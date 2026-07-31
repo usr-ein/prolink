@@ -37,6 +37,15 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 members=$(ifconfig "$BRIDGE" 2>/dev/null | awk '/member:/ { print $2 }')
 [ -n "$members" ] || die "$BRIDGE has no members — is the bridge up?"
 
+# The bridge itself as well as its members, because the two carry *different*
+# traffic and which one you need depends on who is serving:
+#
+#   deck  <-> deck : forwarded member-to-member, seen on a MEMBER, not on the bridge
+#   Mac   <-> deck : the host's own traffic, seen on the BRIDGE, not on a member
+#
+# Tapping only one of them has now cost a session in each direction.
+members="$members $BRIDGE"
+
 # No port filter. The whole point of these captures is fields we cannot name
 # yet, so excluding a protocol nobody has thought of is exactly the mistake to
 # avoid. Only the Mac's own chatter is dropped, and only if it has an address.

@@ -449,11 +449,7 @@ impl VirtualCdj {
                     // marked as the loaded one (F55). Only a track whose
                     // source player is *us* came off our medium.
                     Ok(status::Packet::CdjStatus(peer)) => {
-                        if let Some(device) = peer.sender()
-                            && peer.source_player() == Some(ours)
-                        {
-                            loaded.note(device.get(), peer.source_slot(), peer.track_id());
-                        }
+                        observe_loaded(&loaded, ours, &peer);
                         None
                     }
                     Ok(status::Packet::MediaQuery(query)) => {
@@ -602,6 +598,21 @@ fn keep_alive_packet(
             trailing: config.generation,
         },
     )
+}
+
+/// Record what a peer's status packet says it has loaded **from us**.
+///
+/// Only a track whose source player is our own number came off our medium; a
+/// track a deck loaded from another player is not ours to mark, and marking by
+/// id alone would mark whichever of our tracks happened to share that id.
+fn observe_loaded(loaded: &LoadedTracks, ours: DeviceNumber, peer: &CdjStatus) {
+    let Some(device) = peer.sender() else {
+        return;
+    };
+    if peer.source_player() != Some(ours) {
+        return;
+    }
+    loaded.note(device.get(), peer.source_slot(), peer.track_id());
 }
 
 fn status_packet(
@@ -819,6 +830,67 @@ impl Drop for PeerAddresses {
 
 #[cfg(test)]
 mod tests {
+    /// Every status packet in a capture, fed through [`observe_loaded`] the way
+    /// the live socket feeds it.
+    ///
+    /// The one end-to-end check that the registry behind the key-matching
+    /// indicator fills at all: a real deck-to-deck session in which device 2
+    /// loaded track 472 off device 1's USB (F55).
+    #[test]
+    fn a_capture_of_a_deck_loading_from_us_fills_the_registry() {
+        let Some(corpus) = prolink_capture::Corpus::locate() else {
+            return;
+        };
+        let path = corpus.root().join("S27-sort-by-and-key/run.pcap");
+        let Ok(capture) = prolink_capture::Capture::open(&path) else {
+            return;
+        };
+        let loaded = LoadedTracks::default();
+        let mut seen = 0usize;
+        for packet in capture.udp_to(STATUS_PORT).flatten() {
+            let Ok(status::Packet::CdjStatus(peer)) = status::decode(&packet.payload) else {
+                continue;
+            };
+            let Some(source) = peer.source_player() else {
+                continue;
+            };
+            // Stand in for whichever deck was serving in this session.
+            observe_loaded(&loaded, source, &peer);
+            seen += 1;
+        }
+        assert!(
+            seen > 100,
+            "the corpus should hold plenty of status packets"
+        );
+        assert!(
+            !loaded.by_device.lock().expect("not poisoned").is_empty(),
+            "no deck's loaded track was recorded from {seen} status packets"
+        );
+    }
+
+    #[test]
+    fn a_track_loaded_from_another_player_is_not_ours_to_mark() {
+        let loaded = LoadedTracks::default();
+        let ours = DeviceNumber::new(4).expect("4 is a device number");
+        let theirs = DeviceNumber::new(1).expect("1 is a device number");
+        let mut raw = CdjStatus::builder()
+            .device_number(DeviceNumber::new(2).expect("2 is a device number"))
+            .name(DeviceName::default())
+            .build()
+            .into_bytes();
+        raw[0x28] = theirs.get();
+        raw[0x29] = Slot::USB.0;
+        raw[0x2c..0x30].copy_from_slice(&99u32.to_be_bytes());
+        let peer = CdjStatus::parse(&raw).expect("a status packet");
+        observe_loaded(&loaded, ours, &peer);
+        assert_eq!(loaded.track_on(2, Slot::USB), None);
+
+        raw[0x28] = ours.get();
+        let peer = CdjStatus::parse(&raw).expect("a status packet");
+        observe_loaded(&loaded, ours, &peer);
+        assert_eq!(loaded.track_on(2, Slot::USB), Some(99));
+    }
+
     use super::*;
     use prolink_proto::status::MediaState;
 

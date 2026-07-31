@@ -74,7 +74,12 @@ and none of them produced an error message anywhere.
 
 ### Capturing deck-to-deck
 
-**Tap a bridge *member*, never the bridge itself.** A BSD bridge floods
+**Which interface depends on who is serving.** A bridge member carries the
+traffic the bridge *forwards* between the decks; the bridge interface carries
+the host's own. Tapping one and not the other has cost a session in each
+direction, so `capture-deck-to-deck.sh` now taps all of them.
+
+**Tap a bridge *member* for deck-to-deck.** A BSD bridge floods
 broadcast to every member and to the host, but forwards learned unicast
 **directly from one member port to the other**. A tap on `bridge1` therefore
 sees the host's own traffic and the broadcast — UDP 50000 keep-alives and UDP
