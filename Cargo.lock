@@ -598,6 +598,7 @@ name = "prolink"
 version = "0.1.0"
 dependencies = [
  "network-interface",
+ "prolink-capture",
  "prolink-proto",
  "prolink-rekordbox",
  "sha2",

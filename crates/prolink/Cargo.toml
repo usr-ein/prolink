@@ -26,3 +26,8 @@ unicode-normalization.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Replaying real captured traffic through the servers. A dev-dependency only:
+# nothing in this crate reads a capture at run time.
+prolink-capture.workspace = true

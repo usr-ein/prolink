@@ -37,6 +37,13 @@
 //! settled experimentally, and it warns at startup. [`Ports::is_discoverable`]
 //! is what a caller should check before believing it is browsable.
 //!
+//! All three binds are **exclusive**. Everywhere else in this crate a port is
+//! shared, because a DJ will have rekordbox open and both of us only listen;
+//! here sharing would be silent corruption, since the kernel would hand each of
+//! two servers some of a player's calls and the mount would go to one while the
+//! reads went to the other. So a clash with a real `rpcbind` or `nfsd` is an
+//! error, and its remedy says which of the two problems it is.
+//!
 //! # mountd's port is a constant that is still discovered
 //!
 //! 48276 is not registered to anything, but three independent observations
@@ -60,6 +67,12 @@
 //! the file, so the shape that matters is many small random reads at low
 //! latency rather than throughput.
 //!
+//! A reply is capped at 8192 payload bytes, which is both RFC 1094's ceiling
+//! and the largest read a deck has ever sent us — and, less obviously, the
+//! largest one that is portable: macOS will not send a UDP datagram past 9216
+//! bytes, so answering a deck-to-deck-sized 28584-byte read the way a deck does
+//! would fail with `EMSGSIZE` and leave the caller retransmitting for ever.
+//!
 //! # Everything else worth knowing
 //!
 //! is in `nfs/answer.rs`, which turns one call into one reply and is where the
@@ -69,7 +82,7 @@
 
 mod answer;
 
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, RwLock};
 
 use prolink_proto::rpc::{mount, nfs2, portmap};
@@ -99,7 +112,7 @@ pub const MAX_IN_FLIGHT: usize = 64;
 ///
 /// Platform-specific because the remedy is: Linux has a sysctl for exactly
 /// this, and macOS has nothing of the kind.
-const REMEDY: &str = if cfg!(target_os = "linux") {
+const NOT_PERMITTED: &str = if cfg!(target_os = "linux") {
     "run as root, grant this binary CAP_NET_BIND_SERVICE, or lower the privileged range with \
      `sysctl -w net.ipv4.ip_unprivileged_port_start=111`"
 } else if cfg!(target_os = "macos") {
@@ -107,6 +120,20 @@ const REMEDY: &str = if cfg!(target_os = "linux") {
 } else {
     "ports below 1024 usually require elevated privileges"
 };
+
+/// What a user can do about a port somebody else already holds.
+///
+/// A different problem from privilege with a different fix, and on 111 a user
+/// will meet both — a desktop Linux often runs `rpcbind` by default. These
+/// binds are deliberately exclusive: sharing 111 with a real portmapper would
+/// let the kernel split arriving datagrams between the two servers, so a deck's
+/// `GETPORT` would be answered by whichever happened to receive it and the mount
+/// that followed would go to the wrong one. Failing loudly is the only outcome
+/// that can be acted on.
+const ALREADY_HELD: &str = "another RPC server already holds it — on Linux that is usually \
+                            `rpcbind` or `nfs-server`, and stopping them frees it; sharing the \
+                            port is not an option, because the two servers would each receive \
+                            some of a player's calls";
 
 /// Where the three servers are answering.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -316,21 +343,25 @@ fn listen(
     })
 }
 
-/// Bind `preferred`, falling back to an ephemeral port.
+/// Bind `preferred` exclusively, falling back to an ephemeral port.
 ///
 /// The fallback matters because a real `rpcbind` or `nfsd` on the same host may
 /// hold the number. Losing it costs only the client that skips the portmapper;
 /// failing to bind would cost everything.
+///
+/// Exclusive, because the alternative is worse than losing the port: with
+/// `SO_REUSEPORT` the bind succeeds beside the other server and the kernel then
+/// hands each of us some of a player's calls. See [`crate::socket::Sharing`].
 fn bind_preferred(
     preferred: u16,
     interface: Option<&Interface>,
     what: &'static str,
 ) -> Result<(UdpSocket, u16)> {
-    let socket = match socket::bind(preferred, interface) {
+    let socket = match socket::bind_exclusive(Ipv4Addr::UNSPECIFIED, preferred, interface) {
         Ok(socket) => socket,
         Err(error) => {
             warn!(%error, what, wanted = preferred, "port taken; using an ephemeral one");
-            socket::bind(0, interface)?
+            socket::bind_exclusive(Ipv4Addr::UNSPECIFIED, 0, interface)?
         }
     };
     let port = port_of(&socket)?;
@@ -340,15 +371,26 @@ fn bind_preferred(
 /// Bind the portmapper, or explain what to do about it.
 ///
 /// No fallback: a portmapper anywhere but 111 is one no player will ever ask,
-/// so quietly moving it would turn a loud failure into a silent one.
+/// so quietly moving it would turn a loud failure into a silent one. The two
+/// ways it fails have different fixes and a user will meet both, so the remedy
+/// is chosen from the operating system's own reason — and the reason itself
+/// stays attached, so a caller can tell them apart by
+/// [`std::io::ErrorKind`] rather than by reading English.
 fn bind_portmapper(port: u16, interface: Option<&Interface>) -> Result<UdpSocket> {
-    match socket::bind(port, interface) {
+    match socket::bind_exclusive(Ipv4Addr::UNSPECIFIED, port, interface) {
         Ok(socket) => Ok(socket),
-        Err(Error::Io { source, .. }) => Err(Error::PrivilegedPort {
-            port,
-            source,
-            remedy: REMEDY,
-        }),
+        Err(Error::Io { source, .. }) => {
+            let remedy = if source.kind() == std::io::ErrorKind::AddrInUse {
+                ALREADY_HELD
+            } else {
+                NOT_PERMITTED
+            };
+            Err(Error::PrivilegedPort {
+                port,
+                source,
+                remedy,
+            })
+        }
         Err(other) => Err(other),
     }
 }
@@ -584,6 +626,38 @@ mod tests {
                 mount::Response::Mnt(Ok(_)),
             ),
             "and now there is",
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_server_cannot_take_the_ports_of_the_first() {
+        // Shared, this bind would succeed and the kernel would split a player's
+        // calls between the two of us: the mount answered by one server and the
+        // reads by the other, with nothing anywhere reporting a problem.
+        let (vfs, _) = medium();
+        let first = NfsServer::start(Arc::clone(&vfs), ephemeral())
+            .await
+            .expect("the first server starts");
+        let held = NfsConfig {
+            interface: None,
+            portmap_port: first.ports().portmap,
+            mount_port: first.ports().mount,
+            nfs_port: first.ports().nfs,
+        };
+        let error = NfsServer::start(vfs, held)
+            .await
+            .expect_err("the portmapper's port is already held");
+        // mountd and nfsd fall back to an ephemeral port, because losing their
+        // number costs only a client that skips discovery. The portmapper has
+        // nowhere to fall back to.
+        assert!(
+            matches!(&error, Error::PrivilegedPort { source, .. }
+                if source.kind() == std::io::ErrorKind::AddrInUse),
+            "{error:?}",
+        );
+        assert!(
+            error.to_string().contains("already holds it"),
+            "the remedy must be the one for a clash, not the one for privilege: {error}",
         );
     }
 

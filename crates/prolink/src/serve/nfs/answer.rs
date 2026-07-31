@@ -95,20 +95,35 @@ use crate::serve::vfs::{Node, Vfs};
 
 use super::Ports;
 
-/// Bytes of a `READ` reply that are not payload: the RPC header, the status
-/// word, the `fattr` and the payload's own length prefix.
-const READ_REPLY_OVERHEAD: u32 = 24 + 4 + 68 + 4;
-
-/// The most payload one `READ` reply may carry.
+/// The most payload one reply may carry, for a `READ` or a `READDIR`.
 ///
-/// Derived from what a datagram can physically hold rather than from RFC
-/// 1094's 8192, because hardware exceeds that ceiling in both directions: deck
-/// to deck the modal request is 9408 bytes and a file's first read can be
-/// 28584, answered in full as one datagram in about twenty IP fragments. A deck
-/// reading from *us* has only ever asked for 8192 or less, so this bound is for
-/// our own client's benefit; a server is always free to answer short, and a
-/// short read means "ask for the rest", not "end of file".
-const MAX_READ: u32 = nfs2::MAX_READ_PAYLOAD - READ_REPLY_OVERHEAD;
+/// A reply of this size is 8292 bytes on the wire — the payload plus the RPC
+/// header, the status word, the `fattr` and the payload's own length prefix.
+///
+/// RFC 1094's ceiling, and **hardware exceeds it in both directions**: deck to
+/// deck the modal request is 9408 bytes and a file's first read can be 28584,
+/// answered in full as one datagram in about twenty IP fragments. Answering
+/// like that is nonetheless not portable — **macOS refuses to send a UDP
+/// datagram larger than 9216 bytes** (`net.inet.udp.maxdgram`, its default),
+/// so a reply of 9508 fails with `EMSGSIZE` and is never sent at all. A stall
+/// is much worse than a short read: a short read is ordinary and the client
+/// asks for the rest, where a reply that cannot be sent leaves the deck
+/// retransmitting for ever.
+///
+/// So the cap is the specification's, which every platform can send, which
+/// both reference implementations used while a CDJ-2000NXS loaded and played
+/// from them (F39), and which is what every read a deck has ever sent *us* asks
+/// for — 160, 2048 and 8192 across the serve sessions. Larger requests are
+/// answered short.
+///
+/// **A short answer is not a guess about what hardware tolerates.** Replaying
+/// the corpus through this server measured it: a real Pioneer server answered
+/// short of the request **1372 times mid-file**, and the reading device's next
+/// read of that file resumed at exactly the shortfall **1296** of those times.
+/// A deck asking us for 9408 and getting 8192 therefore asks for the remaining
+/// 1216, which is what it does to its own kind routinely.
+/// This is [`nfs2::MAX_DATA`] as a `u32`, which the two are tested to agree on.
+const MAX_READ: u32 = 8192;
 
 /// Bytes a `READDIR` reply spends before its first entry and after its last:
 /// the RPC header, the status word, the end-of-list marker and the eof flag.
@@ -1425,27 +1440,33 @@ mod tests {
     }
 
     #[test]
-    fn a_read_is_capped_at_what_one_datagram_can_carry() {
-        // A client may ask for anything; a reply has to fit in a datagram.
+    fn a_read_is_capped_at_a_reply_every_platform_can_send() {
+        // A client may ask for anything, including the 9408 and 28584 a deck
+        // asks another deck for. macOS will not send a datagram past 9216
+        // bytes, and a reply that cannot be sent is a stall where a short read
+        // is an ordinary "ask for the rest".
+        assert_eq!(usize::try_from(MAX_READ), Ok(nfs2::MAX_DATA));
         let dispatcher = served();
-        let args =
-            ReadArgs::at(handle("/C/Contents/GESAFFELSTEIN/track.mp3"), 0, u32::MAX).unwrap();
-        let reply = dispatcher
-            .answer(
-                Service::Nfs,
-                &call(
+        for count in [9408u32, 28_584, u32::MAX] {
+            let args =
+                ReadArgs::at(handle("/C/Contents/GESAFFELSTEIN/track.mp3"), 0, count).unwrap();
+            let reply = dispatcher
+                .answer(
                     Service::Nfs,
-                    nfs2::Proc::READ.0,
-                    &nfs2::Request::Read(args).encode_arguments(),
-                ),
-                PEER,
-            )
-            .unwrap();
-        assert!(
-            reply.len() <= usize::try_from(nfs2::MAX_READ_PAYLOAD).unwrap(),
-            "{} bytes would not fit one UDP datagram",
-            reply.len(),
-        );
+                    &call(
+                        Service::Nfs,
+                        nfs2::Proc::READ.0,
+                        &nfs2::Request::Read(args).encode_arguments(),
+                    ),
+                    PEER,
+                )
+                .unwrap();
+            assert!(
+                reply.len() <= 9216,
+                "a {count}-byte read produced {} bytes, which macOS will not send",
+                reply.len(),
+            );
+        }
     }
 
     #[test]

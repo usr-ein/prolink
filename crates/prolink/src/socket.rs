@@ -38,11 +38,36 @@ use crate::{Error, Result};
 /// be a few kilobytes.
 pub(crate) const MAX_DATAGRAM: usize = 65535;
 
+/// Whether a port may be shared with another process.
+///
+/// The two cases are opposites and getting them the wrong way round fails
+/// differently in each direction.
+///
+/// On the **Pro DJ Link ports** sharing is the point: a DJ will have rekordbox
+/// or another tool open, both of us only ever *receive* broadcasts there, and a
+/// library that cannot bind beside the tools already running is a library nobody
+/// can debug with.
+///
+/// On the **ONC RPC ports** sharing is silent corruption. With `SO_REUSEPORT` a
+/// bind of 111 or 2049 succeeds beside a real `rpcbind` or `nfsd`, and the
+/// kernel then splits arriving datagrams between the two of us — so a deck's
+/// `GETPORT` is answered by whichever process happened to receive it, and the
+/// mount that follows goes to the wrong server. There is no way to detect that
+/// afterwards, so those binds must be exclusive and a clash must be an error the
+/// caller can report.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Sharing {
+    /// Take the port even if another process holds it.
+    Shared,
+    /// Fail if another process holds it.
+    Exclusive,
+}
+
 /// Bind a UDP socket for a Pro DJ Link port.
 ///
-/// Binds `0.0.0.0:port` so subnet broadcasts arrive, enables address reuse so
-/// it can coexist with other tools, enables broadcast transmission, and pins
-/// the outgoing interface.
+/// Binds `0.0.0.0:port` so subnet broadcasts arrive, enables address reuse so it
+/// can coexist with other tools, enables broadcast transmission, and pins the
+/// outgoing interface.
 pub(crate) fn bind(port: u16, interface: Option<&Interface>) -> Result<UdpSocket> {
     bind_at(Ipv4Addr::UNSPECIFIED, port, interface)
 }
@@ -56,16 +81,38 @@ pub(crate) fn bind_at(
     port: u16,
     interface: Option<&Interface>,
 ) -> Result<UdpSocket> {
+    bind_sharing(address, port, interface, Sharing::Shared)
+}
+
+/// Bind a UDP socket, refusing to share the port with another process.
+///
+/// For the ONC RPC servers. See [`Sharing`] for why they are different.
+pub(crate) fn bind_exclusive(
+    address: Ipv4Addr,
+    port: u16,
+    interface: Option<&Interface>,
+) -> Result<UdpSocket> {
+    bind_sharing(address, port, interface, Sharing::Exclusive)
+}
+
+fn bind_sharing(
+    address: Ipv4Addr,
+    port: u16,
+    interface: Option<&Interface>,
+    sharing: Sharing,
+) -> Result<UdpSocket> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
         .map_err(Error::io("creating a UDP socket"))?;
 
-    socket
-        .set_reuse_address(true)
-        .map_err(Error::io("SO_REUSEADDR"))?;
-    #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
-    socket
-        .set_reuse_port(true)
-        .map_err(Error::io("SO_REUSEPORT"))?;
+    if sharing == Sharing::Shared {
+        socket
+            .set_reuse_address(true)
+            .map_err(Error::io("SO_REUSEADDR"))?;
+        #[cfg(all(unix, not(target_os = "solaris"), not(target_os = "illumos")))]
+        socket
+            .set_reuse_port(true)
+            .map_err(Error::io("SO_REUSEPORT"))?;
+    }
     socket
         .set_broadcast(true)
         .map_err(Error::io("SO_BROADCAST"))?;
@@ -149,6 +196,22 @@ mod tests {
             second.is_ok(),
             "address reuse must be enabled: {:?}",
             second.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_rpc_port_is_not_shared() {
+        // The opposite case, and it fails silently rather than loudly: with
+        // SO_REUSEPORT a bind of 111 succeeds beside a real rpcbind and the
+        // kernel then splits arriving datagrams between the two of us.
+        let first = bind_exclusive(Ipv4Addr::LOCALHOST, 0, None).expect("first bind");
+        let port = match first.local_addr().expect("local address") {
+            SocketAddr::V4(address) => address.port(),
+            SocketAddr::V6(_) => unreachable!("bound as IPv4"),
+        };
+        assert!(
+            bind_exclusive(Ipv4Addr::LOCALHOST, port, None).is_err(),
+            "a second exclusive bind must fail so the caller can say whose port it is",
         );
     }
 
