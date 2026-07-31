@@ -1042,6 +1042,145 @@ mod tests {
         assert_ne!(unmask(&[0, 0], 1), unmask(&[0, 0], 2));
     }
 
+    /// One `PCP2` entry. `entry_len` gates the trailing fields, so the caller
+    /// chooses how much of the format's history this entry comes from.
+    fn extended_cue_entry(hot_cue: u32, comment: &str, with_color: bool) -> Vec<u8> {
+        let comment_bytes: Vec<u8> = comment
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .flat_map(u16::to_be_bytes)
+            .collect();
+        let len_comment = u32::try_from(comment_bytes.len()).unwrap();
+        // 40 fixed + 4 length + comment, plus four colour bytes if present.
+        let entry_len = 44 + len_comment + if with_color { 4 } else { 0 };
+
+        let mut out = b"PCP2".to_vec();
+        out.extend_from_slice(&12u32.to_be_bytes());
+        out.extend_from_slice(&entry_len.to_be_bytes());
+        out.extend_from_slice(&hot_cue.to_be_bytes());
+        out.push(CueType::LOOP.0);
+        out.extend_from_slice(&[0x00, 0x03, 0xe8]);
+        out.extend_from_slice(&1000u32.to_be_bytes()); // time
+        out.extend_from_slice(&3000u32.to_be_bytes()); // loop_time
+        out.push(4); // color_id
+        out.extend_from_slice(&[0u8; 7]);
+        out.extend_from_slice(&4u16.to_be_bytes()); // loop numerator
+        out.extend_from_slice(&1u16.to_be_bytes()); // loop denominator
+        out.extend_from_slice(&len_comment.to_be_bytes());
+        out.extend_from_slice(&comment_bytes);
+        if with_color {
+            out.extend_from_slice(&[0x22, 0xff, 0xa0, 0x00]);
+        }
+        out
+    }
+
+    #[test]
+    fn an_extended_cue_reads_its_comment_and_colour() {
+        let mut body = CueListType::HOT.0.to_be_bytes().to_vec();
+        body.extend_from_slice(&1u16.to_be_bytes());
+        body.extend_from_slice(&0u16.to_be_bytes());
+        body.extend_from_slice(&extended_cue_entry(3, "drop ✧", true));
+        let Some(Content::ExtendedCueList(list)) = Content::parse(FourCc::PCO2, &body) else {
+            panic!("expected an extended cue list");
+        };
+        let cue = list.cues.first().unwrap();
+        assert_eq!(cue.hot_cue, 3);
+        assert_eq!(cue.cue_type, CueType::LOOP);
+        assert_eq!(cue.time, 1000);
+        assert_eq!(cue.loop_time, 3000);
+        assert_eq!(cue.color_id, 4);
+        assert_eq!((cue.loop_numerator, cue.loop_denominator), (4, 1));
+        assert_eq!(cue.comment, "drop ✧", "UTF-16BE with a trailing NUL");
+        assert_eq!(cue.hot_cue_color_index, 0x22);
+        assert_eq!(
+            (
+                cue.hot_cue_color_red,
+                cue.hot_cue_color_green,
+                cue.hot_cue_color_blue
+            ),
+            (0xff, 0xa0, 0x00)
+        );
+        assert!(cue.trailing.is_empty());
+    }
+
+    #[test]
+    fn an_extended_cue_from_an_older_rekordbox_has_no_colour_fields() {
+        // The trailing fields arrived one release at a time and are gated on
+        // the entry's own declared length, so an older entry must not have four
+        // bytes of the next entry read into it as a colour.
+        let mut body = CueListType::MEMORY.0.to_be_bytes().to_vec();
+        body.extend_from_slice(&2u16.to_be_bytes());
+        body.extend_from_slice(&0u16.to_be_bytes());
+        body.extend_from_slice(&extended_cue_entry(0, "", false));
+        body.extend_from_slice(&extended_cue_entry(1, "", false));
+        let Some(Content::ExtendedCueList(list)) = Content::parse(FourCc::PCO2, &body) else {
+            panic!("expected an extended cue list");
+        };
+        assert_eq!(
+            list.cues.len(),
+            2,
+            "the second entry must start in the right place"
+        );
+        assert_eq!(list.cues[0].hot_cue, 0);
+        assert_eq!(list.cues[1].hot_cue, 1);
+        assert_eq!(list.cues[0].hot_cue_color_index, 0);
+        assert_eq!(list.cues[0].comment, "");
+    }
+
+    /// A waveform tag body: entry size, count, an unknown word, then the data.
+    fn sized_body(entry_bytes: u32, entries: &[u8], entry_len: usize) -> Vec<u8> {
+        let mut body = entry_bytes.to_be_bytes().to_vec();
+        let count = u32::try_from(entries.len() / entry_len).unwrap();
+        body.extend_from_slice(&count.to_be_bytes());
+        body.extend_from_slice(&0u32.to_be_bytes());
+        body.extend_from_slice(entries);
+        body
+    }
+
+    #[test]
+    fn the_waveform_tags_decode_to_their_column_counts() {
+        // PWAV and PWV2 declare a byte count; PWV3, PWV4 and PWV5 declare an
+        // entry size and a count, and the entry sizes differ (1, 6, 2).
+        let mut preview = 4u32.to_be_bytes().to_vec();
+        preview.extend_from_slice(&0u32.to_be_bytes());
+        preview.extend_from_slice(&[0b101_10001, 0, 0, 0]);
+        let Some(Content::WaveformPreview(wave)) = Content::parse(FourCc::PWAV, &preview) else {
+            panic!("expected a waveform preview");
+        };
+        assert_eq!(wave.columns.len(), 4);
+        assert_eq!(wave.columns[0].height(), 0b10001);
+
+        let Some(Content::TinyWaveformPreview(tiny)) = Content::parse(FourCc::PWV2, &preview)
+        else {
+            panic!("expected a tiny preview");
+        };
+        assert_eq!(tiny.columns.len(), 4);
+
+        let detail = sized_body(1, &[7; 6], 1);
+        let Some(Content::WaveformDetail(wave)) = Content::parse(FourCc::PWV3, &detail) else {
+            panic!("expected a waveform detail");
+        };
+        assert_eq!(wave.len_entry_bytes, 1);
+        assert_eq!(wave.columns.len(), 6);
+
+        let color_preview = sized_body(6, &[1; 12], 6);
+        let Some(Content::WaveformColorPreview(wave)) =
+            Content::parse(FourCc::PWV4, &color_preview)
+        else {
+            panic!("expected a colour preview");
+        };
+        assert_eq!(wave.columns.len(), 2);
+        assert_eq!(wave.columns[0].energy_top_third, 1);
+
+        let color_detail = sized_body(2, &[0xa1, 0x6c, 0x00, 0x00], 2);
+        let Some(Content::WaveformColorDetail(wave)) = Content::parse(FourCc::PWV5, &color_detail)
+        else {
+            panic!("expected a colour detail");
+        };
+        assert_eq!(wave.columns.len(), 2);
+        assert_eq!(wave.columns[0].0, 0xa16c, "a big-endian u16");
+    }
+
     #[test]
     fn a_vbr_index_reads_to_the_end_of_its_tag() {
         let mut body = 0u32.to_be_bytes().to_vec();

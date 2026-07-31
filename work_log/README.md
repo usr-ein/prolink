@@ -24,12 +24,12 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 11 | `prolink-proto`: analysis wire transforms (ANLZ → dbserver blobs) | done | `analysis.rs`; takes raw tag payloads so the wire layer stays free of the file layer |
 | 12 | `prolink`: network interface discovery, UDP plumbing, device table, passive discovery | done | [012](012-discovery.md) |
 | 13 | `prolink`: virtual CDJ — claim chain, keep-alive, status emission, media/settings answers | done | [012](012-discovery.md); conflict back-off untested against hardware |
-| 14 | `prolink`: ONC RPC / NFSv2 **client** — mount, walk, streaming reads | wip | agent `consume-stack` |
-| 15 | `prolink`: dbserver **client** — browse a player's library the way LINK does | wip | agent `consume-stack` |
+| 14 | `prolink`: ONC RPC / NFSv2 **client** — mount, walk, streaming reads | done | [014](014-consume.md); driven against a loopback deck, untested on hardware |
+| 15 | `prolink`: dbserver **client** — browse a player's library the way LINK does | done | [014](014-consume.md); requests pinned byte-for-byte against the corpus |
 | 16 | `prolink`: consume facade — devices → slots → menus → tracks → file bytes | wip | agent `consume-stack` |
 | 17 | `prolink`: VFS + filehandle table (12-byte keying, NFC/case folding) | done | keyed on `FileHandleKey`, so a CDJ rewriting a handle's tail still resolves |
 | 18 | `prolink`: portmap + mountd + nfsd **servers** | wip | agent `nfs-server` |
-| 19 | `prolink`: dbserver **server** — root menu, drill-down grid, sorts, search, metadata, analysis | wip | agent `dbserver-server` |
+| 19 | `prolink`: dbserver **server** — root menu, drill-down grid, sorts, search, metadata, analysis | done | [019](019-dbserver-server.md); 14 000 captured requests replayed, zero errors; untested on hardware |
 | 20 | `prolink`: serve facade — two media as USB + SD, wired to the virtual CDJ | todo | |
 | 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap` | wip | `interfaces`, `devices`, `announce` done |
 | 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | wip | spec and architecture written; CI and a licence gate added |

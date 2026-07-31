@@ -65,7 +65,7 @@
 //! [`Status`] codes NFS uses. There is no separate MOUNT error table.
 
 use crate::rpc::Program;
-use crate::rpc::nfs2::{FHANDLE_LEN, FileHandle, NfsResult, Status};
+use crate::rpc::nfs2::{ErrorStatus, FHANDLE_LEN, FileHandle, NfsResult, Status};
 use crate::rpc::xdr::{self, Utf16LeString};
 use crate::{Error, Result, Slot};
 
@@ -337,7 +337,7 @@ impl Response {
                 out.u32(Status::OK.0);
                 out.opaque_fixed(handle.as_bytes());
             }
-            Self::Mnt(Err(status)) => out.u32(status.0),
+            Self::Mnt(Err(status)) => out.u32(status.status().0),
             Self::Dump(entries) => {
                 for entry in entries {
                     out.bool(true);
@@ -371,14 +371,11 @@ impl Response {
             Proc::NULL => Self::Null,
             Proc::UMNT => Self::Umnt,
             Proc::UMNTALL => Self::UmntAll,
-            Proc::MNT => {
-                let status = Status(input.u32()?);
-                if status == Status::OK {
-                    Self::Mnt(Ok(FileHandle::parse(input.opaque_fixed(FHANDLE_LEN)?)?))
-                } else {
-                    Self::Mnt(Err(status))
-                }
-            }
+            Proc::MNT => match ErrorStatus::new(Status(input.u32()?)) {
+                // Zero is the only status followed by a filehandle.
+                None => Self::Mnt(Ok(FileHandle::parse(input.opaque_fixed(FHANDLE_LEN)?)?)),
+                Some(status) => Self::Mnt(Err(status)),
+            },
             Proc::DUMP => Self::Dump(parse_dump(&mut input)?),
             Proc::EXPORT => Self::Export(parse_exports(&mut input)?),
             other => {
@@ -398,8 +395,8 @@ fn parse_dump(input: &mut xdr::Reader<'_>) -> Result<Vec<MountEntry>> {
             hostname: input.ascii_string(xdr::MAX_STRING)?,
             directory: input.utf16le_string(xdr::MAX_STRING)?,
         });
-        if entries.len() >= MAX_ENTRIES {
-            return Err(too_many("a MOUNT DUMP listing"));
+        if entries.len() > MAX_ENTRIES {
+            return Err(too_many("a MOUNT DUMP listing", entries.len()));
         }
     }
     Ok(entries)
@@ -413,22 +410,25 @@ fn parse_exports(input: &mut xdr::Reader<'_>) -> Result<Vec<Export>> {
         while input.bool()? {
             // ASCII, deliberately not the UTF-16LE the path beside it uses.
             groups.push(input.ascii_string(xdr::MAX_STRING)?);
-            if groups.len() >= MAX_ENTRIES {
-                return Err(too_many("an EXPORT group list"));
+            if groups.len() > MAX_ENTRIES {
+                return Err(too_many("an EXPORT group list", groups.len()));
             }
         }
         exports.push(Export { path, groups });
-        if exports.len() >= MAX_ENTRIES {
-            return Err(too_many("an EXPORT listing"));
+        if exports.len() > MAX_ENTRIES {
+            return Err(too_many("an EXPORT listing", exports.len()));
         }
     }
     Ok(exports)
 }
 
-fn too_many(what: &'static str) -> Error {
+/// The cap is on what we will *accept*, so it is checked after the push and
+/// against `>`: a listing of exactly [`MAX_ENTRIES`] is legal, and refusing it
+/// would mean our own encoder could produce a reply our own decoder rejects.
+fn too_many(what: &'static str, seen: usize) -> Error {
     Error::ImplausibleLength {
         what,
-        length: u64::try_from(MAX_ENTRIES).unwrap_or(u64::MAX),
+        length: u64::try_from(seen).unwrap_or(u64::MAX),
         limit: u64::try_from(MAX_ENTRIES).unwrap_or(u64::MAX),
     }
 }
@@ -474,7 +474,7 @@ mod tests {
     /// unannounced client, so this is "announce and retry", not fatal.
     #[test]
     fn a_refused_mount_carries_only_a_status() {
-        let response = Response::Mnt(Err(Status::ACCES));
+        let response = Response::Mnt(Err(ErrorStatus::ACCES));
         assert_eq!(response.encode(), [0, 0, 0, 13]);
         assert_eq!(
             Response::parse(Proc::MNT, &[0, 0, 0, 13]).unwrap(),

@@ -262,9 +262,18 @@ impl Writer {
         self.buf.extend_from_slice(data);
     }
 
-    /// Pad up to the next four-byte boundary.
-    pub fn pad(&mut self) {
-        self.buf.resize(align4(self.buf.len()), 0);
+    /// Pad a field of `field_len` bytes up to the next four-byte boundary.
+    ///
+    /// Deliberately **not** "align the buffer". XDR's padding rule is a
+    /// property of the field, not of where the field happens to have landed,
+    /// and the two agree only while the buffer is already word-aligned.
+    /// [`Writer::raw`] is public and can break that, and a `pad`-the-buffer
+    /// implementation would then silently emit a field with the wrong number
+    /// of padding bytes — the sort of thing that decodes fine against our own
+    /// reader and desynchronises somebody else's.
+    fn pad_field(&mut self, field_len: usize) {
+        self.buf
+            .extend(std::iter::repeat_n(0u8, padding_for(field_len)));
     }
 
     /// Fixed-length opaque: the bytes, then padding, and **no length prefix**.
@@ -275,20 +284,21 @@ impl Writer {
     /// [`crate::rpc::FileHandle`].)
     pub fn opaque_fixed(&mut self, data: &[u8]) {
         self.raw(data);
-        self.pad();
+        self.pad_field(data.len());
     }
 
     /// Variable-length opaque: a byte count, the bytes, then padding.
     ///
-    /// The count is `usize`-to-`u32` saturating. Nothing this crate encodes
-    /// approaches four gigabytes — the largest single field is an 8 KiB READ
-    /// payload — and saturating keeps a truncating cast out of an encoder
-    /// where it could only ever produce a length that disagrees with the
-    /// bytes that follow it.
+    /// The count is `usize`-to-`u32` saturating, which is unreachable rather
+    /// than merely unlikely: the largest field this crate encodes is a `READ`
+    /// payload, itself bounded by what a UDP datagram can carry. Saturating is
+    /// not a fix — a saturated count would disagree with the bytes that follow
+    /// it just as a truncated one would — it is only a way to write the
+    /// conversion without a cast.
     pub fn opaque_var(&mut self, data: &[u8]) {
         self.u32(u32::try_from(data.len()).unwrap_or(u32::MAX));
         self.raw(data);
-        self.pad();
+        self.pad_field(data.len());
     }
 
     /// A length-prefixed **ASCII** string.
@@ -716,6 +726,32 @@ mod tests {
         let mut writer = Writer::new();
         writer.opaque_fixed(b"abc");
         assert_eq!(writer.into_bytes(), b"abc\x00");
+    }
+
+    /// Padding belongs to the field, not to the buffer. `raw` is public, so a
+    /// caller can leave the buffer unaligned; a field written after that must
+    /// still carry its own padding, or a reader counting fields desynchronises
+    /// even though ours — which counts from the same misaligned place — would
+    /// not notice.
+    #[test]
+    fn a_field_is_padded_by_its_own_length_not_by_the_buffers() {
+        let mut writer = Writer::new();
+        writer.raw(&[0xaa]);
+        writer.opaque_fixed(b"abc");
+        assert_eq!(
+            writer.into_bytes(),
+            b"\xaaabc\x00",
+            "three bytes still take one byte of padding"
+        );
+
+        let mut writer = Writer::new();
+        writer.raw(&[0xaa, 0xbb, 0xcc]);
+        writer.opaque_var(b"ab");
+        assert_eq!(
+            writer.into_bytes(),
+            b"\xaa\xbb\xcc\x00\x00\x00\x02ab\x00\x00",
+            "two bytes still take two of padding"
+        );
     }
 
     #[test]

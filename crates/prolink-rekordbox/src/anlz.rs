@@ -131,20 +131,28 @@ pub const TAG_HEADER_LEN: u32 = 12;
 
 /// One tag: its identifier, its bytes, and a decode of them if we have one.
 ///
-/// # Three views of the same bytes, and why each exists
+/// # Four views of the same bytes, and why each exists
 ///
 /// A tag's fixed fields live *inside its declared header*: a `PWAV` header is
 /// 20 bytes — the twelve common ones, a length and an unknown word — and only
-/// the column data follows. So there are three useful slices:
+/// the column data follows. So:
 ///
 /// | | | |
 /// |---|---|---|
 /// | [`Tag::raw`] | the whole tag | archival |
 /// | [`Tag::payload`] | from `header_len` | what a dbserver reply transforms |
-/// | [`Tag::body`] | from byte 12 | what [`Content`] decodes |
+/// | [`Tag::header_extra`] | bytes 12..`header_len` | the tag's own fixed fields |
+/// | [`Tag::body`] | from byte 12 | the last two together, what [`Content`] decodes |
 ///
-/// Conflating the last two is easy and silent: on a tag whose header really is
-/// twelve bytes they are identical.
+/// Conflating `payload` and `body` is easy and silent: on a tag whose header
+/// really is twelve bytes they are identical, and `PVBR` is one such.
+///
+/// The split is not arbitrary — it is what `prolink-proto::analysis` asks for.
+/// Its `beat_grid` takes a `PQTZ` payload meaning "the entries alone, with the
+/// tag's own header already stripped", its `waveform_preview` takes the packed
+/// `PWAV` columns with no length word in front, and its `waveform_detail` takes
+/// the `PWV3` entries *plus* the entry width, which is the first word of
+/// [`Tag::header_extra`].
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tag {
     /// The four-character identifier.

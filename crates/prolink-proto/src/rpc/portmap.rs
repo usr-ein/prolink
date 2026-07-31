@@ -301,7 +301,10 @@ impl Response {
                 let mut mappings = Vec::new();
                 while input.bool()? {
                     mappings.push(Mapping::read(&mut input)?);
-                    if mappings.len() >= MAX_MAPPINGS {
+                    // `>`, not `>=`: a listing of exactly the cap is legal,
+                    // and refusing it would mean our own encoder produces
+                    // replies our own decoder rejects.
+                    if mappings.len() > MAX_MAPPINGS {
                         return Err(Error::ImplausibleLength {
                             what: "a portmap DUMP listing",
                             length: u64::try_from(mappings.len()).unwrap_or(u64::MAX),

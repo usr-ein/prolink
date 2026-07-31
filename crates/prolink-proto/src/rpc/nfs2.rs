@@ -353,7 +353,94 @@ impl fmt::Display for Status {
 /// a decoding failure — a distinction that matters because on a CDJ's screen
 /// an error and an empty folder look identical, so the set of statuses handled
 /// is a user-visible surface rather than an internal detail.
-pub type NfsResult<T> = core::result::Result<T, Status>;
+pub type NfsResult<T> = core::result::Result<T, ErrorStatus>;
+
+/// A [`Status`] that is not `NFS_OK`.
+///
+/// Every NFSv2 reply is a status word followed by a body if and only if the
+/// status is zero, so "an error whose code is zero" has no wire form at all:
+/// it would claim success and then carry no `fattr`, which a client reads as a
+/// truncated datagram rather than as an error. That is an easy state to reach
+/// by accident — an errno-to-status mapping that falls through to zero — so
+/// the inner value is private and [`ErrorStatus::new`] refuses `NFS_OK`.
+///
+/// The check therefore happens once, where a status is chosen, instead of
+/// being owed by every encoder downstream.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ErrorStatus(Status);
+
+impl ErrorStatus {
+    // Every [`Status`] but `OK`, so that choosing an error is always a
+    // constant here rather than a fallible conversion at the call site.
+    /// Not owner.
+    pub const PERM: Self = Self(Status::PERM);
+    /// No such file or directory.
+    pub const NOENT: Self = Self(Status::NOENT);
+    /// I/O error.
+    pub const IO: Self = Self(Status::IO);
+    /// No such device or address.
+    pub const NXIO: Self = Self(Status::NXIO);
+    /// Permission denied. On `MNT`, "try announcing first" (F12).
+    pub const ACCES: Self = Self(Status::ACCES);
+    /// File exists.
+    pub const EXIST: Self = Self(Status::EXIST);
+    /// No such device.
+    pub const NODEV: Self = Self(Status::NODEV);
+    /// Not a directory.
+    pub const NOTDIR: Self = Self(Status::NOTDIR);
+    /// Is a directory.
+    pub const ISDIR: Self = Self(Status::ISDIR);
+    /// File too large — a file past NFSv2's 32-bit ceiling, which is the one
+    /// error a server on a modern filesystem can genuinely hit.
+    pub const FBIG: Self = Self(Status::FBIG);
+    /// No space left on device.
+    pub const NOSPC: Self = Self(Status::NOSPC);
+    /// Read-only filesystem, which every write procedure would deserve.
+    pub const ROFS: Self = Self(Status::ROFS);
+    /// Filename too long.
+    pub const NAMETOOLONG: Self = Self(Status::NAMETOOLONG);
+    /// Directory not empty.
+    pub const NOTEMPTY: Self = Self(Status::NOTEMPTY);
+    /// Quota exceeded.
+    pub const DQUOT: Self = Self(Status::DQUOT);
+    /// The handle refers to nothing. What a media swap looks like, and what a
+    /// server that trusts the spec answers a real deck with (F28).
+    pub const STALE: Self = Self(Status::STALE);
+    /// Write cache flushed.
+    pub const WFLUSH: Self = Self(Status::WFLUSH);
+
+    /// `None` for `NFS_OK`, which is not an error and has a body.
+    pub fn new(status: Status) -> Option<Self> {
+        if status == Status::OK {
+            None
+        } else {
+            Some(Self(status))
+        }
+    }
+
+    /// The status word this puts on the wire. Never zero.
+    pub fn status(self) -> Status {
+        self.0
+    }
+}
+
+impl From<ErrorStatus> for Status {
+    fn from(status: ErrorStatus) -> Self {
+        status.status()
+    }
+}
+
+impl fmt::Debug for ErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Display for ErrorStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
 
 /// What kind of thing a filehandle refers to.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -1022,7 +1109,14 @@ impl Response<'_> {
         if matches!(self, Self::Null) {
             return Vec::new();
         }
-        let mut out = xdr::Writer::with_capacity(Fattr::WIRE_LEN + 8);
+        // Sized for the payload as well as the header: a READ reply is up to
+        // 8 KiB and this is the path where a stall is an audio dropout (F18),
+        // so it should not be a sequence of reallocations.
+        let payload = match self {
+            Self::Read(Ok(read)) => read.data.len() + 4,
+            _ => 0,
+        };
+        let mut out = xdr::Writer::with_capacity(Fattr::WIRE_LEN + 8 + payload);
         out.u32(self.status().0);
         match self {
             Self::Attr(Ok(attr)) => attr.write(&mut out),
@@ -1069,7 +1163,9 @@ impl Response<'_> {
         }
         let mut input = xdr::Reader::new(results);
         let status = Status(input.u32()?);
-        if status != Status::OK {
+        // `NFS_OK` is the only status with a body, so anything else is an
+        // error and `ErrorStatus::new` cannot refuse it.
+        if let Some(status) = ErrorStatus::new(status) {
             return Ok(match procedure {
                 Proc::GETATTR => Response::Attr(Err(status)),
                 Proc::LOOKUP => Response::Lookup(Err(status)),
@@ -1124,7 +1220,8 @@ fn parse_listing(input: &mut xdr::Reader<'_>) -> Result<Listing> {
             name: input.utf16le_string(MAX_NAME)?,
             cookie: read_cookie(input)?,
         });
-        if entries.len() >= MAX_DIR_ENTRIES {
+        // `>`, not `>=`: a listing of exactly the cap is legal.
+        if entries.len() > MAX_DIR_ENTRIES {
             return Err(Error::ImplausibleLength {
                 what: "a READDIR listing",
                 length: u64::try_from(entries.len()).unwrap_or(u64::MAX),
@@ -1142,10 +1239,10 @@ fn parse_listing(input: &mut xdr::Reader<'_>) -> Result<Listing> {
     Ok(Listing { entries, eof })
 }
 
-fn status_of<T>(result: core::result::Result<&T, &Status>) -> Status {
+fn status_of<T>(result: core::result::Result<&T, &ErrorStatus>) -> Status {
     match result {
         Ok(_) => Status::OK,
-        Err(status) => *status,
+        Err(status) => status.status(),
     }
 }
 
@@ -1295,12 +1392,40 @@ mod tests {
 
     #[test]
     fn an_error_reply_is_four_bytes_and_nothing_else() {
-        let encoded = Response::Lookup(Err(Status::NOENT)).encode();
+        let encoded = Response::Lookup(Err(ErrorStatus::NOENT)).encode();
         assert_eq!(encoded, [0, 0, 0, 2]);
         assert_eq!(
             Response::parse(Proc::LOOKUP, &encoded).unwrap(),
-            Response::Lookup(Err(Status::NOENT))
+            Response::Lookup(Err(ErrorStatus::NOENT))
         );
+    }
+
+    /// "Error, code zero" has no wire form: the status word would say success
+    /// and no body would follow, which a client reads as a truncated datagram
+    /// rather than as an error. An errno mapping that falls through to zero is
+    /// an easy way to reach that, so the type refuses it.
+    #[test]
+    fn an_error_status_cannot_be_nfs_ok() {
+        assert_eq!(ErrorStatus::new(Status::OK), None);
+        assert_eq!(
+            ErrorStatus::new(Status::NOENT),
+            Some(ErrorStatus::NOENT),
+            "and every non-zero status is one"
+        );
+        assert_eq!(
+            ErrorStatus::new(Status(12_345)).map(ErrorStatus::status),
+            Some(Status(12_345)),
+            "including a status NFSv2 does not define"
+        );
+        // Which means every error reply this type can express re-parses.
+        for status in [ErrorStatus::NOENT, ErrorStatus::STALE, ErrorStatus::ACCES] {
+            let encoded = Response::Lookup(Err(status)).encode();
+            assert_eq!(encoded.len(), 4);
+            assert_eq!(
+                Response::parse(Proc::LOOKUP, &encoded).unwrap(),
+                Response::Lookup(Err(status))
+            );
+        }
     }
 
     #[test]

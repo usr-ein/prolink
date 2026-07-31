@@ -1,0 +1,157 @@
+# Real packets, lifted byte for byte out of the capture corpus.
+#
+# The committed floor `crates/prolink-proto/tests/corpus.rs` runs off when
+# `PROLINK_CAPTURES` names nothing: skipping is not the same as passing, and a
+# coverage regression must not be able to hide behind a machine with no
+# captures. Every record below was produced by that test file's extractor from
+# `captures/S*/run.pcap`, so the provenance comment names the capture and the
+# frame it came from and nothing here was typed by hand.
+#
+# Format: `label = hex`, and a line indented by two spaces continues the one
+# above it. Hex only, lower case, no separators.
+
+# Discovery and device numbering — UDP 50000.
+#
+# Six of the nine kinds `djl::PacketKind` names. The three missing ones are
+# missing from the whole corpus, not from this file: `mixer_assign_intent`
+# (0x01) and `mixer_assign` (0x03) need a mixer, and this rig is two CDJs;
+# `number_conflict` (0x08) has never been observed anywhere, because nothing
+# has ever contested a number here. `tests/corpus.rs` asserts that last
+# absence, so the day a capture contains one the test says so.
+
+# S01-cold-boot-a frame 32 — 169.254.103.172:50000 -> 169.254.255.255:50000
+djl/hello = 5173707431576d4a4f4c0a0043444a2d323030306e65787573000000000000000102002501
+
+# S01-cold-boot-a frame 35 — stage 1, publishes the MAC
+djl/claim_mac = 5173707431576d4a4f4c000043444a2d323030306e65787573000000000000000102002c0101745e1c5667ac
+
+# S01-cold-boot-a frame 38 — stage 2. Byte 0x31 = 0x02, 'manual' (F36)
+djl/claim_ip = 5173707431576d4a4f4c020043444a2d323030306e657875730000000000000001020032a9fe67ac745e1c5667ac
+  01010102
+
+# S01-cold-boot-a frame 41 — stage 3. 0x26 bytes long, not the 0x2a the
+# pre-hardware literature gives (C2)
+djl/claim_number = 5173707431576d4a4f4c040043444a2d323030306e6578757300000000000000010200260101
+
+# S13-format-ground-truth frame 69 — 169.254.202.84:50000 -> 169.254.103.172:50000,
+# unicast. Byte for byte a claim_number but for the kind (F36)
+djl/number_in_use = 5173707431576d4a4f4c050043444a2d323030306e6578757300000000000000010200260201
+
+# S01-cold-boot-a frame 44 — byte 0x35 is 0x00 on nexus hardware, not 0x01 (C3)
+djl/keep_alive = 5173707431576d4a4f4c060043444a2d323030306e6578757300000000000000010200360102745e1c5667aca9fe
+  67ac010000000100
+
+# Player status, media and settings — UDP 50002.
+#
+# All five kinds this crate models. `mixer_status` (0x29) needs a mixer and is
+# absent from the corpus.
+
+# S05-link-browse frame 1 — 169.254.202.84:9559 -> 169.254.103.172:50002.
+# 284 bytes, the length reference documentation maps to 'Nexus 2' (F22)
+status/cdj_status = 5173707431576d4a4f4c0a43444a2d323030306e657875730000000000000001040200f802000000000000000000
+  00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  0000000000000000000000000100060400000000000000040101000000000000312e343400000000000000020084
+  fffe000fbc6a7fffffff7fffffff000fbc6a000000ffffffffff01ff000000000000000000000000000000000100
+  0000000000000000000fbc6a000fbc6a000027940f01000012345678000000010101010102010000000000000000
+  00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005
+  0000000000000000
+
+# S10-serve-to-cdj frame 40 — a deck asking about slot 3 (USB) of device 3.
+# The step no reference implementation performs (F24)
+status/media_query = 5173707431576d4a4f4c0543444a2d323030306e6578757300000000000000010002000ca9feca54000000030000
+  0003
+
+# S10b-serve-to-cdj frame 151 — the volume 'SAM2', 692 tracks, 35 playlists
+status/media_response = 5173707431576d4a4f4c0643444a2d323030306e6578757300000000000000010003009c00000003000000030053
+  0041004d003200000000000000000000000000000000000000000000000000000000000000000000000000000000
+  000000000000000000000000000000000032003000320035002d00300036002d0032003400000000003100300030
+  0030000000000000000000000000000000000000000000000000000002b400000101000000230000000728ca8000
+  000000057d06c000
+
+# S16a-settings-over-link frame 352 — LOAD SETTINGS over LINK, and not a file
+# read (F38)
+status/settings_query = 5173707431576d4a4f4c3543444a2d323030306e6578757300000000000000010002000402030000
+
+# S16a-settings-over-link frame 356 — the answer, PIONEER/MYSETTING.DAT inline
+status/settings_response = 5173707431576d4a4f4c3643444a2d323030306e6578757300000000000000010001002c02030000123456780000
+  00028181818881018181810101018080808180818000008000008181818181800000
+
+# The dbserver metadata protocol — TCP.
+#
+# The two directions of one whole conversation, preamble included, 212 bytes
+# between them: the smallest complete dbserver exchange in the corpus.
+# S4b-media-insert, 169.254.103.172:1062 -> 169.254.202.84:1051 — a deck
+# introducing itself, asking 0x3e03, and disconnecting.
+
+# client -> server: preamble, introduce, 0x3e03, disconnect
+dbserver/request = 110000000111872349ae11fffffffe1000000f01140000000c060000000000000000000000110000000111872349
+  ae1103800392103e030f01140000000c060000000000000000000000110101030111872349ae11fffffffe100100
+  0f00140000000c000000000000000000000000
+
+# server -> client: preamble, introduce_reply, 0x4b02
+dbserver/reply = 110000000111872349ae11fffffffe1040000f02140000000c060600000000000000000000110000000011000000
+  0211872349ae1103800392104b020f04140000000c0606060200000000000000001100003e031100000000110000
+  000226000000010000
+
+# S10g-serve-to-cdj, waveform_preview — 42 bytes, and the argument the header
+# declares as a blob is *absent from the wire*: argument 1 is a UInt32 zero
+# and argument 2 is the blob it announces, which is simply not sent. A reader
+# that expects an empty blob consumes the next message's magic instead.
+dbserver/omitted_blob = 11872349ae11038002941044020f03140000000c06060300000000000000000011000000031100000000
+
+# ONC RPC — one call per procedure the corpus contains.
+#
+# Every one is a whole UDP payload, header and arguments. The corpus holds no
+# STATFS, READDIR, MOUNTPROC_DUMP or UMNTALL: a CDJ never sends them.
+
+# S04-media-insert frame 103 — 169.254.99.100:64841 -> 169.254.103.172:111
+rpc/portmap_null = 100000000000000000000002000186a00000000200000000000000010000001483fd243d00000000000000000000
+  0000000000000000000000000000
+
+# S04-media-insert frame 107 — 'which port is mountd on?'. With nothing on 111
+# a deck never lists us at all (F46)
+rpc/portmap_getport = 100000020000000000000002000186a000000002000000030000000100000014e6d9c43a00000000000000000000
+  0000000000000000000000000000000186a5000000010000001100000000
+
+# S04-media-insert frame 105
+rpc/portmap_dump = 100000010000000000000002000186a000000002000000040000000100000014529ee72500000000000000000000
+  0000000000000000000000000000
+
+# S04-media-insert frame 457 — MNT '/C/', the USB export. The path is UTF-16LE
+# counted in bytes: 0x06 for three characters
+rpc/mount_mnt = 100000010000000000000002000186a500000001000000010000000100000014105af8a000000000000000000000
+  0000000000000000000000000000000000062f0043002f000000
+
+# S13-format-ground-truth frame 53203 — UMNT after an eject (C9). Its two XDR
+# pad bytes are 0x3c 0xd2, not zero
+rpc/mount_umnt = 000017f90000000000000002000186a5000000010000000300000001000000147ac50e0c00000000000000000000
+  0000000000000000000000000000000000062f0043002f003cd2
+
+# S04-media-insert frame 313 — EXPORT. Never sent by a real deck (F37); this
+# one is a reference client asking
+rpc/mount_export = 100000010000000000000002000186a500000001000000050000000100000014c7fe92f000000000000000000000
+  0000000000000000000000000000
+
+# S06-load-and-play frame 1026 — GETATTR on a handle the deck built itself:
+# it keeps our leading twelve bytes and overwrites the rest (F28)
+rpc/nfs_getattr = 000000080000000000000002000186a300000002000000010000000100000014bc69031000000000000000000000
+  00000000000000000000000000000134155401341300012b28100000000000000000000000000000000000000000
+
+# S04-media-insert frame 461 — LOOKUP 'PIONEER'. Fourteen bytes of UTF-16LE:
+# 50 00 49 00 4f 00 ... — the ASCII byte first and the zero second, which is
+# what makes it little-endian and not the big-endian dbserver uses
+rpc/nfs_lookup = 100000030000000000000002000186a3000000020000000400000001000000144e7c439500000000000000000000
+  0000000000000000000000000000012b2810012b2810012b28100000000000000000000000000000000000000000
+  0000000e500049004f004e004500450052000000
+
+# S10f-serve-to-cdj frame 506 — LOOKUP '6 SENSE', whose two trailing XDR pad
+# bytes are 0x87 0x58. A deck does not clear the pad, so an argument block
+# does not re-encode byte for byte and only its fields can be compared
+rpc/nfs_lookup_stale_pad = 000000220000000000000002000186a300000002000000040000000100000014f0bc710700000000000000000000
+  0000000000000000000000000000bb1a86efaafed0590437b5f803015a0000001b5800000000030301000000033d
+  0000000e36002000530045004e00530045008758
+
+# S04-media-insert frame 467 — READ, the call the audio itself arrives through
+rpc/nfs_read = 100000060000000000000002000186a300000002000000060000000100000014163c62b800000000000000000000
+  000000000000000000000000000001253c8c01253b8c012b28100000000000000000000000000000000000000000
+  000000000000050000000000

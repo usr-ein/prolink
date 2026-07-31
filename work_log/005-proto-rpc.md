@@ -162,7 +162,7 @@ fewer.
 
 ## Tests
 
-197 tests in the crate, of which 116 are this layer. The `captured` module in
+202 tests in the crate, of which 121 are this layer. The `captured` module in
 `rpc.rs` is the fixture floor: 22 whole datagrams off real hardware, decoded end
 to end and re-encoded, covering portmap `NULL`/`GETPORT`/`DUMP`, `MNT` of `/C/`,
 `/B/` and `/C/EXPORT`, `UMNT`, both flavours of `EXPORT` reply, `LOOKUP`
@@ -192,6 +192,52 @@ valid ones, plus seeded noise and hostile length prefixes written at every
 offset — pushed through every parser, asserting only that they return. Seeded,
 so a failure reproduces; no `rand` dependency, and none wanted.
 
+## What an adversarial review found
+
+Worth recording, because two of the defects were the *same class of bug the
+conventions exist to prevent*: our own encoder could build datagrams our own
+decoder rejects, and no round-trip test could ever have caught it, because both
+halves agreed.
+
+**`Reply::failed` accepted any `AcceptStat`.** `PROG_MISMATCH` is followed by a
+version range; the bare-status arm wrote none, giving a 24-byte reply every
+conformant client reads as truncated. Same shape for `Denied::Other` holding
+`AUTH_ERROR` or `RPC_MISMATCH`. Fixed by making those states unrepresentable:
+`FailureStat` and `OtherReject` have private fields and constructors that refuse
+exactly the values that carry a body. `Reply::prog_mismatch` is the way to send
+one now. The parser can construct them unchecked because its two preceding match
+arms are precisely the refused values.
+
+**`Err(Status::OK)` encoded as a success with no body.** An errno-to-status
+mapping that falls through to zero is an easy way to reach that, and the result
+is a reply claiming `NFS_OK` with no `fattr` — a truncated datagram to the
+client, mid-load. Fixed the same way: `NfsResult<T>` is now
+`Result<T, ErrorStatus>`, and `ErrorStatus::new` refuses `NFS_OK`.
+
+**The list caps were off by one.** `>=` after the push meant a listing of
+*exactly* the documented cap was refused — so a 64-entry `EXPORT` we encoded
+would not decode. `>` now, and `too_many` reports the observed count rather than
+the cap, which previously read "implausible length 64 (limit 64)".
+
+**`Writer::pad` aligned the buffer, not the field.** Correct only while the
+buffer happens to be word-aligned, which public `raw` can break. Now
+`pad_field(len)`, so padding is a property of the field as XDR says it is.
+
+Also fixed: `Message::parse` reported offsets relative to a sub-slice; the reply
+encoders sized for the header only, reallocating ~8 times per 8 KiB `READ` on
+the path where a stall is a dropout; the gids cap cited RFC 1057, which says
+`<10>` — 16 is RFC 5531's; and `no_length_prefix_can_make_a_parser_allocate`
+asserted nothing at all, so it would have passed with every cap deleted. It now
+checks the error at the offsets a length prefix actually occupies, with the
+blanket sweep kept beside it as a panic check only.
+
+The review confirmed as correct: all wire layouts against RFC 1057/1094 and the
+captures (including that the Python reference's `build_denied_reply` omits
+`auth_stat` and ours is right); all 29 captured hex literals byte-exact; the
+`STAMP_SEQUENCE` entries 33–40 that the evidence file does not print, chased
+into the journals independently; every `Fattr` constant; no reachable panic; and
+allocation linear in datagram size everywhere.
+
 ## Not settled
 
 - **`READDIR` and `STATFS` are unexercised.** Zero calls in 56,966 — a deck
@@ -218,7 +264,28 @@ so a failure reproduces; no `rand` dependency, and none wanted.
 
 ## Outside my files
 
-Nothing. No change to `error.rs` — `Truncated`, `Malformed` and
-`ImplausibleLength` covered every case, and the distinction that mattered
-(`is_truncated()` true for a short datagram, false for a hostile length prefix)
-already existed.
+No file edited outside `rpc.rs` and `rpc/`. No change to `error.rs` —
+`Truncated`, `Malformed` and `ImplausibleLength` covered every case, and the
+distinction that mattered (`is_truncated()` true for a short datagram, false for
+a hostile length prefix) already existed.
+
+**But three of the review fixes are breaking API changes**, made while
+`crates/prolink` was already building on this layer:
+
+| Was | Is |
+|---|---|
+| `Reply::failed(xid, AcceptStat::X)` | `Reply::failed(xid, FailureStat::X)` |
+| `Accepted::Failed(AcceptStat)` | `Accepted::Failed(FailureStat)` |
+| `Denied::Other(RejectStat)` | `Denied::Other(OtherReject)` |
+| `NfsResult<T> = Result<T, Status>` | `Result<T, ErrorStatus>` |
+| `Err(Status::NOENT)` | `Err(ErrorStatus::NOENT)` |
+
+The migration is a rename in every case: `ErrorStatus` carries a constant for
+every `Status` but `OK`, and `FailureStat` for every `AcceptStat` but the two
+that carry a body, so no call site needs a fallible conversion. `From<ErrorStatus>
+for Status` exists for the way back. `Reply::prog_mismatch(xid, low, high)` is
+the new way to send the one refusal that carries a version range.
+
+The workspace builds and every crate's tests pass as of this note, but the serve
+and consume layers are being written concurrently, so this is worth knowing
+about rather than discovering.

@@ -62,13 +62,19 @@ use crate::{Error, MAGIC, Result, Slot};
 /// Measured at 199 ms mean (min 63, max 207) on a real CDJ-2000nexus.
 pub const STATUS_INTERVAL: Duration = Duration::from_millis(200);
 
+// The offsets below, and the four helpers further down marked `pub(crate)`,
+// describe the header **shared with UDP 50001** — see [`crate::beat`], which
+// reads and writes exactly this layout with a different byte at `0x0a`. They
+// live here because this is where they were first written down; a second copy
+// in the beat codec would be two things that have to be corrected together.
+
 /// Offset of the 20-byte device name. **Not** `0x0c` as on the discovery port.
-const OFF_NAME: usize = 0x0b;
+pub(crate) const OFF_NAME: usize = 0x0b;
 /// Offset of the structural `0x01` (C14).
-const OFF_CONST_ONE: usize = 0x1f;
-const OFF_SUBTYPE: usize = 0x20;
-const OFF_SENDER: usize = 0x21;
-const OFF_BODY_LEN: usize = 0x22;
+pub(crate) const OFF_CONST_ONE: usize = 0x1f;
+pub(crate) const OFF_SUBTYPE: usize = 0x20;
+pub(crate) const OFF_SENDER: usize = 0x21;
+pub(crate) const OFF_BODY_LEN: usize = 0x22;
 /// First byte of the body; body length counts from here.
 const BODY_START: usize = 0x24;
 
@@ -230,16 +236,16 @@ pub fn decode(data: &[u8]) -> Result<Packet> {
 
 // -- byte access ----------------------------------------------------------
 
-fn byte_at(raw: &[u8], offset: usize) -> Option<u8> {
+pub(crate) fn byte_at(raw: &[u8], offset: usize) -> Option<u8> {
     raw.get(offset).copied()
 }
 
-fn be_u16_at(raw: &[u8], offset: usize) -> Option<u16> {
+pub(crate) fn be_u16_at(raw: &[u8], offset: usize) -> Option<u16> {
     let bytes = raw.get(offset..offset.checked_add(2)?)?;
     Some(u16::from_be_bytes(bytes.try_into().ok()?))
 }
 
-fn be_u32_at(raw: &[u8], offset: usize) -> Option<u32> {
+pub(crate) fn be_u32_at(raw: &[u8], offset: usize) -> Option<u32> {
     let bytes = raw.get(offset..offset.checked_add(4)?)?;
     Some(u32::from_be_bytes(bytes.try_into().ok()?))
 }
@@ -270,12 +276,21 @@ fn utf16be_at(raw: &[u8], offset: usize, len: usize) -> String {
 
 /// Write the 50002 header into an already-sized buffer.
 fn write_header(out: &mut [u8], kind: StatusKind, name: DeviceName, sender: u8) {
+    write_shared_header(out, kind.0, name, sender);
+}
+
+/// Write the header shared by UDP 50001 and 50002 into an already-sized buffer.
+///
+/// The byte at `0x0a` is port-specific — [`StatusKind`] here and
+/// [`crate::beat::BeatKind`] on 50001 — so it arrives as a plain byte rather
+/// than as either enumeration.
+pub(crate) fn write_shared_header(out: &mut [u8], kind: u8, name: DeviceName, sender: u8) {
     let total = out.len();
     if let Some(magic) = out.get_mut(..MAGIC.len()) {
         magic.copy_from_slice(&MAGIC);
     }
     if let Some(slot) = out.get_mut(MAGIC.len()) {
-        *slot = kind.0;
+        *slot = kind;
     }
     if let Some(field) = out.get_mut(OFF_NAME..OFF_NAME + DeviceName::LEN) {
         field.copy_from_slice(&name.0);
@@ -1062,6 +1077,26 @@ impl fmt::Debug for SettingsResponse {
 
 /// The check every constructor on this port performs, once.
 fn check(data: &[u8], kind: StatusKind, min_len: usize) -> Result<()> {
+    check_header(data, kind.0, min_len).map_err(|error| match error {
+        // Restore the named form in the message: `0x0a` reads as `cdj_status`
+        // on this port and as nothing at all on 50001.
+        Error::Malformed { at, .. } if at == MAGIC.len() => Error::malformed(
+            at,
+            format!(
+                "expected {kind:?} ({:#04x}), got {:#04x}",
+                kind.0,
+                byte_at(data, MAGIC.len()).unwrap_or(0)
+            ),
+        ),
+        other => other,
+    })
+}
+
+/// The magic, kind and minimum-length check shared by UDP 50001 and 50002.
+///
+/// Performed **once**, by a constructor, which is what makes every accessor
+/// below `min_len` total.
+pub(crate) fn check_header(data: &[u8], kind: u8, min_len: usize) -> Result<()> {
     if data.get(..MAGIC.len()) != Some(MAGIC.as_slice()) {
         let got = data.get(..MAGIC.len()).unwrap_or(data);
         return Err(Error::BadMagic {
@@ -1070,11 +1105,11 @@ fn check(data: &[u8], kind: StatusKind, min_len: usize) -> Result<()> {
         });
     }
     match byte_at(data, MAGIC.len()) {
-        Some(actual) if actual == kind.0 => {}
+        Some(actual) if actual == kind => {}
         Some(actual) => {
             return Err(Error::malformed(
                 MAGIC.len(),
-                format!("expected {kind:?} ({:#04x}), got {actual:#04x}", kind.0),
+                format!("expected kind {kind:#04x}, got {actual:#04x}"),
             ));
         }
         None => {

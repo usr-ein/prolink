@@ -636,6 +636,7 @@ name = "prolink-proto"
 version = "0.1.0"
 dependencies = [
  "binrw 0.15.2",
+ "prolink-capture",
  "thiserror 2.0.19",
 ]
 

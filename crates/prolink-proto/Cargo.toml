@@ -16,5 +16,11 @@ categories.workspace = true
 binrw.workspace = true
 thiserror.workspace = true
 
+# `tests/corpus.rs` replays the capture corpus through these codecs. It is a
+# dev-dependency and must stay one: this crate is a pure codec and depends on
+# nothing at build time.
+[dev-dependencies]
+prolink-capture.workspace = true
+
 [lints]
 workspace = true

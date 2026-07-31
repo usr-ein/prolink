@@ -60,6 +60,7 @@ pub mod device;
 pub mod discovery;
 pub mod interface;
 pub mod media;
+pub mod monitor;
 pub mod serve;
 pub mod virtual_cdj;
 
@@ -71,6 +72,9 @@ pub use discovery::Discovery;
 pub use error::{Error, Result};
 pub use interface::Interface;
 pub use media::{MediaDescription, MediaSource};
+pub use monitor::{Monitor, MonitorEvent, PlayerState};
+/// The beat-packet types that appear in [`monitor`]'s signatures.
+pub use prolink_proto::beat::{Beat, BeatInBar, Pitch};
 pub use virtual_cdj::{VirtualCdj, VirtualCdjConfig};
 
 /// Re-exported so callers do not need a direct dependency on the codec crate

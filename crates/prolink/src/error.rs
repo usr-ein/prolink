@@ -34,6 +34,14 @@ pub enum Error {
     #[error("no usable network interface")]
     NoUsableInterface,
 
+    /// A server was asked to serve no media.
+    ///
+    /// An error rather than an empty server, because a device that advertises
+    /// no slots is one no player will ever ask about (F24), so it would sit
+    /// there looking correct and doing nothing.
+    #[error("nothing to serve: give at least one medium")]
+    NothingToServe,
+
     /// A peer sent something this crate could not decode.
     #[error(transparent)]
     Protocol(#[from] prolink_proto::Error),
@@ -63,6 +71,24 @@ pub enum Error {
         holder: Ipv4Addr,
     },
 
+    /// A port serving requires could not be bound.
+    ///
+    /// Only UDP/111 is in this position. With nothing there a deck retries
+    /// `GETPORT` once a second indefinitely, never falls back to the well-known
+    /// ports, and so never lists us at all (F46) — so this is a hard failure
+    /// rather than a warning. It carries its own variant because the remedy is
+    /// platform-specific and belongs in front of a user rather than in a log.
+    #[error("cannot bind UDP {port}, which serving files requires: {source} — {remedy}")]
+    PrivilegedPort {
+        /// The port that could not be bound.
+        port: u16,
+        /// What the operating system said.
+        #[source]
+        source: std::io::Error,
+        /// What a user can do about it on this platform.
+        remedy: &'static str,
+    },
+
     /// A peer stopped answering.
     #[error("{what} timed out after {}ms", .after.as_millis())]
     Timeout {
@@ -70,6 +96,38 @@ pub enum Error {
         what: &'static str,
         /// How long we waited.
         after: std::time::Duration,
+    },
+
+    /// A peer answered a file-access call with a filesystem status.
+    ///
+    /// A well-formed reply reporting a failure, not a decoding failure, and the
+    /// status is the whole of what a caller can act on:
+    /// [`ACCES`](prolink_proto::rpc::nfs2::ErrorStatus::ACCES) on `MNT`
+    /// means "announce first" rather than "give up" (F12),
+    /// [`NOENT`](prolink_proto::rpc::nfs2::ErrorStatus::NOENT) on a `LOOKUP` may
+    /// mean the medium spells the name differently from its own database (O6),
+    /// and [`STALE`](prolink_proto::rpc::nfs2::ErrorStatus::STALE) means the mount
+    /// has to be redone.
+    #[error("{operation} {path}: {status}")]
+    Nfs {
+        /// Which procedure failed.
+        operation: &'static str,
+        /// The path or export it was called on.
+        path: String,
+        /// What the peer reported.
+        status: prolink_proto::rpc::nfs2::ErrorStatus,
+    },
+
+    /// A peer understood a request and would not answer it.
+    ///
+    /// Distinct from [`Error::Protocol`], which means the bytes did not decode
+    /// at all: this one is a peer that is speaking the protocol and saying no.
+    #[error("{what}: {detail}")]
+    Refused {
+        /// What was being attempted.
+        what: &'static str,
+        /// What the peer said, in whatever terms its layer has.
+        detail: String,
     },
 }
 

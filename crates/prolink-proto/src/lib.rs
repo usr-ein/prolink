@@ -61,6 +61,7 @@
 )]
 
 pub mod analysis;
+pub mod beat;
 pub mod dbserver;
 pub mod device;
 pub mod djl;

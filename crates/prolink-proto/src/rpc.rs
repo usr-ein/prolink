@@ -419,7 +419,9 @@ impl AuthUnix {
             machine_name: input.ascii_string(255)?,
             uid: input.u32()?,
             gid: input.u32()?,
-            // RFC 1057 caps supplementary groups at 16.
+            // RFC 1057 §9.2 declares `unsigned int gids<10>`; RFC 5531 raised
+            // it to 16, which is what every implementation actually allows.
+            // A player sends none at all.
             gids: input.u32_array(16)?,
         })
     }
@@ -648,13 +650,55 @@ pub enum Accepted<'a> {
         /// Highest version supported.
         high: u32,
     },
-    /// Any other `accept_stat`, which RFC 1057 gives no body.
-    ///
-    /// [`Reply::parse`] never puts `SUCCESS` or `PROG_MISMATCH` here — they
-    /// have their own variants. Encoding one anyway writes a well-formed
-    /// header with an empty body, which is what a `SUCCESS` with no results
-    /// looks like.
-    Failed(AcceptStat),
+    /// Any other `accept_stat` — all of which RFC 1057 gives no body.
+    Failed(FailureStat),
+}
+
+/// An `accept_stat` whose wire form is the status word and nothing else.
+///
+/// That is every value except the two that carry something: `SUCCESS`, which
+/// is followed by the procedure's results, and `PROG_MISMATCH`, which is
+/// followed by a version range. Both have their own [`Accepted`] variant.
+///
+/// The inner value is private and [`FailureStat::new`] refuses those two,
+/// because the alternative was a public constructor that could build a reply
+/// our own decoder rejects: `PROG_MISMATCH` with no version range is a
+/// twenty-four-byte datagram that every conformant client reads as truncated.
+/// This is the "make illegal states unrepresentable" case in miniature — the
+/// check happens once, here, and no encoder below can forget it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FailureStat(AcceptStat);
+
+impl FailureStat {
+    /// This host does not run that program.
+    pub const PROG_UNAVAIL: Self = Self(AcceptStat::PROG_UNAVAIL);
+    /// The program does not implement that procedure. What a real CDJ answers
+    /// a `READDIR` with, and what we answer a write with.
+    pub const PROC_UNAVAIL: Self = Self(AcceptStat::PROC_UNAVAIL);
+    /// The arguments did not decode.
+    pub const GARBAGE_ARGS: Self = Self(AcceptStat::GARBAGE_ARGS);
+    /// The server failed for a reason of its own.
+    pub const SYSTEM_ERR: Self = Self(AcceptStat::SYSTEM_ERR);
+
+    /// `None` for `SUCCESS` and `PROG_MISMATCH`, which carry a body and so
+    /// cannot be represented as a bare status.
+    pub fn new(stat: AcceptStat) -> Option<Self> {
+        match stat {
+            AcceptStat::SUCCESS | AcceptStat::PROG_MISMATCH => None,
+            other => Some(Self(other)),
+        }
+    }
+
+    /// The `accept_stat` word this puts on the wire.
+    pub fn stat(self) -> AcceptStat {
+        self.0
+    }
+}
+
+impl fmt::Debug for FailureStat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
 }
 
 impl Accepted<'_> {
@@ -663,7 +707,7 @@ impl Accepted<'_> {
         match self {
             Self::Success(_) => AcceptStat::SUCCESS,
             Self::ProgMismatch { .. } => AcceptStat::PROG_MISMATCH,
-            Self::Failed(stat) => *stat,
+            Self::Failed(stat) => stat.stat(),
         }
     }
 }
@@ -680,8 +724,40 @@ pub enum Denied {
     },
     /// The credential was refused.
     AuthError(AuthStat),
-    /// A `reject_stat` outside the two the standard defines.
-    Other(RejectStat),
+    /// A `reject_stat` outside the two the standard defines, and so with no
+    /// body.
+    Other(OtherReject),
+}
+
+/// A `reject_stat` outside the two RFC 1057 defines.
+///
+/// Both defined values carry a body — `RPC_MISMATCH` a version range and
+/// `AUTH_ERROR` an [`AuthStat`] — and both have their own [`Denied`] variant,
+/// so as with [`FailureStat`] the inner value is private and cannot be one of
+/// them. Nothing has ever sent us one of these: there is not a single
+/// `MSG_DENIED` reply in the corpus.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OtherReject(RejectStat);
+
+impl OtherReject {
+    /// `None` for the two values that carry a body.
+    pub fn new(stat: RejectStat) -> Option<Self> {
+        match stat {
+            RejectStat::RPC_MISMATCH | RejectStat::AUTH_ERROR => None,
+            other => Some(Self(other)),
+        }
+    }
+
+    /// The `reject_stat` word this puts on the wire.
+    pub fn stat(self) -> RejectStat {
+        self.0
+    }
+}
+
+impl fmt::Debug for OtherReject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
 }
 
 /// One RPC reply.
@@ -723,11 +799,25 @@ impl<'a> Reply<'a> {
     /// An accepted reply reporting a non-success status — `PROC_UNAVAIL` for a
     /// procedure we do not implement, `PROG_UNAVAIL` for a program that is not
     /// this port's, `GARBAGE_ARGS` for arguments that did not decode.
-    pub fn failed(xid: Xid, stat: AcceptStat) -> Self {
+    ///
+    /// Takes a [`FailureStat`] rather than an [`AcceptStat`] so that
+    /// `PROG_MISMATCH`, which needs a version range after it, cannot be sent
+    /// from here without one.
+    pub fn failed(xid: Xid, stat: FailureStat) -> Self {
         Self::Accepted {
             xid,
             verifier: Auth::NULL,
             status: Accepted::Failed(stat),
+        }
+    }
+
+    /// An accepted reply reporting that this program is served at a different
+    /// version, with the range that is served.
+    pub fn prog_mismatch(xid: Xid, low: u32, high: u32) -> Self {
+        Self::Accepted {
+            xid,
+            verifier: Auth::NULL,
+            status: Accepted::ProgMismatch { low, high },
         }
     }
 
@@ -754,8 +844,14 @@ impl<'a> Reply<'a> {
     }
 
     /// Encode this reply as one datagram.
+    ///
+    /// Every reply this type can express is well formed — the two unions that
+    /// carry a body have their own variants, so the body cannot go missing.
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = xdr::Writer::with_capacity(32);
+        // Sized for the header plus whatever results ride along, because the
+        // biggest of those is an 8 KiB READ payload on the path a stall turns
+        // into an audio dropout (F18).
+        let mut out = xdr::Writer::with_capacity(32 + self.results().map_or(0, <[u8]>::len));
         match self {
             Self::Accepted {
                 xid,
@@ -790,7 +886,7 @@ impl<'a> Reply<'a> {
                         out.u32(RejectStat::AUTH_ERROR.0);
                         out.u32(stat.0);
                     }
-                    Denied::Other(stat) => out.u32(stat.0),
+                    Denied::Other(stat) => out.u32(stat.stat().0),
                 }
             }
         }
@@ -824,7 +920,9 @@ impl<'a> Reply<'a> {
                         high: input.u32()?,
                     },
                     RejectStat::AUTH_ERROR => Denied::AuthError(AuthStat(input.u32()?)),
-                    other => Denied::Other(other),
+                    // The two arms above are the only ones RejectStat defines,
+                    // so `new` cannot refuse what is left.
+                    other => Denied::Other(OtherReject(other)),
                 };
                 Ok(Self::Denied { xid, reason })
             }
@@ -837,7 +935,9 @@ impl<'a> Reply<'a> {
                         low: input.u32()?,
                         high: input.u32()?,
                     },
-                    other => Accepted::Failed(other),
+                    // Likewise: the two arms above are exactly the values
+                    // `FailureStat::new` rejects.
+                    other => Accepted::Failed(FailureStat(other)),
                 };
                 Ok(Self::Accepted {
                     xid,
@@ -866,7 +966,14 @@ pub enum Message<'a> {
 impl<'a> Message<'a> {
     /// Decode one datagram, dispatching on `msg_type`.
     pub fn parse(data: &'a [u8]) -> Result<Self> {
-        let msg_type = xdr::Reader::new(data.get(4..).unwrap_or(&[])).u32()?;
+        // Read the discriminator through a reader over the whole datagram, so
+        // that a runt reports the offset it actually ran out at. A reader over
+        // `data[4..]` would report offsets relative to that slice, and for a
+        // datagram shorter than four bytes would describe a slice that does
+        // not exist.
+        let mut header = xdr::Reader::new(data);
+        let _xid = header.u32()?;
+        let msg_type = header.u32()?;
         match msg_type {
             MSG_CALL => Call::parse(data).map(Message::Call),
             MSG_REPLY => Reply::parse(data).map(Message::Reply),
@@ -1035,7 +1142,7 @@ mod tests {
 
     #[test]
     fn proc_unavail_is_a_real_answer_and_carries_no_body() {
-        let raw = Reply::failed(Xid(1), AcceptStat::PROC_UNAVAIL).encode();
+        let raw = Reply::failed(Xid(1), FailureStat::PROC_UNAVAIL).encode();
         assert_eq!(
             raw.len(),
             24,
@@ -1046,11 +1153,43 @@ mod tests {
         assert!(matches!(
             reply,
             Reply::Accepted {
-                status: Accepted::Failed(AcceptStat::PROC_UNAVAIL),
+                status: Accepted::Failed(FailureStat::PROC_UNAVAIL),
                 ..
             }
         ));
         assert_eq!(reply.results(), None);
+    }
+
+    /// A reply this type can build must be one our own decoder accepts.
+    ///
+    /// `PROG_MISMATCH` is followed by a version range and `AUTH_ERROR` by an
+    /// `auth_stat`, so putting either in the "bare status" arm would emit a
+    /// datagram every conformant client reads as truncated. The constructors
+    /// refuse them, which is why that arm needs no runtime check.
+    #[test]
+    fn a_status_that_carries_a_body_cannot_be_sent_as_a_bare_status() {
+        assert_eq!(FailureStat::new(AcceptStat::PROG_MISMATCH), None);
+        assert_eq!(
+            FailureStat::new(AcceptStat::SUCCESS),
+            None,
+            "SUCCESS is followed by the results, so it is not a failure either"
+        );
+        assert_eq!(
+            FailureStat::new(AcceptStat::PROC_UNAVAIL),
+            Some(FailureStat::PROC_UNAVAIL)
+        );
+        assert_eq!(
+            FailureStat::new(AcceptStat(99)).map(FailureStat::stat),
+            Some(AcceptStat(99)),
+            "an unfamiliar status has no body either, so it is representable"
+        );
+
+        assert_eq!(OtherReject::new(RejectStat::RPC_MISMATCH), None);
+        assert_eq!(OtherReject::new(RejectStat::AUTH_ERROR), None);
+        assert_eq!(
+            OtherReject::new(RejectStat(7)).map(OtherReject::stat),
+            Some(RejectStat(7))
+        );
     }
 
     #[test]
@@ -1695,7 +1834,7 @@ mod captured {
         assert_eq!(reply.len(), 28);
         assert_eq!(
             nfs2::Response::parse(nfs2::Proc::LOOKUP, results(&reply)).unwrap(),
-            nfs2::Response::Lookup(Err(nfs2::Status::NOENT))
+            nfs2::Response::Lookup(Err(nfs2::ErrorStatus::NOENT))
         );
     }
 
@@ -1972,13 +2111,10 @@ mod fuzz {
         }
     }
 
-    /// Random noise rarely gets past a header check, so most of the work is
-    /// done here: start from datagrams that *are* valid and break them one
-    /// byte at a time.
-    #[test]
-    fn no_mutation_of_a_valid_datagram_can_panic_a_parser() {
+    /// One well-formed datagram per shape a peer can send us, to be broken.
+    fn valid_datagrams() -> Vec<Vec<u8>> {
         let credential = AuthUnix::cdj(STAMP_FIRST_CALL).encode();
-        let seeds: Vec<Vec<u8>> = vec![
+        vec![
             Call::new(
                 Xid(1),
                 Program::PORTMAP,
@@ -2054,10 +2190,16 @@ mod fuzz {
                 .encode(),
             )
             .encode(),
-        ];
+        ]
+    }
 
+    /// Random noise rarely gets past a header check, so most of the work is
+    /// done here: start from datagrams that *are* valid and break them one
+    /// byte at a time.
+    #[test]
+    fn no_mutation_of_a_valid_datagram_can_panic_a_parser() {
         let mut rng = Lcg(0xc0ff_ee42);
-        for seed in &seeds {
+        for seed in &valid_datagrams() {
             // Every truncation, which is the commonest real malformation.
             for cut in 0..=seed.len() {
                 parse_every_way(seed.get(..cut).unwrap_or(seed));
@@ -2076,7 +2218,7 @@ mod fuzz {
             // And a few thousand multi-byte scrambles per seed.
             for _ in 0..2_000 {
                 let mut mutated = seed.clone();
-                for _ in 0..rng.below(6) + 1 {
+                for _ in 0..=rng.below(6) {
                     let position = rng.below(mutated.len().max(1));
                     if let Some(slot) = mutated.get_mut(position) {
                         *slot = rng.next_byte();
@@ -2090,10 +2232,73 @@ mod fuzz {
     /// The property that must survive every port of this code: a length prefix
     /// claiming four gigabytes costs a parse failure, not four gigabytes.
     ///
-    /// Checked at every offset of every seed rather than in one hand-picked
-    /// place, because the guarantee is about the reader, not about one field.
+    /// Asserted at the offsets where a length prefix actually lives, so the
+    /// test fails if the cap is ever removed. The sweep below is the companion
+    /// to it and only checks that nothing panics — worth having, but it would
+    /// pass with every cap deleted, which is why this one exists.
     #[test]
-    fn no_length_prefix_can_make_a_parser_allocate() {
+    fn a_hostile_length_prefix_is_refused_rather_than_allocated() {
+        // A LOOKUP call: 24 header + 8 credential head + 20 body + 8 verifier
+        // + 32 filehandle puts the name's length prefix at 92.
+        let credential = AuthUnix::cdj(STAMP_FIRST_CALL).encode();
+        let arguments = nfs2::Request::Lookup {
+            dir: FileHandle::ZERO,
+            name: xdr::Utf16LeString::new("Contents"),
+        }
+        .encode_arguments();
+        let mut call = Call::new(
+            Xid(1),
+            Program::NFS,
+            2,
+            nfs2::Proc::LOOKUP.0,
+            Auth::unix(&credential),
+            &arguments,
+        )
+        .encode();
+        assert_eq!(call.get(92..96), Some(16u32.to_be_bytes().as_slice()));
+        if let Some(slot) = call.get_mut(92..96) {
+            slot.copy_from_slice(&0xffff_ffffu32.to_be_bytes());
+        }
+        let parsed = Call::parse(&call).expect("the header is still intact");
+        let error = nfs2::Request::parse(nfs2::Proc::LOOKUP, parsed.arguments)
+            .expect_err("a four-gigabyte name must be refused");
+        assert!(
+            matches!(error, Error::ImplausibleLength { limit, .. } if limit == u64::from(nfs2::MAX_NAME)),
+            "expected a capped refusal, got {error:?}"
+        );
+        assert!(
+            !error.is_truncated(),
+            "and it is not truncation: more bytes would not help"
+        );
+
+        // The credential body's own prefix, at offset 28, is capped at RFC
+        // 1057's 400 bytes by the framing layer itself.
+        let mut call = Call::new(
+            Xid(1),
+            Program::NFS,
+            2,
+            nfs2::Proc::LOOKUP.0,
+            Auth::unix(&credential),
+            &arguments,
+        )
+        .encode();
+        if let Some(slot) = call.get_mut(28..32) {
+            slot.copy_from_slice(&0xffff_ffffu32.to_be_bytes());
+        }
+        assert!(
+            matches!(
+                Call::parse(&call),
+                Err(Error::ImplausibleLength { limit: 400, .. })
+            ),
+            "an oversized opaque_auth body must be refused before allocating"
+        );
+    }
+
+    /// The companion sweep: hostile prefixes at *every* offset, checking only
+    /// that nothing panics or hangs. See the test above for the assertion that
+    /// the caps are doing anything.
+    #[test]
+    fn no_length_prefix_at_any_offset_can_panic_a_parser() {
         let credential = AuthUnix::cdj(STAMP_FIRST_CALL).encode();
         let seed = Call::new(
             Xid(1),
@@ -2117,6 +2322,397 @@ mod fuzz {
                 }
                 parse_every_way(&mutated);
             }
+        }
+    }
+}
+
+/// Every procedure driven through all four halves, in order.
+///
+/// This layer exists twice over: we build calls and parse replies as a client,
+/// and parse calls and build replies as a server. A codec can be
+/// self-consistent in each direction separately and still have the two
+/// disagree — an argument encoder that writes a field the argument parser does
+/// not read is invisible to any test that only round-trips one of them.
+///
+/// So each test here runs the whole loop a real exchange runs:
+///
+/// ```text
+/// client builds a call ─► server parses it ─► server builds a reply ─► client parses that
+/// ```
+///
+/// and checks that what the client asked for is what the server saw, and that
+/// what the server answered is what the client got. The captured-bytes tests
+/// above are what tie this to a CDJ; this is what ties the two directions to
+/// each other.
+#[cfg(test)]
+mod loopback {
+    use super::*;
+    use crate::rpc::xdr::Utf16LeString;
+
+    const HANDLE: FileHandle = FileHandle([7; nfs2::FHANDLE_LEN]);
+
+    /// Put a call on the wire and take it off again, as a server would.
+    fn exchange_call<'a>(
+        program: Program,
+        version: u32,
+        procedure: u32,
+        arguments: &'a [u8],
+        datagram: &'a mut Vec<u8>,
+    ) -> Call<'a> {
+        let credential = AuthUnix::cdj(STAMP_FIRST_CALL).encode();
+        *datagram = Call::new(
+            Xid(0x0350_0001),
+            program,
+            version,
+            procedure,
+            Auth::unix(&credential),
+            arguments,
+        )
+        .encode();
+        let parsed = Call::parse(datagram).expect("a call we built must parse");
+        assert_eq!(parsed.program, program);
+        assert_eq!(parsed.version, version);
+        assert_eq!(parsed.procedure, procedure);
+        assert_eq!(parsed.xid, Xid(0x0350_0001));
+        parsed
+    }
+
+    /// Put a reply on the wire and take it off again, as a client would.
+    fn exchange_reply<'a>(results: &'a [u8], datagram: &'a mut Vec<u8>) -> &'a [u8] {
+        *datagram = Reply::success(Xid(0x0350_0001), results).encode();
+        let parsed = Reply::parse(datagram).expect("a reply we built must parse");
+        assert_eq!(parsed.xid(), Xid(0x0350_0001));
+        parsed.results().expect("a success carries results")
+    }
+
+    #[test]
+    fn every_portmap_procedure_survives_a_full_exchange() {
+        let cases = [
+            (portmap::Request::Null, portmap::Response::Null),
+            (
+                portmap::Request::GetPort(portmap::Mapping::query(
+                    Program::MOUNT,
+                    1,
+                    IpProtocol::UDP,
+                )),
+                portmap::Response::GetPort(Some(mount::PIONEER_PORT)),
+            ),
+            (
+                portmap::Request::GetPort(portmap::Mapping::query(
+                    Program::NFS,
+                    2,
+                    IpProtocol::UDP,
+                )),
+                // The empty slot's honest answer, and the one most easily
+                // mistaken for a failure.
+                portmap::Response::GetPort(None),
+            ),
+            (
+                portmap::Request::Dump,
+                portmap::Response::Dump(
+                    portmap::cdj_registrations(portmap::PORT, mount::PIONEER_PORT, nfs2::PORT)
+                        .to_vec(),
+                ),
+            ),
+        ];
+
+        for (request, response) in cases {
+            let arguments = request.encode_arguments();
+            let mut wire = Vec::new();
+            let call = exchange_call(
+                Program::PORTMAP,
+                portmap::VERSION,
+                request.procedure().0,
+                &arguments,
+                &mut wire,
+            );
+            let seen = portmap::Request::parse(portmap::Proc(call.procedure), call.arguments)
+                .expect("the server must decode what the client encoded");
+            assert_eq!(seen, request, "the call did not survive the wire");
+
+            let results = response.encode();
+            let mut wire = Vec::new();
+            let got = portmap::Response::parse(
+                portmap::Proc(call.procedure),
+                exchange_reply(&results, &mut wire),
+            )
+            .expect("the client must decode what the server encoded");
+            assert_eq!(got, response, "the reply did not survive the wire");
+        }
+    }
+
+    #[test]
+    fn every_mount_procedure_survives_a_full_exchange() {
+        let cases = [
+            (mount::Request::Null, mount::Response::Null),
+            (
+                mount::Request::Mnt(Utf16LeString::new(mount::EXPORT_USB)),
+                mount::Response::Mnt(Ok(HANDLE)),
+            ),
+            (
+                // An unaligned path, so the padding is exercised too.
+                mount::Request::Mnt(Utf16LeString::new("/C/EXPORT")),
+                mount::Response::Mnt(Err(nfs2::ErrorStatus::ACCES)),
+            ),
+            (
+                mount::Request::Umnt(Utf16LeString::new(mount::EXPORT_SD)),
+                mount::Response::Umnt,
+            ),
+            (mount::Request::UmntAll, mount::Response::UmntAll),
+            (
+                mount::Request::Dump,
+                mount::Response::Dump(vec![mount::MountEntry {
+                    hostname: "169.254.99.100".to_owned(),
+                    directory: Utf16LeString::new(mount::EXPORT_USB),
+                }]),
+            ),
+            (
+                mount::Request::Export,
+                mount::Response::Export(vec![
+                    mount::Export::new(mount::EXPORT_SD, &[mount::Export::LINK_LOCAL_SUBNET]),
+                    mount::Export::new(mount::EXPORT_USB, &[mount::Export::LINK_LOCAL_SUBNET]),
+                ]),
+            ),
+        ];
+
+        for (request, response) in cases {
+            let arguments = request.encode_arguments();
+            let mut wire = Vec::new();
+            let call = exchange_call(
+                Program::MOUNT,
+                mount::VERSION,
+                request.procedure().0,
+                &arguments,
+                &mut wire,
+            );
+            let seen = mount::Request::parse(mount::Proc(call.procedure), call.arguments)
+                .expect("the server must decode what the client encoded");
+            assert_eq!(seen, request, "the call did not survive the wire");
+
+            let results = response.encode();
+            let mut wire = Vec::new();
+            let got = mount::Response::parse(
+                mount::Proc(call.procedure),
+                exchange_reply(&results, &mut wire),
+            )
+            .expect("the client must decode what the server encoded");
+            assert_eq!(got, response, "the reply did not survive the wire");
+        }
+    }
+
+    /// One call and one plausible answer for every NFS procedure we model,
+    /// plus the two error shapes that matter and one we refuse.
+    fn nfs_exchanges(payload: &[u8]) -> Vec<(nfs2::Request, nfs2::Response<'_>)> {
+        let attr = nfs2::Fattr::regular_file(1, 7_633_531, nfs2::Fattr::EPOCH)
+            .expect("a 7 MB file is well inside the 32-bit ceiling");
+        vec![
+            (nfs2::Request::Null, nfs2::Response::Null),
+            (
+                nfs2::Request::GetAttr(HANDLE),
+                nfs2::Response::Attr(Ok(attr)),
+            ),
+            (
+                nfs2::Request::GetAttr(HANDLE),
+                // A stale handle is what a media swap looks like from here.
+                nfs2::Response::Attr(Err(nfs2::ErrorStatus::STALE)),
+            ),
+            (
+                nfs2::Request::Lookup {
+                    dir: HANDLE,
+                    // Unaligned and non-ASCII at once: 19 characters, 38
+                    // bytes, two of padding.
+                    name: Utf16LeString::new("02. Akiba - カガミ.mp3"),
+                },
+                nfs2::Response::Lookup(Ok(nfs2::FileRef {
+                    handle: HANDLE,
+                    attr,
+                })),
+            ),
+            (
+                nfs2::Request::Lookup {
+                    dir: HANDLE,
+                    name: Utf16LeString::new("Contents"),
+                },
+                nfs2::Response::Lookup(Err(nfs2::ErrorStatus::NOENT)),
+            ),
+            (
+                nfs2::Request::Read(nfs2::ReadArgs::at(HANDLE, 8192, 8192).unwrap()),
+                nfs2::Response::Read(Ok(nfs2::FileData {
+                    attr,
+                    data: payload,
+                })),
+            ),
+            (
+                nfs2::Request::ReadDir(nfs2::ReadDirArgs {
+                    handle: HANDLE,
+                    cookie: nfs2::Cookie::START,
+                    count: 4096,
+                }),
+                nfs2::Response::ReadDir(Ok(nfs2::Listing {
+                    entries: vec![
+                        nfs2::DirEntry {
+                            fileid: 2,
+                            name: Utf16LeString::new("PIONEER"),
+                            cookie: nfs2::Cookie([0, 0, 0, 1]),
+                        },
+                        nfs2::DirEntry {
+                            fileid: 3,
+                            name: Utf16LeString::new("カガミ"),
+                            cookie: nfs2::Cookie([0, 0, 0, 2]),
+                        },
+                    ],
+                    eof: false,
+                })),
+            ),
+            (
+                nfs2::Request::StatFs(HANDLE),
+                nfs2::Response::StatFs(Ok(nfs2::FsStat {
+                    tsize: 8192,
+                    bsize: 512,
+                    blocks: 1_000_000,
+                    bfree: 0,
+                    bavail: 0,
+                })),
+            ),
+            (
+                // A write, which we refuse — but the argument block must still
+                // survive intact, because that is what lets a server answer
+                // PROC_UNAVAIL rather than drop the datagram.
+                nfs2::Request::Unknown {
+                    procedure: nfs2::Proc::WRITE,
+                    arguments: vec![1, 2, 3, 4, 5, 6, 7, 8],
+                },
+                nfs2::Response::Null,
+            ),
+        ]
+    }
+
+    #[test]
+    fn every_nfs_procedure_survives_a_full_exchange() {
+        let payload = vec![0x5a; 1280];
+        for (request, response) in nfs_exchanges(&payload) {
+            let arguments = request.encode_arguments();
+            let mut wire = Vec::new();
+            let call = exchange_call(
+                Program::NFS,
+                nfs2::VERSION,
+                request.procedure().0,
+                &arguments,
+                &mut wire,
+            );
+            let seen = nfs2::Request::parse(nfs2::Proc(call.procedure), call.arguments)
+                .expect("the server must decode what the client encoded");
+            assert_eq!(seen, request, "the call did not survive the wire");
+
+            if matches!(request, nfs2::Request::Unknown { .. }) {
+                continue; // No reply codec, by design: it gets PROC_UNAVAIL.
+            }
+            let results = response.encode();
+            let mut wire = Vec::new();
+            let got = nfs2::Response::parse(
+                nfs2::Proc(call.procedure),
+                exchange_reply(&results, &mut wire),
+            )
+            .expect("the client must decode what the server encoded");
+            assert_eq!(got, response, "the reply did not survive the wire");
+        }
+    }
+
+    /// The refusals a server actually sends. None appears in the corpus — no
+    /// captured reply is anything but SUCCESS — so these are RFC 1057 as
+    /// written, and this is the only check they get.
+    #[test]
+    fn every_refusal_a_server_can_send_survives_the_wire() {
+        let refusals = [
+            Reply::failed(Xid(1), FailureStat::PROG_UNAVAIL),
+            Reply::failed(Xid(1), FailureStat::PROC_UNAVAIL),
+            Reply::failed(Xid(1), FailureStat::GARBAGE_ARGS),
+            Reply::failed(Xid(1), FailureStat::SYSTEM_ERR),
+            Reply::Accepted {
+                xid: Xid(1),
+                verifier: Auth::NULL,
+                status: Accepted::ProgMismatch { low: 2, high: 2 },
+            },
+            Reply::Denied {
+                xid: Xid(1),
+                reason: Denied::AuthError(AuthStat::TOOWEAK),
+            },
+            Reply::Denied {
+                xid: Xid(1),
+                reason: Denied::RpcMismatch { low: 2, high: 2 },
+            },
+            Reply::prog_mismatch(Xid(1), 2, 2),
+            Reply::Denied {
+                xid: Xid(1),
+                reason: Denied::Other(
+                    OtherReject::new(RejectStat(9)).expect("9 is not a defined reject_stat"),
+                ),
+            },
+        ];
+        for refusal in refusals {
+            let wire = refusal.encode();
+            let parsed = Reply::parse(&wire).expect("a refusal we built must parse");
+            assert_eq!(parsed, refusal);
+            assert_eq!(
+                parsed.results(),
+                None,
+                "a refusal carries no results, and a caller must not find any"
+            );
+            assert_eq!(parsed.encode(), wire, "and it re-encodes byte for byte");
+        }
+    }
+
+    /// A listing of exactly the decoder's cap is legal and must survive.
+    ///
+    /// The caps exist to stop a hostile datagram allocating without bound, not
+    /// to limit what a peer may legitimately say. Checked with `>=` they were
+    /// off by one, so our own encoder produced listings our own decoder
+    /// refused — a bug no round-trip of a *small* listing could find.
+    #[test]
+    fn a_listing_of_exactly_the_cap_survives_and_one_more_does_not() {
+        // portmap DUMP, cap 512.
+        let mapping = portmap::Mapping::registered(Program::NFS, 2, IpProtocol::UDP, nfs2::PORT);
+        for (count, should_parse) in [(512usize, true), (513, false)] {
+            let listing = portmap::Response::Dump(vec![mapping; count]);
+            let parsed = portmap::Response::parse(portmap::Proc::DUMP, &listing.encode());
+            assert_eq!(
+                parsed.is_ok(),
+                should_parse,
+                "a portmap DUMP of {count} mappings"
+            );
+        }
+
+        // MOUNT EXPORT, cap 64 — both the export list and each group list.
+        for (count, should_parse) in [(64usize, true), (65, false)] {
+            let listing = mount::Response::Export(vec![
+                mount::Export::new(
+                    "/C/",
+                    &["169.254.0.0/255.255.0.0"]
+                );
+                count
+            ]);
+            let parsed = mount::Response::parse(mount::Proc::EXPORT, &listing.encode());
+            assert_eq!(parsed.is_ok(), should_parse, "an EXPORT of {count} entries");
+
+            let groups = vec!["169.254.0.0/255.255.0.0"; count];
+            let listing = mount::Response::Export(vec![mount::Export::new("/C/", &groups)]);
+            let parsed = mount::Response::parse(mount::Proc::EXPORT, &listing.encode());
+            assert_eq!(
+                parsed.is_ok(),
+                should_parse,
+                "an export with {count} groups"
+            );
+        }
+
+        // MOUNT DUMP, cap 64.
+        let entry = mount::MountEntry {
+            hostname: "169.254.99.100".to_owned(),
+            directory: Utf16LeString::new("/C/"),
+        };
+        for (count, should_parse) in [(64usize, true), (65, false)] {
+            let listing = mount::Response::Dump(vec![entry.clone(); count]);
+            let parsed = mount::Response::parse(mount::Proc::DUMP, &listing.encode());
+            assert_eq!(parsed.is_ok(), should_parse, "a MOUNT DUMP of {count}");
         }
     }
 }

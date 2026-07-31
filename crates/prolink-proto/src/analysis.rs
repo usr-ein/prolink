@@ -74,7 +74,10 @@ impl PrefixWord {
     ///
     /// Monotonic and non-zero for any elapsed time, including zero.
     pub fn from_elapsed(elapsed: std::time::Duration) -> Self {
-        let ticks = elapsed.as_millis().saturating_mul(u128::from(Self::OBSERVED_RATE)) / 1000;
+        let ticks = elapsed
+            .as_millis()
+            .saturating_mul(u128::from(Self::OBSERVED_RATE))
+            / 1000;
         let advanced = Self::OBSERVED_BASE.wrapping_add(u32::try_from(ticks).unwrap_or(u32::MAX));
         Self::new(advanced).unwrap_or(Self(NonZeroU32::MIN))
     }
@@ -123,7 +126,9 @@ pub fn beat_grid(pqtz_payload: &[u8], prefix: PrefixWord) -> Vec<u8> {
     for entry in pqtz_payload.chunks_exact(FILE_BEAT_LEN) {
         // A slice pattern rather than indexing: `chunks_exact` guarantees the
         // width, and this way the compiler knows it too.
-        let [beat_hi, beat_lo, tempo_hi, tempo_lo, time @ ..] = entry else { continue };
+        let [beat_hi, beat_lo, tempo_hi, tempo_lo, time @ ..] = entry else {
+            continue;
+        };
         let beat = u16::from_be_bytes([*beat_hi, *beat_lo]);
         let tempo = u16::from_be_bytes([*tempo_hi, *tempo_lo]);
         let time = u32::from_be_bytes(time.try_into().unwrap_or_default());
@@ -260,7 +265,11 @@ pub fn cue_points(cues: &[Cue]) -> CueBlobs {
         times.extend_from_slice(&cue.time_ms.to_le_bytes());
         times.extend_from_slice(&cue.loop_time_ms.to_le_bytes());
     }
-    CueBlobs { records, count: u32::try_from(sorted.len()).unwrap_or(u32::MAX), times }
+    CueBlobs {
+        records,
+        count: u32::try_from(sorted.len()).unwrap_or(u32::MAX),
+        times,
+    }
 }
 
 /// A tag payload is a run of big-endian words; the wire wants them
@@ -309,7 +318,10 @@ mod tests {
     #[test]
     fn the_vbr_index_is_the_payload_with_every_word_swapped() {
         let payload = [0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78];
-        assert_eq!(vbr_index(&payload), vec![0, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]);
+        assert_eq!(
+            vbr_index(&payload),
+            vec![0, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]
+        );
     }
 
     #[test]
@@ -327,17 +339,30 @@ mod tests {
 
         assert_eq!(wire.len(), 20 + WIRE_BEAT_LEN);
         let entry = &wire[20..];
-        assert_eq!(&entry[0..2], &1u16.to_le_bytes(), "beat number, little-endian");
-        assert_eq!(&entry[2..4], &13_200u16.to_le_bytes(), "tempo, little-endian");
+        assert_eq!(
+            &entry[0..2],
+            &1u16.to_le_bytes(),
+            "beat number, little-endian"
+        );
+        assert_eq!(
+            &entry[2..4],
+            &13_200u16.to_le_bytes(),
+            "tempo, little-endian"
+        );
         assert_eq!(&entry[4..8], &500u32.to_le_bytes(), "time, little-endian");
-        assert_eq!(&entry[8..16], &[0xff; 8], "padded with 0xff, not with zeros");
+        assert_eq!(
+            &entry[8..16],
+            &[0xff; 8],
+            "padded with 0xff, not with zeros"
+        );
     }
 
     #[test]
     fn the_beat_grid_prefix_describes_the_entries_that_follow() {
         let payload = [0u8; FILE_BEAT_LEN * 3];
         let wire = beat_grid(&payload, prefix());
-        let word = |index: usize| u32::from_le_bytes(wire[index * 4..index * 4 + 4].try_into().unwrap());
+        let word =
+            |index: usize| u32::from_le_bytes(wire[index * 4..index * 4 + 4].try_into().unwrap());
         assert_eq!(word(0), 0x0008_0000, "the tag's own constant");
         assert_eq!(word(1), 3, "beat count");
         assert_eq!(word(2), 3 * 16, "entry-block length");
@@ -365,8 +390,13 @@ mod tests {
     fn the_detail_waveform_payload_is_not_reordered() {
         let payload: Vec<u8> = (0..=255u8).collect();
         let wire = waveform_detail(&payload, 1, prefix());
-        assert_eq!(&wire[20..], payload.as_slice(), "single bytes have no byte order");
-        let word = |index: usize| u32::from_le_bytes(wire[index * 4..index * 4 + 4].try_into().unwrap());
+        assert_eq!(
+            &wire[20..],
+            payload.as_slice(),
+            "single bytes have no byte order"
+        );
+        let word =
+            |index: usize| u32::from_le_bytes(wire[index * 4..index * 4 + 4].try_into().unwrap());
         assert_eq!(word(0), 256);
         assert_eq!(word(1), 1, "entry width");
         assert_eq!(word(2), 256);
@@ -377,16 +407,40 @@ mod tests {
     #[test]
     fn a_cue_time_becomes_a_frame_index_by_truncation() {
         // 271 ms is 40.65 frames at 150 fps, and the hardware sends 40.
-        assert_eq!(Cue { order: 0, hot_cue: 0, time_ms: 271, loop_time_ms: 0 }.frame(), 40);
+        assert_eq!(
+            Cue {
+                order: 0,
+                hot_cue: 0,
+                time_ms: 271,
+                loop_time_ms: 0
+            }
+            .frame(),
+            40
+        );
     }
 
     #[test]
     fn cues_go_out_sorted_by_time_not_in_file_order() {
         // rekordbox had written the reference track's cues newest-first.
         let cues = [
-            Cue { order: 3, hot_cue: 0, time_ms: 9000, loop_time_ms: 0 },
-            Cue { order: 1, hot_cue: 1, time_ms: 271, loop_time_ms: 0 },
-            Cue { order: 2, hot_cue: 0, time_ms: 4000, loop_time_ms: 0 },
+            Cue {
+                order: 3,
+                hot_cue: 0,
+                time_ms: 9000,
+                loop_time_ms: 0,
+            },
+            Cue {
+                order: 1,
+                hot_cue: 1,
+                time_ms: 271,
+                loop_time_ms: 0,
+            },
+            Cue {
+                order: 2,
+                hot_cue: 0,
+                time_ms: 4000,
+                loop_time_ms: 0,
+            },
         ];
         let blobs = cue_points(&cues);
         assert_eq!(blobs.count, 3);
