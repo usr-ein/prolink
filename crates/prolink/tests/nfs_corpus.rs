@@ -273,10 +273,10 @@ struct Census {
     shortened: u64,
     largest_shortened: usize,
     short_mid_file: u64,
-    /// Lookups skipped because this filesystem would not accept the name the
-    /// reconstruction needed. Zero on a case-insensitive one; a handful on
-    /// Linux, where two spellings are two files rather than one.
-    unbuildable: u64,
+    /// Lookups skipped because this filesystem cannot reproduce the deck's
+    /// FAT32 tree for that name. Zero on a case-insensitive filesystem; a
+    /// handful on Linux, where two spellings are two directories.
+    unrepresentable: u64,
     resumed_after_short: u64,
     errors_differed: BTreeMap<(u32, u32), u64>,
     names: BTreeSet<String>,
@@ -564,9 +564,9 @@ fn merge(nodes: &mut BTreeMap<String, Option<u64>>, path: String, size: Option<u
 }
 
 thread_local! {
-    /// Names the reconstruction could not put on this filesystem. See
-    /// [`build_tree`].
-    static MISSING: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
+    /// Names the reconstruction cannot represent faithfully on this
+    /// filesystem. See [`build_tree`].
+    static UNREPRESENTABLE: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
 }
 
 /// Write the reconstructed tree out as sparse files and mount it.
@@ -591,23 +591,44 @@ fn build_tree(session: &Session, root: &Path) -> Vfs {
                 }
             }
         }
-        // What the filesystem would not give us. Two paths differing only in
-        // case are one file on macOS and two on Linux, and a name the
-        // reconstruction could not create is a limitation of this fixture
-        // rather than a disagreement with the captured server — asserting on
-        // it would report a bug that is not there, which is what it did the
-        // first time this ran on a case-sensitive filesystem.
-        if !on_disk.exists() {
-            MISSING.with(|missing| {
-                missing.borrow_mut().insert(
-                    on_disk
-                        .file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
-                        .unwrap_or_default(),
-                );
-            });
-        }
     }
+
+    // A medium is FAT32: case-insensitive and case-preserving, so a deck
+    // holding two spellings of one directory is holding one directory. macOS
+    // reproduces that and Linux does not — there the two spellings become two
+    // directories, the handle a capture recorded maps to one of them, and a
+    // child that lives in the other is answered NOENT.
+    //
+    // That is this fixture failing to reproduce a FAT32 tree, not the server
+    // disagreeing with the captured one, and the VFS's own case folding is
+    // covered by `serve::vfs` on both platforms. So the names under a
+    // fold-collision are recorded and a NOENT for one of them is counted
+    // rather than asserted on.
+    let mut by_fold: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for path in session.nodes.keys() {
+        let Some(name) = path.rsplit('/').next() else {
+            continue;
+        };
+        by_fold
+            .entry(name.to_lowercase())
+            .or_default()
+            .insert(name.to_owned());
+    }
+    UNREPRESENTABLE.with(|names| {
+        let mut names = names.borrow_mut();
+        for (_, spellings) in by_fold.iter().filter(|(_, set)| set.len() > 1) {
+            names.extend(spellings.iter().cloned());
+        }
+        // And anything the filesystem simply refused.
+        for (path, _) in &session.nodes {
+            let on_disk = root.join(path.trim_start_matches('/'));
+            if !on_disk.exists()
+                && let Some(name) = path.rsplit('/').next()
+            {
+                names.insert(name.to_owned());
+            }
+        }
+    });
     let mut vfs = Vfs::new();
     for prefix in ["B", "C"] {
         let subtree = root.join(prefix);
@@ -845,13 +866,13 @@ fn check_nfs(replayed: &Replayed, results: &[u8], census: &mut Census) {
     if !agrees(answer.status(), theirs, census) {
         return;
     }
-    // A name this filesystem would not accept is the fixture's problem, not
-    // the server's.
+    // A name this filesystem cannot represent as the deck's FAT32 did is the
+    // fixture's problem, not the server's.
     if answer.status() == Status::NOENT
         && let Some(name) = looked_up(replayed)
-        && MISSING.with(|missing| missing.borrow().contains(&name))
+        && UNREPRESENTABLE.with(|names| names.borrow().contains(&name))
     {
-        census.unbuildable += 1;
+        census.unrepresentable += 1;
         return;
     }
     assert_eq!(
