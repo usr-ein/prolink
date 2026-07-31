@@ -566,7 +566,8 @@ fn merge(nodes: &mut BTreeMap<String, Option<u64>>, path: String, size: Option<u
 thread_local! {
     /// Names the reconstruction cannot represent faithfully on this
     /// filesystem. See [`build_tree`].
-    static UNREPRESENTABLE: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
+    static UNREPRESENTABLE: RefCell<BTreeSet<String>> =
+        const { RefCell::new(BTreeSet::new()) };
 }
 
 /// Write the reconstructed tree out as sparse files and mount it.
@@ -620,7 +621,7 @@ fn build_tree(session: &Session, root: &Path) -> Vfs {
             names.extend(spellings.iter().cloned());
         }
         // And anything the filesystem simply refused.
-        for (path, _) in &session.nodes {
+        for path in session.nodes.keys() {
             let on_disk = root.join(path.trim_start_matches('/'));
             if !on_disk.exists()
                 && let Some(name) = path.rsplit('/').next()
