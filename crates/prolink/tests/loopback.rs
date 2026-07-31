@@ -9,7 +9,7 @@
 //!
 //! It is not a substitute for hardware — two implementations agreeing is weaker
 //! evidence than one implementation agreeing with a CDJ, and the codecs are
-//! separately pinned against 33 captures of real traffic for exactly that
+//! separately pinned against 37 captures of real traffic for exactly that
 //! reason. What this proves is the wiring: that the server answers the requests
 //! the client actually sends, in the shapes it expects, in the order a browse
 //! goes in.

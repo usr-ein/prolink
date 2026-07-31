@@ -37,9 +37,10 @@
 //!
 //! # Running it
 //!
-//! The corpus is ~240 MB and is neither in this repository nor allowed to be.
-//! Point `PROLINK_CAPTURES` at it, or leave it and the corpus tests skip —
-//! but skipping is not passing, so the committed fixtures in
+//! The corpus is ~272 MB and is committed, in `captures/`, so a plain
+//! `cargo test` replays it. `PROLINK_CAPTURES` points somewhere else instead;
+//! without either, the corpus tests skip — but skipping is not passing, so the
+//! committed fixtures in
 //! `testdata/corpus-fixtures.hex` run the same checks over real packets with
 //! no corpus at all.
 //!

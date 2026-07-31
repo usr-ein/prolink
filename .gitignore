@@ -2,8 +2,11 @@
 **/*.rs.bk
 Cargo.lock.orig
 
-# Local capture corpora. Tests find them through PROLINK_CAPTURES; the
-# committed fixtures in testdata/ are what runs without one.
-/captures
+# The capture corpus is committed, under `captures/`. Recordings anywhere else
+# in the tree are someone's working files, not part of it. The first rule is
+# not redundant: a global ignore of `captures/` excludes the directory outright,
+# and git does not look inside an excluded directory for the re-inclusions below.
+!captures/
 *.pcap
 *.pcapng
+!captures/**

@@ -14,9 +14,10 @@ protocol as it actually behaves on CDJ-2000NXS hardware running firmware 1.44.
 
 Every `F<n>`, `C<n>` and `O<n>` in this document and in the source is a citation
 into the research record that established it: `F` a finding, `C` a correction to
-the pre-hardware literature, `O` an observation. That record lives with the
-captures in the `prolinks-compat` research project; the claims it supports are
-reproduced here in full, so this document stands alone.
+the pre-hardware literature, `O` an observation. That record lives in the
+`prolinks-compat` research project; the captures it was drawn from are in
+[`captures/`](../captures/), and the claims it supports are reproduced here in
+full, so this document stands alone.
 
 Everything below is marked:
 

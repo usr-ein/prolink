@@ -2,12 +2,13 @@
 
 //! Finding the capture corpus, or finding that there is none.
 //!
-//! The corpus is ~240 MB of recordings of real Pioneer hardware. It is not in
-//! this repository and must not be put there: it is large, and it is other
-//! people's traffic. Tests reach it through the `PROLINK_CAPTURES` environment
-//! variable, falling back to a path relative to the workspace, and **skip
-//! cleanly when it is absent** — which is why this returns
-//! `Option<Corpus>` rather than a path that may or may not exist.
+//! The corpus is ~272 MB of recordings of real Pioneer hardware, committed to
+//! this repository under `captures/` so that the evidence behind every codec
+//! ships with the code. Tests reach it through the `PROLINK_CAPTURES`
+//! environment variable, falling back to that directory, and **skip cleanly
+//! when it is absent** — a shallow clone or a vendored copy of the sources may
+//! not carry it, which is why this returns `Option<Corpus>` rather than a path
+//! that may or may not exist.
 //!
 //! Skipping is not the same as passing. Every test file that consumes the
 //! corpus also carries a committed fixture floor, so a coverage regression
@@ -19,7 +20,7 @@ use std::path::{Path, PathBuf};
 pub const CORPUS_ENV: &str = "PROLINK_CAPTURES";
 
 /// Where the corpus lives if the variable is unset, relative to the workspace.
-const DEFAULT_RELATIVE: &str = "../CustomDJ/prolinks-compat/captures";
+const DEFAULT_RELATIVE: &str = "captures";
 
 /// A directory of capture files that exists.
 ///
@@ -61,7 +62,7 @@ impl Corpus {
     ///
     /// Selected by extension — `pcap` or `pcapng` — which says nothing about
     /// the format inside: every file in this project's corpus is named
-    /// `run.pcap` and eight of the thirty-three are pcapng.
+    /// `run.pcap` and eleven of the thirty-seven are pcapng.
     /// [`crate::Capture`] dispatches on the magic, not on the name.
     pub fn captures(&self) -> Vec<PathBuf> {
         let mut found = Vec::new();

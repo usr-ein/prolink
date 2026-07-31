@@ -1,8 +1,8 @@
 # Real packets, lifted byte for byte out of the capture corpus.
 #
-# The committed floor `crates/prolink-proto/tests/corpus.rs` runs off when
-# `PROLINK_CAPTURES` names nothing: skipping is not the same as passing, and a
-# coverage regression must not be able to hide behind a machine with no
+# The committed floor `crates/prolink-proto/tests/corpus.rs` runs off when no
+# corpus is found: skipping is not the same as passing, and a coverage
+# regression must not be able to hide behind a checkout that carries no
 # captures. Every record below was produced by that test file's extractor from
 # `captures/S*/run.pcap`, so the provenance comment names the capture and the
 # frame it came from and nothing here was typed by hand.

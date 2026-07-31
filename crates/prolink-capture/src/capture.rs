@@ -117,7 +117,7 @@ struct Interface {
 /// order. Frames are read and dissected lazily: a capture costs the underlying
 /// reader's 8 MiB window plus one frame plus whatever IP fragments are still
 /// being reassembled, and not the size of the file. That matters here — the
-/// corpus this crate exists for is 240 MB, one file of it 78 MB.
+/// corpus this crate exists for is 272 MB, one file of it 78 MB.
 ///
 /// # Errors are the caller's to act on
 ///
@@ -167,8 +167,8 @@ impl Capture<File> {
     /// Open a capture file.
     ///
     /// The format is decided by the first four bytes, not by the extension:
-    /// every file in this project's corpus is named `run.pcap` and eight of
-    /// the thirty-three are pcapng.
+    /// every file in this project's corpus is named `run.pcap` and eleven of
+    /// the thirty-seven are pcapng.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         Self::new(File::open(path)?)
     }

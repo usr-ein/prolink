@@ -3,7 +3,7 @@
 //! Every ONC RPC call in the capture corpus, replayed through our servers.
 //!
 //! The unit tests in `serve/nfs` pin eight captured datagrams as hex literals.
-//! This one takes the other 45 000: it walks all 33 captures, reconstructs the
+//! This one takes the other 45 000: it walks all 37 captures, reconstructs the
 //! medium each session was reading, stands our three servers up on ephemeral
 //! ports, and sends every call a device actually sent — the deck's own
 //! credentials, its own UTF-16LE names, its own rewritten filehandles — over a
@@ -34,10 +34,10 @@
 //!
 //! # The floor
 //!
-//! The corpus is 240 MB, is not in this repository, and is other people's
-//! traffic. Without it the sweep skips — so this file also carries tests that
-//! need no capture at all, including the one about read sizes that the corpus
-//! prompted.
+//! The corpus is 272 MB and lives in `captures/`. A clone without it — the
+//! crate published to crates.io excludes it — makes the sweep skip, so this
+//! file also carries tests that need no capture at all, including the one about
+//! read sizes that the corpus prompted.
 
 // An assertion *is* the failure mode of a test; propagating errors carefully
 // would report them as passes.
