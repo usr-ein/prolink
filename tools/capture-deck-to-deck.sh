@@ -46,12 +46,16 @@ members=$(ifconfig "$BRIDGE" 2>/dev/null | awk '/member:/ { print $2 }')
 # Tapping only one of them has now cost a session in each direction.
 members="$members $BRIDGE"
 
-# No port filter. The whole point of these captures is fields we cannot name
-# yet, so excluding a protocol nobody has thought of is exactly the mistake to
-# avoid. Only the Mac's own chatter is dropped, and only if it has an address.
-mac_ip=$(ifconfig "$BRIDGE" 2>/dev/null | awk '/inet /{ print $2; exit }')
-filter=""
-[ -n "$mac_ip" ] && filter="not host $mac_ip"
+# No filter at all, and deliberately.
+#
+# The obvious tidy-up — dropping the Mac's own mDNS and SSDP chatter with
+# `not host <our address>` — also drops every packet between the Mac and a
+# deck, which on the bridge interface is the entire serving session. That
+# mistake produced a capture with zero packets in it.
+#
+# The noise is a few hundred packets against tens of thousands. Filtering it is
+# not worth one more lost session, and a filter can only ever remove the
+# protocol nobody has thought of yet.
 
 pids=()
 files=()
@@ -59,7 +63,7 @@ for member in $members; do
     out="$PREFIX-$member.pcap"
     files+=("$out")
     # -s 0 whole frames, -B 8192 an 8 MB buffer so an NFS burst does not drop.
-    tcpdump -i "$member" -s 0 -B 8192 -n -w "$out" $filter 2>/dev/null &
+    tcpdump -i "$member" -s 0 -B 8192 -n -w "$out" 2>/dev/null &
     pids+=($!)
     printf 'tapping %-5s -> %s\n' "$member" "$out"
 done
@@ -84,7 +88,8 @@ report() {
         fi
     done
     if [ "$any_dbserver" = 0 ]; then
-        printf '\nNO dbserver traffic on either tap. Do not trust this capture.\n' >&2
+        printf '\nNO dbserver traffic on any tap. Do not trust this capture.\n' >&2
+        printf 'A browse produces TCP 1051; if none appeared, nothing browsed.\n' >&2
     fi
 }
 trap report EXIT INT TERM
