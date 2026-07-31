@@ -800,9 +800,16 @@ impl MessageKind {
     /// stopped browsing dead.
     pub const UNKNOWN_3D03: Self = Self(0x3d03);
     /// Undocumented, one argument (the descriptor), sent immediately after
-    /// `INTRODUCE` by a player browsing a **foreign** device — it never appears
-    /// between two CDJs, which is why it went unnoticed. Answer it with
-    /// [`MessageKind::UNKNOWN_4B02`]; answering with an error is F25.
+    /// `INTRODUCE`. Answer it with [`MessageKind::UNKNOWN_4B02`]; answering
+    /// with an error is F25.
+    ///
+    /// **Not a foreign-device probe**, though it was recorded here as one. A
+    /// sweep of every dbserver connection in the corpus that begins with
+    /// `INTRODUCE` finds it sent deck-to-deck in four sessions — S13, S25, S26
+    /// and S4b — and absent from two others between the same two decks. It
+    /// tracks something about the session, not about who is being asked, and
+    /// the earlier reading came from a sample that happened to split the same
+    /// way (F56).
     pub const UNKNOWN_3E03: Self = Self(0x3e03);
 
     /// "Understood": `[request type, count]`, or `[0, our device number]` in
