@@ -27,6 +27,12 @@ impl DeviceNumber {
     /// The highest number a peer will offer as a browsable source (F45).
     pub const MAX_BROWSABLE: u8 = 4;
 
+    /// Device number 1, the lowest a player can hold.
+    ///
+    /// Exists so that a caller needing a total fallback has one that is not a
+    /// panic.
+    pub const ONE: Self = Self(NonZeroU8::MIN);
+
     /// Parse a device number, rejecting zero.
     pub const fn new(raw: u8) -> Option<Self> {
         match NonZeroU8::new(raw) {

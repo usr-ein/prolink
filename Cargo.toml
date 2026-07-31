@@ -23,7 +23,7 @@ binrw = "0.15"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
 etherparse = "0.19"
-if-addrs = "0.14"
+network-interface = "2"
 pcap-file = "2"
 rekordcrate = { version = "0.3", default-features = false }
 thiserror = "2"
