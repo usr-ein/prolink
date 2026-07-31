@@ -14,6 +14,7 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -82,6 +83,26 @@ enum Command {
         /// set to player 5 or 6.
         #[arg(long, default_value_t = 0x00, value_parser = maybe_hex)]
         generation: u8,
+    },
+
+    /// Read a rekordbox `export.pdb` and list what is on it.
+    Tracks {
+        /// The database, usually `PIONEER/rekordbox/export.pdb` on the medium.
+        file: PathBuf,
+
+        /// Show the playlist tree instead of the tracks.
+        #[arg(long)]
+        playlists: bool,
+
+        /// Only tracks matching this term, in title, artist or album.
+        #[arg(long)]
+        search: Option<String>,
+    },
+
+    /// Summarise the Pro DJ Link traffic in a pcap or pcapng capture.
+    Pcap {
+        /// The capture file.
+        file: PathBuf,
     },
 }
 
@@ -158,7 +179,172 @@ async fn run(cli: Cli) -> Result<(), BoxedError> {
             let interface = choose_interface(cli.interface.as_deref())?;
             announce(interface, claim, number, &name, generation).await
         }
+        Command::Tracks {
+            file,
+            playlists,
+            search,
+        } => list_tracks(&file, playlists, search.as_deref()),
+        Command::Pcap { file } => summarise_capture(&file),
     }
+}
+
+/// Read a rekordbox database and print what is on the medium.
+fn list_tracks(
+    path: &std::path::Path,
+    playlists: bool,
+    search: Option<&str>,
+) -> Result<(), BoxedError> {
+    let raw = std::fs::read(path)?;
+    let library = prolink_rekordbox::Library::parse(&raw)?;
+    let summary = library.summary();
+    eprintln!(
+        "{} tracks, {} artists, {} albums, {} genres, {} keys, {} playlists in {} folders",
+        summary.tracks,
+        summary.artists,
+        summary.albums,
+        summary.genres,
+        summary.keys,
+        summary.playlists,
+        summary.folders,
+    );
+
+    if playlists {
+        print_playlists(&library, &library.root_playlists(), 0);
+        return Ok(());
+    }
+
+    let tracks = match search {
+        Some(term) => library.search(term),
+        None => library.track_list(),
+    };
+    for track in tracks {
+        println!(
+            "{:>8}  {:>6}  {:>6.1}  {:<4} {:<28}  {}",
+            track.id,
+            track.duration_text(),
+            track.bpm(),
+            track.key,
+            truncate(&track.artist, 28),
+            truncate(&track.title, 40),
+        );
+    }
+    Ok(())
+}
+
+fn print_playlists(
+    library: &prolink_rekordbox::Library,
+    playlists: &[&prolink_rekordbox::Playlist],
+    depth: usize,
+) {
+    for playlist in playlists {
+        let indent = "  ".repeat(depth);
+        let marker = if playlist.is_folder { "[+]" } else { "   " };
+        let count = if playlist.is_folder {
+            String::new()
+        } else {
+            format!("  ({} tracks)", playlist.track_count())
+        };
+        println!(
+            "{indent}{marker} {}{count}  #{}",
+            playlist.name, playlist.id
+        );
+        let children: Vec<&prolink_rekordbox::Playlist> = playlist
+            .children
+            .iter()
+            .filter_map(|id| library.playlists.get(id))
+            .collect();
+        print_playlists(library, &children, depth + 1);
+    }
+}
+
+fn truncate(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    text.chars()
+        .take(width.saturating_sub(1))
+        .chain(std::iter::once('…'))
+        .collect()
+}
+
+/// Count the Pro DJ Link traffic in a capture.
+///
+/// Filters on the **destination** port throughout. The type byte at 0x0a is
+/// shared across ports and the layouts behind it are not — 0x06 is a keep-alive
+/// on 50000 and a media response on 50002 — so counting "either endpoint" would
+/// attribute a tool's keep-alives, which it sends *from* 50002, to the wrong
+/// protocol and decode them into confident nonsense.
+fn summarise_capture(path: &std::path::Path) -> Result<(), BoxedError> {
+    use std::collections::BTreeMap;
+
+    let capture = prolink_capture::Capture::open(path)?;
+    eprintln!("{} ({:?})", path.display(), capture.format());
+
+    let mut per_port: BTreeMap<u16, usize> = BTreeMap::new();
+    let mut djl_kinds: BTreeMap<String, usize> = BTreeMap::new();
+    let mut status_kinds: BTreeMap<String, usize> = BTreeMap::new();
+    let mut tcp_bytes = 0usize;
+
+    for packet in capture {
+        let packet = packet?;
+        let port = packet.destination.port();
+        *per_port.entry(port).or_default() += 1;
+        if packet.transport.is_tcp() {
+            tcp_bytes += packet.payload.len();
+            continue;
+        }
+
+        match port {
+            prolink_capture::DISCOVERY_PORT => {
+                if let Ok(decoded) = prolink_proto::djl::Packet::decode(&packet.payload) {
+                    let kind = decoded.kind();
+                    let name = kind
+                        .name()
+                        .map_or_else(|| format!("{kind:?}"), str::to_owned);
+                    *djl_kinds.entry(name).or_default() += 1;
+                }
+            }
+            prolink_capture::STATUS_PORT => {
+                if let Ok(decoded) = prolink_proto::status::decode(&packet.payload) {
+                    let kind = decoded.kind();
+                    let name = kind
+                        .name()
+                        .map_or_else(|| format!("{kind:?}"), str::to_owned);
+                    *status_kinds.entry(name).or_default() += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    println!("packets by destination port:");
+    for (port, count) in &per_port {
+        let label = match *port {
+            prolink_capture::DISCOVERY_PORT => "  discovery",
+            prolink_capture::BEAT_PORT => "  beat",
+            prolink_capture::STATUS_PORT => "  status",
+            111 => "  portmap",
+            2049 => "  nfs",
+            48276 => "  mountd",
+            1051 => "  dbserver",
+            12523 => "  dbserver port query",
+            _ => "",
+        };
+        println!("  {port:>6}  {count:>8}{label}");
+    }
+    if tcp_bytes > 0 {
+        println!("  TCP payload bytes: {tcp_bytes}");
+    }
+    for (title, counts) in [("UDP 50000", &djl_kinds), ("UDP 50002", &status_kinds)] {
+        if counts.is_empty() {
+            continue;
+        }
+        println!("{title} by kind:");
+        for (kind, count) in counts {
+            println!("  {kind:<20} {count:>8}");
+        }
+    }
+    Ok(())
 }
 
 fn choose_interface(name: Option<&str>) -> Result<Interface, BoxedError> {
