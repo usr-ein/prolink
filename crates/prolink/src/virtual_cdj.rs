@@ -87,8 +87,8 @@ pub enum Numbering {
     Claim {
         /// The number to try first. Any other browsable number is tried if it
         /// turns out to be taken; if all four are, starting fails with
-        /// [`Error::NoBrowsableNumber`] rather than silently degrading, because
-        /// the degraded state cannot serve and the caller has to know.
+        /// [`crate::Error::NoBrowsableNumber`] rather than silently degrading,
+        /// because the degraded state cannot serve and the caller has to know.
         preferred: Option<BrowsableDeviceNumber>,
     },
     /// Announce at a fixed number without contending for it.

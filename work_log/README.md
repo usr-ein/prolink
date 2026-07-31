@@ -17,24 +17,24 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 04 | `prolink-proto`: dbserver (TCP 1051) message codec, both directions | done | [004](004-proto-dbserver.md) |
 | 05 | `prolink-proto`: XDR / ONC RPC v2 / portmap / MOUNT / NFSv2, calls **and** replies | done | [005](005-proto-rpc.md) |
 | 06 | `prolink-capture`: pcapng reader + TCP reassembly, so tests can replay real captures | done | [006](006-capture.md); 244,501 packets across 33 files, matching the Python reference exactly |
-| 07 | Corpus tests: replay every capture through the codecs; distil committed fixtures | wip | agent `corpus-tests` |
+| 07 | Corpus tests: replay every capture through the codecs; distil committed fixtures | done | [007](007-corpus-tests.md); 33 captures, zero failures of any kind |
 | 08 | `prolink-rekordbox`: `export.pdb` reader | done | [008](008-rekordbox.md); 651 tracks / 329 artists / 274 albums from the real export |
 | 09 | `prolink-rekordbox`: ANLZ reader (raw payloads for serving, structured for consuming) + `PIONEER/*SETTING*.DAT` | done | [008](008-rekordbox.md) |
 | 10 | `prolink-rekordbox`: the `Library` model — pdb rows joined into tracks/playlists | done | [008](008-rekordbox.md) |
 | 11 | `prolink-proto`: analysis wire transforms (ANLZ → dbserver blobs) | done | `analysis.rs`; takes raw tag payloads so the wire layer stays free of the file layer |
 | 12 | `prolink`: network interface discovery, UDP plumbing, device table, passive discovery | done | [012](012-discovery.md) |
 | 13 | `prolink`: virtual CDJ — claim chain, keep-alive, status emission, media/settings answers | done | [012](012-discovery.md); conflict back-off untested against hardware |
-| 14 | `prolink`: ONC RPC / NFSv2 **client** — mount, walk, streaming reads | done | [014](014-consume.md); driven against a loopback deck, untested on hardware |
-| 15 | `prolink`: dbserver **client** — browse a player's library the way LINK does | done | [014](014-consume.md); requests pinned byte-for-byte against the corpus |
-| 16 | `prolink`: consume facade — devices → slots → menus → tracks → file bytes | wip | agent `consume-stack` |
+| 14 | `prolink`: ONC RPC / NFSv2 **client** — mount, walk, streaming reads | done | [014](014-consume.md) |
+| 15 | `prolink`: dbserver **client** — browse a player's library the way LINK does | done | [014](014-consume.md) |
+| 16 | `prolink`: consume facade — devices → slots → menus → tracks → file bytes | done | [014](014-consume.md) |
 | 17 | `prolink`: VFS + filehandle table (12-byte keying, NFC/case folding) | done | keyed on `FileHandleKey`, so a CDJ rewriting a handle's tail still resolves |
-| 18 | `prolink`: portmap + mountd + nfsd **servers** | wip | agent `nfs-server` |
-| 19 | `prolink`: dbserver **server** — root menu, drill-down grid, sorts, search, metadata, analysis | done | [019](019-dbserver-server.md); 14 000 captured requests replayed, zero errors; untested on hardware |
-| 20 | `prolink`: serve facade — two media as USB + SD, wired to the virtual CDJ | todo | |
-| 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap` | wip | `interfaces`, `devices`, `announce` done |
-| 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | wip | spec and architecture written; CI and a licence gate added |
-| 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | todo | |
-| 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | wip | agent `beat-monitor` |
+| 18 | `prolink`: portmap + mountd + nfsd **servers** | done | [018](018-nfs-server.md) |
+| 19 | `prolink`: dbserver **server** — root menu, drill-down grid, sorts, search, metadata, analysis | done | [019](019-dbserver-server.md) |
+| 20 | `prolink`: serve facade — two media as USB + SD, wired to the virtual CDJ | done | `ProLinkServer`, plus an end-to-end loopback test of server against client |
+| 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap`, `status` | done | ten commands, covering every capability on the acceptance list |
+| 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | done | plus `CONVENTIONS.md`, CI and a dependency licence gate |
+| 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | wip | |
+| 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
 
 ## Acceptance: what the CLI must be able to do
 

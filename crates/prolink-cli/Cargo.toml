@@ -15,6 +15,10 @@ categories.workspace = true
 [[bin]]
 name = "prolink"
 path = "src/main.rs"
+# The binary and the `prolink` library would write the same rustdoc output
+# directory, which `cargo doc --workspace` reports as a filename collision.
+# The binary's documentation is its `--help`.
+doc = false
 
 [dependencies]
 prolink.workspace = true
