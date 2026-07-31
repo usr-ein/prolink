@@ -633,6 +633,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prolink-ffi"
+version = "0.1.0"
+dependencies = [
+ "prolink",
+ "prolink-proto",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "prolink-proto"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,44 @@
+[package]
+name = "prolink-ffi"
+description = "A C ABI over prolink, for hosts that are not written in Rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation.workspace = true
+readme = "README.md"
+keywords = ["pioneer", "dj", "ffi", "cdj"]
+categories = ["api-bindings", "multimedia::audio"]
+
+[lib]
+# `staticlib` for linking into a C++ binary, `cdylib` for loading one, and
+# `rlib` so the crate's own tests can call it as ordinary Rust.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+prolink = { path = "../prolink" }
+prolink-proto = { path = "../prolink-proto" }
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
+tracing = { workspace = true }
+
+# **Not** `lints.workspace = true`, and this is the only crate in the workspace
+# that does not inherit it. The workspace *forbids* `unsafe_code`, and `forbid`
+# cannot be lifted by an inner `allow` — which is the point of it everywhere
+# else. A C ABI cannot be written without `unsafe`, so this crate denies it
+# instead: every use has to be spelled out and justified at the site, and no
+# other crate loses the absolute guarantee.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+future_incompatible = { level = "warn", priority = -1 }
+nonstandard_style = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
