@@ -136,15 +136,12 @@ read to that point and no further, which presents as a truncated track rather
 than as an error. So a node larger than `MAX_FILE_SIZE` is `NFSERR_FBIG` from
 `GETATTR`, `LOOKUP` and `READ` alike.
 
-## Sizes, and the one number that is derived rather than observed
+## Sizes
 
-A `READ` is answered up to `MAX_READ_PAYLOAD - 100` bytes — what one UDP
-datagram can carry, less the RPC header, status word, `fattr` and length prefix.
-RFC 1094's ceiling is 8192 and every read a deck has ever sent *us* is 8192 or
-less (160, 2048 and 8192 in `S10j`), but deck-to-deck the modal request is 9408
-and a file's first read can be 28584, answered in full. So the bound is what the
-wire can carry rather than what the specification says, and a server answering
-short is normal in either direction.
+A `READ` is answered up to 8192 payload bytes, RFC 1094's own ceiling — see
+"Read sizes, corrected" below, which is where that number was argued out
+properly against the corpus. It was briefly `MAX_READ_PAYLOAD - 100`; that is
+wrong on macOS and the sweep caught it.
 
 `READDIR` spends its `count` as a byte budget and mints its cookies as indices,
 which is what they are for; it always returns at least one entry, so a client
