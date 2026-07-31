@@ -287,13 +287,15 @@ async fn announce(
 
     match cdj.browsable_number() {
         Some(number) => {
-            println!("announcing as device {number} — a peer will offer us as a source")
+            println!("announcing as device {number} — a peer will offer us as a source");
         }
-        None => println!(
-            "announcing as device {} — visible, but outside 1-{} no peer will ever browse us",
-            cdj.number(),
-            DeviceNumber::MAX_BROWSABLE
-        ),
+        None => {
+            println!(
+                "announcing as device {} — visible, but outside 1-{} no peer will ever browse us",
+                cdj.number(),
+                DeviceNumber::MAX_BROWSABLE
+            );
+        }
     }
     println!("ctrl-c to stop");
 
