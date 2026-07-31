@@ -121,8 +121,20 @@ pub(super) fn build(
     args: &Arguments,
     medium: Option<&Medium>,
     tags: &[u32],
+    playing: Option<u32>,
 ) -> Option<Vec<MenuItem>> {
     let mut items = build_unmarked(kind, args, medium, tags)?;
+    // The row the browsing deck has loaded. A deck does not compute key
+    // compatibility from its own copy of the track: it reads the key off
+    // whichever row carries this mark and lights every row harmonically
+    // compatible with it, so an unmarked listing lights nothing (F55).
+    if let Some(playing) = playing {
+        for item in &mut items {
+            if item.flags & MenuItem::TRACK_FLAGS != 0 && item.id == playing {
+                item.flags |= MenuItem::LOADED;
+            }
+        }
+    }
     // Every track row the requesting deck has tagged is marked, whatever menu
     // it appears in — a tagged track shows the marker in the artist list as
     // well as in the tag list itself (F53).

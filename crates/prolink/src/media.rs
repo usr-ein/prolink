@@ -16,10 +16,20 @@
 //! slot, and a reply saying zero tracks means it has no reason ever to ask
 //! again. This is the step no reference implementation performs, because none
 //! of them serve.
+//!
+//! # A slot is more than occupied or not
+//!
+//! Media presence is published at `0x6f` and `0x73` of every status packet
+//! (F20), and hardware uses four values there rather than two. An eject is a
+//! sequence — loaded, [`MediaState::UNMOUNTING`], [`MediaState::UNMOUNTING_ALT`],
+//! empty — and it is the third of those that a consuming deck reacts to by
+//! releasing its NFS mount. So a source reports a *state* rather than a
+//! boolean; the boolean would leave no way to say the medium is going.
 
 use std::collections::BTreeSet;
 
 use prolink_proto::Slot;
+use prolink_proto::status::MediaState;
 
 /// What a peer is told about one of our slots.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -64,6 +74,22 @@ pub trait MediaSource: Send + Sync + std::fmt::Debug {
     /// then offer an empty medium.
     fn describe(&self, slot: Slot) -> Option<MediaDescription>;
 
+    /// What to publish at `0x6f`/`0x73` for a slot.
+    ///
+    /// The default is the two-valued reading of [`Self::occupied_slots`], which
+    /// is all a source that never ejects anything needs. A source that does —
+    /// the serve side, on its way out — overrides this to walk a medium through
+    /// the unmounting states, because a consumer releases its mount on
+    /// [`MediaState::UNMOUNTING_ALT`] and never sees that state if the slot
+    /// jumps straight from loaded to empty.
+    fn slot_state(&self, slot: Slot) -> MediaState {
+        if self.occupied_slots().contains(&slot) {
+            MediaState::LOADED
+        } else {
+            MediaState::EMPTY
+        }
+    }
+
     /// The 32 bytes from this medium's `PIONEER/MYSETTING.DAT`, if it has any.
     ///
     /// An empty block is a legitimate answer — a medium with no saved settings
@@ -101,5 +127,23 @@ mod tests {
         assert!(NoMedia.occupied_slots().is_empty());
         assert_eq!(NoMedia.describe(Slot::USB), None);
         assert!(NoMedia.settings(Slot::USB).is_empty());
+        assert_eq!(NoMedia.slot_state(Slot::USB), MediaState::EMPTY);
+    }
+
+    #[test]
+    fn a_source_that_never_ejects_publishes_only_loaded_and_empty() {
+        #[derive(Debug)]
+        struct UsbOnly;
+        impl MediaSource for UsbOnly {
+            fn occupied_slots(&self) -> BTreeSet<Slot> {
+                [Slot::USB].into_iter().collect()
+            }
+            fn describe(&self, slot: Slot) -> Option<MediaDescription> {
+                (slot == Slot::USB).then(MediaDescription::default)
+            }
+        }
+
+        assert_eq!(UsbOnly.slot_state(Slot::USB), MediaState::LOADED);
+        assert_eq!(UsbOnly.slot_state(Slot::SD), MediaState::EMPTY);
     }
 }

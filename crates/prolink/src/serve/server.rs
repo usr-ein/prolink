@@ -21,10 +21,23 @@
 //! dbserver is listening. That gap does not matter in practice: in the one full
 //! load we have timed, a deck sent its media query at t=7.6 s and did not open
 //! dbserver until t=44 s.
+//!
+//! # Going away is a sequence, not a `drop`
+//!
+//! Stopping is not the reverse of starting. A deck that is reading our files
+//! has a mount open and a filehandle in hand, and sockets that simply vanish
+//! leave it retrying against nothing — the same dead end as a missing
+//! portmapper, arrived at from the other side. Real hardware does not do that:
+//! ejecting a stick walks the slot through two unmounting states first, and the
+//! consuming deck releases its mount when it sees the second (see
+//! [`ProLinkServer::shutdown`]). So we eject before we stop.
 
 use std::net::Ipv4Addr;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
+use prolink_proto::status::MediaState;
 use prolink_proto::{BrowsableDeviceNumber, DeviceKind, DeviceName, Slot};
 use tracing::{info, warn};
 
@@ -214,14 +227,19 @@ impl ProLinkServer {
                 taken: discovery.numbers_seen().into_iter().collect(),
             })?;
 
-        // Step 3: dbserver, which needs the number.
-        let dbserver = DbServer::start(
+        // Step 3: dbserver, which needs the number — and the virtual CDJ's
+        // view of what each deck has loaded from us, so a track row can carry
+        // the mark a browsing deck reads its reference key from (F55). The
+        // dbserver never sees UDP 50002 itself; the virtual CDJ already holds
+        // that socket to answer media queries.
+        let dbserver = DbServer::start_watching(
             DbServerConfig {
                 device,
                 address: Ipv4Addr::UNSPECIFIED,
                 ..DbServerConfig::default()
             },
             media.all().iter().map(Arc::clone),
+            cdj.loaded(),
         )
         .await?;
 

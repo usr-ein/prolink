@@ -98,6 +98,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use crate::serve::medium::{Medium, ServedSlot};
+use crate::virtual_cdj::LoadedTracks;
 use crate::{Error, Result};
 
 /// How many result sets one connection holds before the oldest is dropped.
@@ -224,6 +225,10 @@ struct Shared {
     /// What each deck has tagged. The one piece of mutable server state, and
     /// the reason it is behind a lock rather than owned by a connection.
     tags: TagLists,
+    /// What each deck has loaded from us, so its row can be marked (F55).
+    /// Shared with the [`crate::virtual_cdj::VirtualCdj`] that fills it; a
+    /// dbserver started without one simply marks nothing.
+    loaded: Arc<LoadedTracks>,
     /// Slot → medium. Resolved per *message* and never cached on a connection
     /// (F37).
     media: BTreeMap<Slot, Arc<Medium>>,
@@ -262,6 +267,20 @@ impl DbServer {
         config: DbServerConfig,
         media: impl IntoIterator<Item = Arc<Medium>>,
     ) -> Result<Self> {
+        Self::start_watching(config, media, Arc::new(LoadedTracks::default())).await
+    }
+
+    /// Start one that marks the loaded track's row.
+    ///
+    /// `loaded` comes from the [`crate::virtual_cdj::VirtualCdj`] announcing
+    /// for this server. Without it no row is marked, and a browsing deck has
+    /// no reference key — the key-matching indicator stays dark on every row
+    /// (F55).
+    pub async fn start_watching(
+        config: DbServerConfig,
+        media: impl IntoIterator<Item = Arc<Medium>>,
+        loaded: Arc<LoadedTracks>,
+    ) -> Result<Self> {
         let media: BTreeMap<Slot, Arc<Medium>> = media
             .into_iter()
             .map(|medium| (medium.slot().slot(), medium))
@@ -272,6 +291,7 @@ impl DbServer {
         let shared = Arc::new(Shared {
             device: config.device,
             tags: TagLists::default(),
+            loaded: Arc::clone(&loaded),
             media,
             started: Instant::now(),
         });
@@ -632,7 +652,14 @@ impl Session {
         let tags = descriptor.map_or_else(Vec::new, |descriptor| {
             shared.tags.get(descriptor.device.get(), descriptor.slot)
         });
-        if let Some(items) = menu::build(kind, &message.args, medium, &tags) {
+        // The track this deck has loaded from the slot it is browsing, so its
+        // row can carry the mark the deck reads its reference key from (F55).
+        let playing = descriptor.and_then(|descriptor| {
+            shared
+                .loaded
+                .track_on(descriptor.device.get(), descriptor.slot)
+        });
+        if let Some(items) = menu::build(kind, &message.args, medium, &tags, playing) {
             let count = u32::try_from(items.len()).unwrap_or(u32::MAX);
             let raw = descriptor.map_or(0, Descriptor::to_raw);
             self.remember(raw, count, items);

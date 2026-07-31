@@ -41,6 +41,7 @@
 //! number is free: an XDJ-XZ and an Opus Quad do not defend their numbers with
 //! conflict packets at all, so only having watched the network is.
 
+use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -158,6 +159,54 @@ pub enum Phase {
     Failed,
 }
 
+/// What each peer has loaded **from our media**, as its status packets report it.
+///
+/// A browsing deck needs a reference to compare rows against — the key of the
+/// track it has loaded — and it does not compute that locally. It expects the
+/// *server* to mark the loaded track's row, and it takes the key from whatever
+/// row carries the mark. A listing with no marked row gives it nothing to
+/// compare against and no row lights (F55).
+///
+/// So a server has to know what its clients have loaded. It does: a deck
+/// unicasts status to us every ~200 ms naming the track, the player it came
+/// from and the slot, and a track whose source player is us came off our
+/// medium. That is the whole mechanism, and it is why this lives beside the
+/// socket that already receives those packets rather than in the dbserver.
+#[derive(Debug, Default)]
+pub struct LoadedTracks {
+    /// `(device, slot)` → the track id that device loaded from that slot.
+    by_device: Mutex<BTreeMap<(u8, Slot), u32>>,
+}
+
+impl LoadedTracks {
+    /// Record that `device` has `track` loaded from our `slot`.
+    ///
+    /// A track id of zero means nothing is loaded, and forgets the entry
+    /// rather than marking row zero.
+    pub fn note(&self, device: u8, slot: Slot, track: u32) {
+        let Ok(mut loaded) = self.by_device.lock() else {
+            return;
+        };
+        if track == 0 {
+            loaded.remove(&(device, slot));
+        } else {
+            loaded.insert((device, slot), track);
+        }
+    }
+
+    /// Forget everything a device had loaded, when it leaves the network.
+    pub fn forget(&self, device: u8) {
+        if let Ok(mut loaded) = self.by_device.lock() {
+            loaded.retain(|(had, _), _| *had != device);
+        }
+    }
+
+    /// What `device` has loaded from `slot`, if anything.
+    pub fn track_on(&self, device: u8, slot: Slot) -> Option<u32> {
+        self.by_device.lock().ok()?.get(&(device, slot)).copied()
+    }
+}
+
 /// A device on the network: keep-alives, and optionally status.
 #[derive(Debug)]
 pub struct VirtualCdj {
@@ -168,6 +217,8 @@ pub struct VirtualCdj {
     number: Arc<AtomicU8>,
     phase: watch::Sender<Phase>,
     media: Arc<dyn MediaSource>,
+    /// What our peers have loaded from us, kept current by the status socket.
+    loaded: Arc<LoadedTracks>,
     status_counter: Arc<AtomicU32>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -216,6 +267,7 @@ impl VirtualCdj {
             number: Arc::new(AtomicU8::new(number.get())),
             phase,
             media,
+            loaded: Arc::new(LoadedTracks::default()),
             status_counter: Arc::new(AtomicU32::new(0)),
             tasks: Vec::new(),
         };
@@ -248,6 +300,13 @@ impl VirtualCdj {
     }
 
     /// Watch the claim state machine.
+    /// What our peers have loaded from us. Shared, and kept current for as
+    /// long as this virtual CDJ runs.
+    pub fn loaded(&self) -> Arc<LoadedTracks> {
+        Arc::clone(&self.loaded)
+    }
+
+    /// A receiver for our own beat phase.
     pub fn phase(&self) -> watch::Receiver<Phase> {
         self.phase.subscribe()
     }
@@ -367,6 +426,7 @@ impl VirtualCdj {
         let name = self.config.name;
         let number = Arc::clone(&self.number);
         let media = Arc::clone(&self.media);
+        let loaded = Arc::clone(&self.loaded);
 
         Ok(tokio::spawn(async move {
             let mut buffer = vec![0u8; MAX_DATAGRAM];
@@ -387,6 +447,18 @@ impl VirtualCdj {
                 };
 
                 let reply = match status::decode(datagram) {
+                    // Not a query, but the packet that tells us what this deck
+                    // has loaded from us — which is what lets a track row be
+                    // marked as the loaded one (F55). Only a track whose
+                    // source player is *us* came off our medium.
+                    Ok(status::Packet::CdjStatus(peer)) => {
+                        if let Some(device) = peer.sender()
+                            && peer.source_player() == Some(ours)
+                        {
+                            loaded.note(device.get(), peer.source_slot(), peer.track_id());
+                        }
+                        None
+                    }
                     Ok(status::Packet::MediaQuery(query)) => {
                         answer_media_query(query, ours, name, media.as_ref())
                             .map(|reply| (reply, query.requester_ip))

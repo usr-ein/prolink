@@ -427,6 +427,7 @@ fn other_library() -> Library {
 fn shared(media: impl IntoIterator<Item = Arc<Medium>>) -> Shared {
     Shared {
         tags: TagLists::default(),
+        loaded: Arc::new(LoadedTracks::default()),
         device: BrowsableDeviceNumber::new(2).expect("device 2 is browsable"),
         media: media
             .into_iter()
@@ -691,8 +692,14 @@ fn the_root_menu_is_what_a_real_deck_sends_minus_the_category_we_cannot_answer()
         .collect();
     assert_eq!(real.len(), 12, "a real root menu is all twelve");
 
-    let ours = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None, &[])
-        .expect("the root menu needs no medium");
+    let ours = menu::build(
+        MessageKind::MENU_ROOT,
+        &Arguments::default(),
+        None,
+        &[],
+        None,
+    )
+    .expect("the root menu needs no medium");
     let expected: Vec<MenuItem> = real
         .into_iter()
         .filter(|item| item.label1 != menu_label("FOLDER"))
@@ -708,8 +715,14 @@ fn the_root_menu_is_what_a_real_deck_sends_minus_the_category_we_cannot_answer()
 fn the_sort_menu_re_encodes_byte_for_byte_as_a_real_deck_sent_it() {
     // A round trip between our own encoder and our own decoder proves they
     // agree with each other, which is not the same as agreeing with a CDJ.
-    let ours = menu::build(MessageKind::MENU_SORT, &Arguments::default(), None, &[])
-        .expect("the sort menu needs no medium");
+    let ours = menu::build(
+        MessageKind::MENU_SORT,
+        &Arguments::default(),
+        None,
+        &[],
+        None,
+    )
+    .expect("the sort menu needs no medium");
     assert_eq!(ours.len(), REAL_SORT_MENU.len());
     for (item, text) in ours.iter().zip(REAL_SORT_MENU) {
         let real = hex(text);
@@ -726,7 +739,14 @@ fn the_sort_menu_re_encodes_byte_for_byte_as_a_real_deck_sent_it() {
 fn we_advertise_no_category_we_cannot_answer() {
     // An unimplemented category and an empty one are indistinguishable on a
     // deck's screen, so every row of our root menu must lead somewhere (F40).
-    let root = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None, &[]).expect("root");
+    let root = menu::build(
+        MessageKind::MENU_ROOT,
+        &Arguments::default(),
+        None,
+        &[],
+        None,
+    )
+    .expect("root");
     let labels: Vec<&str> = ROOT_CATEGORIES
         .iter()
         .filter(|category| {
@@ -2425,4 +2445,103 @@ fn the_tag_list_honours_the_sort_the_deck_asks_for() {
     let mut expected = titles.clone();
     expected.sort_by_key(|title| title.to_lowercase());
     assert_eq!(titles, expected, "a sort other than DEFAULT is applied");
+}
+
+// -- the loaded-track mark ---------------------------------------------------
+
+#[test]
+fn the_loaded_track_row_is_marked_so_the_key_indicator_has_a_reference() {
+    // A browsing deck does not compute key compatibility from its own copy of
+    // the loaded track. It reads the key off whichever row carries bit 8 and
+    // lights every row harmonically compatible with it — so a listing with no
+    // marked row lights nothing, which is exactly what a real deck showed for
+    // this server until now (F55).
+    //
+    // Established by serving the *same medium* a real deck was serving and
+    // diffing 125 rows: every field matched except this one bit, on the one
+    // row the browsing deck had loaded.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let device = descriptor(Slot::USB, MenuTarget::MAIN).device.get();
+    shared.loaded.note(device, Slot::USB, 2);
+
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TRACK, 1, &[0]),
+    );
+    let rows = render_all(&mut session, 3);
+    assert!(rows.len() > 1, "the whole list, not just the loaded track");
+    for row in &rows {
+        let marked = row.flags & MenuItem::LOADED != 0;
+        assert_eq!(marked, row.id == 2, "row {} carries the wrong mark", row.id);
+    }
+}
+
+#[test]
+fn nothing_is_marked_when_the_deck_has_loaded_nothing_from_us() {
+    // A track a deck loaded from *another* player is not on our medium, and
+    // marking a row by id alone would mark whichever of our tracks happened to
+    // share that id.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TRACK, 1, &[0]),
+    );
+    let rows = render_all(&mut session, 3);
+    assert!(
+        rows.iter().all(|row| row.flags & MenuItem::LOADED == 0),
+        "no row is marked when nothing was loaded from us"
+    );
+}
+
+#[test]
+fn the_mark_follows_the_slot_the_deck_is_browsing() {
+    // Two media, and a deck with a track loaded from the USB. Browsing the SD
+    // must not mark the row that happens to share the id.
+    let sd = Arc::new(Medium::synthetic(ServedSlot::SD, other_library(), "SD"));
+    let shared = shared([usb(), sd]);
+    let mut session = Session::default();
+    let device = descriptor(Slot::USB, MenuTarget::MAIN).device.get();
+    shared.loaded.note(device, Slot::USB, 1);
+
+    let sd_request = Message::new(
+        1,
+        MessageKind::MENU_TRACK,
+        Arguments::new(vec![
+            Field::U32(descriptor(Slot::SD, MenuTarget::MAIN).to_raw()),
+            Field::U32(0),
+        ])
+        .expect("two arguments"),
+    );
+    ask(&mut session, &shared, &sd_request);
+    let mut out = Vec::new();
+    let render = Message::render_of(2, descriptor(Slot::SD, MenuTarget::MAIN), 0, 4, 4);
+    session.render(&render, &mut out);
+    let mut offset = 0;
+    while let Some(rest) = out.get(offset..).filter(|rest| !rest.is_empty()) {
+        let (message, used) = Message::decode(rest).expect("our own replies decode");
+        offset += used;
+        if let Some(item) = MenuItem::from_message(&message) {
+            assert_eq!(
+                item.flags & MenuItem::LOADED,
+                0,
+                "the USB's loaded track marked a row on the SD"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_deck_that_unloads_clears_the_mark() {
+    // Track id zero in a status packet means nothing is loaded, and must forget
+    // the entry rather than mark row zero.
+    let shared = shared([usb()]);
+    let device = descriptor(Slot::USB, MenuTarget::MAIN).device.get();
+    shared.loaded.note(device, Slot::USB, 2);
+    assert_eq!(shared.loaded.track_on(device, Slot::USB), Some(2));
+    shared.loaded.note(device, Slot::USB, 0);
+    assert_eq!(shared.loaded.track_on(device, Slot::USB), None);
 }
