@@ -34,6 +34,33 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap` | wip | `interfaces`, `devices`, `announce` done |
 | 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | wip | spec and architecture written; CI and a licence gate added |
 | 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | todo | |
+| 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | wip | agent `beat-monitor` |
+
+## Acceptance: what the CLI must be able to do
+
+Stated by the user, and what "end to end" means. Each maps to a command and to
+the steps that have to be finished before it works.
+
+| # | Capability | Command | Needs |
+|---|---|---|---|
+| 1 | Join a CDJ network, see the other players, and browse a USB in one of them | `prolink devices`, `prolink browse <device> --slot usb` | 12, 13, 14, 15, 16 |
+| 2 | The same for an SD card | `prolink browse <device> --slot sd` | as above |
+| 3 | A USB in this machine that other CDJs see on their LINK screen | `prolink serve --usb <path>` | 13, 17, 18, 19, 20 |
+| 4 | Two USBs, the second presented as an SD card | `prolink serve --usb <path> --sd <path>` | as above, plus per-slot resolution (F37) |
+| 5 | Other CDJs browsing categories, drilling down, searching and sorting | (same session) | 19 |
+| 6 | Other CDJs **loading and playing** a track from it | (same session) | 18, 19, and the analysis transforms (11) |
+| 7 | Live playing information: beat pulses, phase, tempo, the loaded track, who is master | `prolink status --watch` | 24 |
+
+Capability 7 needs two sources and only one of them is passive: beat packets are
+broadcast on UDP 50001, but the loaded track, the play state and **who holds
+tempo master** are published only in UDP-50002 status, which is unicast to peers
+that have announced themselves (F21). So `status` shows tempo and phase without
+announcing, and everything else only with `--announce`.
+
+Capabilities 3–6 additionally need a **browsable device number in 1–4** and a
+**portmapper on UDP/111** — the latter is privileged, so on Linux either run as
+root or set `net.ipv4.ip_unprivileged_port_start=111`; macOS cannot serve it
+without elevation (F45, F46).
 
 ## Decisions taken along the way
 
