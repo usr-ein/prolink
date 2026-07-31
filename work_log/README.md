@@ -22,8 +22,8 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 09 | `prolink-rekordbox`: ANLZ reader (raw payloads for serving, structured for consuming) + `PIONEER/*SETTING*.DAT` | wip | agent `rekordbox-readers` |
 | 10 | `prolink-rekordbox`: the `Library` model — pdb rows joined into tracks/playlists | wip | agent `rekordbox-readers` |
 | 11 | `prolink-proto`: analysis wire transforms (ANLZ → dbserver blobs) | done | `analysis.rs`; takes raw tag payloads so the wire layer stays free of the file layer |
-| 12 | `prolink`: network interface discovery, UDP plumbing, device table, passive discovery | todo | |
-| 13 | `prolink`: virtual CDJ — claim chain, keep-alive, status emission, media/settings answers | todo | |
+| 12 | `prolink`: network interface discovery, UDP plumbing, device table, passive discovery | done | [012](012-discovery.md) |
+| 13 | `prolink`: virtual CDJ — claim chain, keep-alive, status emission, media/settings answers | done | [012](012-discovery.md); conflict back-off untested against hardware |
 | 14 | `prolink`: ONC RPC / NFSv2 **client** — mount, walk, streaming reads | todo | |
 | 15 | `prolink`: dbserver **client** — browse a player's library the way LINK does | todo | |
 | 16 | `prolink`: consume facade — devices → slots → menus → tracks → file bytes | todo | |
@@ -31,8 +31,8 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 18 | `prolink`: portmap + mountd + nfsd **servers** | todo | |
 | 19 | `prolink`: dbserver **server** — root menu, drill-down grid, sorts, search, metadata, analysis | todo | |
 | 20 | `prolink`: serve facade — two media as USB + SD, wired to the virtual CDJ | todo | |
-| 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap` | todo | |
-| 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | todo | |
+| 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap` | wip | `interfaces`, `devices`, `announce` done |
+| 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | wip | spec and architecture written; CI and a licence gate added |
 | 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | todo | |
 
 ## Decisions taken along the way

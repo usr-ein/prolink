@@ -1,0 +1,1117 @@
+====================================================================================================
+REAL CAPTURED ONC RPC / PORTMAP / MOUNT / NFSv2 DATAGRAMS
+Extracted verbatim from pcap. Every hex string below is the complete UDP payload as captured.
+====================================================================================================
+
+CORPUS AND METHOD
+-----------------
+Sources scanned:
+  33 x /Users/sam1902/Documents/CustomDJ/prolinks-compat/captures/S*/run.pcap
+   5 x /Users/sam1902/Documents/CustomDJ/prolinks-compat/research/ref-repos/dysentery/doc/assets/*.pcapng
+  26 x /Users/sam1902/Documents/CustomDJ/prolinks-compat/captures/journals/*/journal.jsonl
+
+Reader: prolinks_poc.capture.pcap.read_capture (Ethernet/IPv4/UDP, with IP-fragment
+reassembly -- essential, because 8k+ NFS replies arrive as 6-20 fragments).
+
+IMPORTANT METHOD NOTE: filtering on ports {111, 2049, 48276} alone finds only 16,799
+datagrams and misses ~85% of the RPC traffic. Our own NFS/MOUNT server binds EPHEMERAL
+ports (it registers them with its portmapper), so a deck talking to us uses ports like
+50978/63525/61886. The scan below is therefore CONTENT-based: every UDP payload >= 24
+bytes is RPC-decoded and kept if it is a CALL with rpcvers==2 and prog in
+{100000,100003,100005}, or a REPLY whose xid matches a call already seen in that file.
+That yields 113,900 datagrams: 56,966 calls and 56,934 replies.
+
+The journals (captures/journals/*/journal.jsonl, records with 'hex' + 'local_port')
+were also decoded: 1,796 RPC records, ALL of which are duplicates of datagrams already
+present in the pcaps (same sessions, logged by our own tool). They contribute nothing new.
+
+Hosts:
+  169.254.103.172 = deck A, CDJ-2000NXS, fw v1.44   (REAL HARDWARE)
+  169.254.202.84  = deck B, CDJ-2000NXS, fw v1.44   (REAL HARDWARE)
+  169.254.99.100  = the Mac running our `prolinks` tool (client AND server)
+  169.254.99.60 / 169.254.244.181 = Pioneer players in dysentery's LinkInfo.pcapng
+  169.254.192.112 = the computer capturing in dysentery's LinkInfo.pcapng
+Where an exchange is deck<->deck, BOTH the call and the reply are genuine Pioneer bytes;
+that is preferred below and is called out per item.
+
+----------------------------------------------------------------------------------------------------
+HEADLINE RESULTS (details and byte evidence in the numbered sections)
+----------------------------------------------------------------------------------------------------
+  * REQUESTED ITEMS 9 (STATFS), 10 (READDIR) and NFS NULL: NOT PRESENT IN CORPUS.
+    A CDJ only ever issues GETPORT, MNT, UMNT, LOOKUP, GETATTR and READ. Nine
+    (prog,vers,proc) triples exist in the whole corpus and a deck uses six of them.
+  * MOUNT EXPORT does exist (3 calls) but F37 holds: no CDJ ever calls it. All 3 are
+    computer-originated. The replies are real Pioneer bytes and are quoted.
+  * The mount path is UTF-16LE with a trailing slash: '/C/' = 2f0043002f00 (USB),
+    '/B/' = 2f0042002f00 (SD). '/C/EXPORT' appears only in dysentery's older capture.
+  * F28 CONFIRMED, and more strongly than documented: the 12-byte truncation also
+    happens DECK-TO-DECK, so it is Pioneer firmware talking to Pioneer firmware. The
+    12 surviving bytes are three 32-bit ids [self, parent, mount-root].
+  * CORRECTION TO C8: the AUTH_UNIX stamp is NOT a nonce. It is a DETERMINISTIC
+    function of the xid -- 56,102 Pioneer-originated calls, 9,947 recurring xids,
+    ZERO disagreements, and dysentery's 2016 capture off different hardware produces
+    the identical stamp for xids 1..9. 0x967b8703 is simply entry #1. A 32-entry
+    lookup table of the real sequence is given in section 13.
+  * NEW: in a CDJ's READ reply the fattr is ALL ZEROS except fileid (7884/7884). Its
+    LOOKUP and GETATTR replies carry a full, correct fattr. Do not read size from a
+    READ reply.
+  * REFINEMENT OF F19: 8192 is not the ceiling. A deck asks its peer for 9408 most
+    often, and up to 28584 bytes in a single NFSv2 UDP READ, answered in full as a
+    28,656-byte datagram (~20 IP fragments).
+  * A CDJ's file mode is 0o100000 (no permission bits) and a directory's is 0o040666;
+    all timestamps are the constant 1672531200 (2023-01-01T00:00:00Z).
+
+### 1. portmap GETPORT call + reply
+
+-- 1a. GETPORT(mountd) -- deck B asking deck A's portmapper. BOTH SIDES REAL HARDWARE.
+capture: captures/S13-format-ground-truth/run.pcap  frame 91  169.254.202.84:1065 -> 169.254.103.172:111   [CALL]
+hex: 000000010000000000000002000186a000000002000000030000000100000014967b8703000000000000000000000000000000000000000000000000000186a5000000010000001100000000
+decode:
+  xid=0x00000001  mtype=CALL(0)  rpcvers=2  prog=100000 (PORTMAP)  vers=2  proc=3 (GETPORT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x967b8703 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  prog=100005 (MOUNT)  vers=1  prot=17 (IPPROTO_UDP)  port=0
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 92  169.254.103.172:111 -> 169.254.202.84:1065   [REPLY]
+hex: 0000000100000001000000000000000000000000000000000000bc94
+decode:
+  xid=0x00000001  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: port = 48276  (mountd on a CDJ-2000NXS)
+
+-- 1b. GETPORT(nfs) -- deck B asking deck A's portmapper. BOTH SIDES REAL HARDWARE.
+capture: captures/S13-format-ground-truth/run.pcap  frame 93  169.254.202.84:1065 -> 169.254.103.172:111   [CALL]
+hex: 000000020000000000000002000186a0000000020000000300000001000000149922e112000000000000000000000000000000000000000000000000000186a3000000020000001100000000
+decode:
+  xid=0x00000002  mtype=CALL(0)  rpcvers=2  prog=100000 (PORTMAP)  vers=2  proc=3 (GETPORT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x9922e112 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  prog=100003 (NFS)  vers=2  prot=17 (IPPROTO_UDP)  port=0
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 94  169.254.103.172:111 -> 169.254.202.84:1065   [REPLY]
+hex: 00000002000000010000000000000000000000000000000000000801
+decode:
+  xid=0x00000002  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: port = 2049  (nfsd on a CDJ-2000NXS)
+
+-- 1c. GETPORT(mountd) -- a REAL DECK asking OUR portmapper (deck is the client, we reply).
+   Same call shape; the reply proves a deck accepts a NON-standard, ephemeral mountd port.
+capture: captures/S10-serve-to-cdj/run.pcap  frame 34  169.254.202.84:6456 -> 169.254.99.100:111   [CALL]
+hex: 0000000d0000000000000002000186a00000000200000003000000010000001464322e08000000000000000000000000000000000000000000000000000186a5000000010000001100000000
+decode:
+  xid=0x0000000d  mtype=CALL(0)  rpcvers=2  prog=100000 (PORTMAP)  vers=2  proc=3 (GETPORT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x64322e08 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  prog=100005 (MOUNT)  vers=1  prot=17  port=0
+
+capture: captures/S10-serve-to-cdj/run.pcap  frame 35  169.254.99.100:111 -> 169.254.202.84:6456   [REPLY]
+hex: 0000000d00000001000000000000000000000000000000000000d120
+decode:
+  xid=0x0000000d  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: port = 53536  (our server's ephemeral mountd port)
+
+-- 1d. GETPORT(nfs) -- same session, deck asking our portmapper.
+capture: captures/S10-serve-to-cdj/run.pcap  frame 36  169.254.202.84:6456 -> 169.254.99.100:111   [CALL]
+hex: 0000000e0000000000000002000186a000000002000000030000000100000014561ec900000000000000000000000000000000000000000000000000000186a3000000020000001100000000
+decode:
+  xid=0x0000000e  mtype=CALL(0)  rpcvers=2  prog=100000 (PORTMAP)  vers=2  proc=3 (GETPORT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x561ec900 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  prog=100003 (NFS)  vers=2  prot=17  port=0
+
+capture: captures/S10-serve-to-cdj/run.pcap  frame 37  169.254.99.100:111 -> 169.254.202.84:6456   [REPLY]
+hex: 0000000e00000001000000000000000000000000000000000000dea4
+decode:
+  xid=0x0000000e  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: port = 56996  (our server's ephemeral nfsd port)
+
+NOTE: a GETPORT call is always 76 bytes and a GETPORT reply always 28 bytes.
+NOTE: a real deck NEVER asks for anything but (100005,1,udp) and (100003,2,udp), and it
+      always asks for mountd FIRST. 91 of the 106 GETPORT calls in the corpus are
+      deck-originated and every one of them is one of those two.
+
+### 2. portmap DUMP call + reply
+
+Only 3 DUMP calls exist in the whole corpus and all 3 are OURS (the `prolinks` probe).
+A real deck never calls DUMP. The REPLY below, however, is genuine CDJ-2000NXS bytes and
+is the authoritative statement of what a deck registers.
+capture: captures/S04-media-insert/run.pcap  frame 105  169.254.99.100:64841 -> 169.254.103.172:111   [CALL]
+hex: 100000010000000000000002000186a000000002000000040000000100000014529ee725000000000000000000000000000000000000000000000000
+decode:
+  xid=0x10000001  mtype=CALL(0)  rpcvers=2  prog=100000 (PORTMAP)  vers=2  proc=4 (DUMP)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x529ee725 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  (void)
+
+capture: captures/S04-media-insert/run.pcap  frame 106  169.254.103.172:111 -> 169.254.99.100:64841   [REPLY]
+hex: 10000001000000010000000000000000000000000000000000000001000186a300000002000000110000080100000001000186a500000001000000110000bc9400000001000186a000000002000000110000006f00000000
+decode:
+  xid=0x10000001  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: pmaplist (linked list, 1=follows / 0=end):
+    prog=100003 vers=2 prot=17 port=2049
+    prog=100005 vers=1 prot=17 port=48276
+    prog=100000 vers=2 prot=17 port=111
+    terminator 00000000
+
+### 3. MOUNT MNT call + reply
+
+EXPORT PATH ENCODING -- CONFIRMED. The dirpath is a plain XDR opaque<> whose BYTES are
+UTF-16LE, NOT ASCII. USB slot = '/C/' = 6 bytes 2f 00 43 00 2f 00 (padded to 8 with 2 zero
+bytes). SD slot = '/B/' = 6 bytes 2f 00 42 00 2f 00. Both have a TRAILING slash and no NUL.
+The length prefix is 6 (the byte count), not 3. All 33 MNT calls in the corpus use exactly
+one of: '/C/' (28 calls), '/B/' (4 calls), '/C/EXPORT' (1 call, dysentery capture only).
+
+-- 3a. MNT '/C/' (USB) -- deck B mounting deck A. BOTH SIDES REAL HARDWARE.
+capture: captures/S13-format-ground-truth/run.pcap  frame 95  169.254.202.84:1065 -> 169.254.103.172:48276   [CALL]
+hex: 000000030000000000000002000186a500000001000000010000000100000014a4921306000000000000000000000000000000000000000000000000000000062f0043002f000011
+decode:
+  xid=0x00000003  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=1 (MNT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xa4921306 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dirpath opaque<> length=6
+         raw bytes  = 2f0043002f00
+         UTF-16LE   = '/C/'
+         XDR padding= 0000 (6 -> 8)
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 96  169.254.103.172:48276 -> 169.254.202.84:1065   [REPLY]
+hex: 00000003000000010000000000000000000000000000000000000000012538a8012538a8012538a80000000000000000000000000000000000000000
+decode:
+  xid=0x00000003  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: fhstatus status = 0 (NFS_OK)
+          fhandle (32 bytes) = 012538a8012538a8012538a80000000000000000000000000000000000000000
+          -- a real deck's handle is a 4-byte value repeated 3x then 20 zero bytes:
+             012538a8 012538a8 012538a8 + 20 x 00
+
+-- 3b. MNT '/B/' (SD) -- deck B mounting deck A's SD card. BOTH SIDES REAL HARDWARE.
+capture: captures/S15a-sd-alone/run.pcap  frame 259  169.254.202.84:7219 -> 169.254.103.172:48276   [CALL]
+hex: 000017fc0000000000000002000186a5000000010000000100000001000000149c0fcd05000000000000000000000000000000000000000000000000000000062f0042002f000011
+decode:
+  xid=0x000017fc  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=1 (MNT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x9c0fcd05 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dirpath length=6  raw=2f0042002f00  UTF-16LE='/B/'
+
+capture: captures/S15a-sd-alone/run.pcap  frame 260  169.254.103.172:48276 -> 169.254.202.84:7219   [REPLY]
+hex: 000017fc000000010000000000000000000000000000000000000000022538a8022538a8022538a80000000000000000000000000000000000000000
+decode:
+  xid=0x000017fc  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status=0, fhandle = 022538a8022538a8022538a80000000000000000000000000000000000000000
+          (022538a8 x3 + 20 zeros -- note the leading byte is 02 for SD vs 01 for USB)
+
+-- 3c. MNT '/C/EXPORT' -- dysentery's capture, an older Pioneer player. Path IS different there.
+capture: research/ref-repos/dysentery/doc/assets/LinkInfo.pcapng  frame 163  169.254.192.112:1053 -> 169.254.99.60:48276   [CALL]
+hex: 000000050000000000000002000186a5000000010000000100000001000000142a994a03000000000000000000000000000000000000000000000000000000122f0043002f004500580050004f00520054000004
+decode:
+  xid=0x00000005  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=1 (MNT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x2a994a03 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dirpath length=18  raw=2f0043002f004500580050004f0052005400
+         UTF-16LE='/C/EXPORT'   (no trailing slash, 9 chars = 18 bytes)
+
+capture: research/ref-repos/dysentery/doc/assets/LinkInfo.pcapng  frame 164  169.254.99.60:48276 -> 169.254.192.112:1053   [REPLY]
+hex: 0000000500000001000000000000000000000000000000000000000001c1cec801c1cec801c1cec80000000000000000000000000000000000000000
+decode:
+  xid=0x00000005  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status=0, fhandle = 01c1cec801c1cec801c1cec80000000000000000000000000000000000000000
+          (01c1cec8 x3 + 20 zeros -- the handle quoted in FINDINGS F28)
+
+-- 3d. MNT '/C/' -- a REAL DECK mounting OUR server (deck is the client). Needed for F28 below.
+capture: captures/S10-serve-to-cdj/run.pcap  frame 38  169.254.202.84:6456 -> 169.254.99.100:53536   [CALL]
+hex: 0000000f0000000000000002000186a500000001000000010000000100000014d0409301000000000000000000000000000000000000000000000000000000062f0043002f000011
+decode:
+  xid=0x0000000f  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=1 (MNT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xd0409301 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dirpath length=6 raw=2f0043002f00 = '/C/'
+
+capture: captures/S10-serve-to-cdj/run.pcap  frame 39  169.254.99.100:53536 -> 169.254.202.84:6456   [REPLY]
+hex: 0000000f0000000100000000000000000000000000000000000000008a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+decode:
+  xid=0x0000000f  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status=0, fhandle = 8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+          (this is OUR hash-derived handle, NOT deck-shaped -- see F28)
+
+NOTE: an MNT call for a 3-char path is always 72 bytes; an OK MNT reply is always 60 bytes.
+
+### 4. MOUNT UMNT call + reply
+
+-- deck B unmounting deck A's '/C/'. BOTH SIDES REAL HARDWARE.
+capture: captures/S13-format-ground-truth/run.pcap  frame 53203  169.254.202.84:1065 -> 169.254.103.172:48276   [CALL]
+hex: 000017f90000000000000002000186a5000000010000000300000001000000147ac50e0c000000000000000000000000000000000000000000000000000000062f0043002f003cd2
+decode:
+  xid=0x000017f9  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=3 (UMNT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x7ac50e0c machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dirpath length=6 raw=2f0043002f00 UTF-16LE='/C/'
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 53204  169.254.103.172:48276 -> 169.254.202.84:1065   [REPLY]
+hex: 000017f90000000100000000000000000000000000000000
+decode:
+  xid=0x000017f9  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: (void) -- the whole reply is 24 bytes: xid, REPLY, MSG_ACCEPTED,
+          AUTH_NULL verifier, SUCCESS. Nothing after accept_stat.
+
+-- and the '/B/' (SD) UMNT, also deck<->deck:
+capture: captures/S15b-sd-and-usb/run.pcap  frame 3004  169.254.202.84:7219 -> 169.254.103.172:48276   [CALL]
+hex: 00001b710000000000000002000186a5000000010000000300000001000000144fb0d311000000000000000000000000000000000000000000000000000000062f0042002f0045fc
+decode:
+  xid=0x00001b71  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=3 (UMNT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x4fb0d311 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dirpath length=6 raw=2f0042002f00 UTF-16LE='/B/'
+
+capture: captures/S15b-sd-and-usb/run.pcap  frame 3005  169.254.103.172:48276 -> 169.254.202.84:7219   [REPLY]
+hex: 00001b710000000100000000000000000000000000000000
+decode:
+  xid=0x00001b71  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: (void), 24-byte reply
+
+There are 5 UMNT calls in the corpus (4 deck-originated). UMNTALL (proc 4) and MOUNT DUMP
+(proc 2): NOT PRESENT IN CORPUS.
+
+### 5. MOUNT EXPORT call + reply
+
+EXPORT EXISTS IN THE CORPUS, but F37's claim holds: **no real deck ever calls EXPORT**.
+All 3 EXPORT calls are computer-originated -- 2 from our Mac (169.254.99.100) in
+S04-media-insert, 1 from dysentery's capture host (169.254.192.112). Of 56,966 calls,
+the 56,093 that came from a CDJ include ZERO EXPORT calls.
+The REPLIES below are genuine Pioneer bytes and are the useful part.
+
+-- 5a. EXPORT to deck A (CDJ-2000NXS). Call is ours; reply is the deck's.
+capture: captures/S04-media-insert/run.pcap  frame 313  169.254.99.100:53665 -> 169.254.103.172:48276   [CALL]
+hex: 100000010000000000000002000186a500000001000000050000000100000014c7fe92f0000000000000000000000000000000000000000000000000
+decode:
+  xid=0x10000001  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=5 (EXPORT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xc7fe92f0 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  (void)
+
+capture: captures/S04-media-insert/run.pcap  frame 314  169.254.103.172:48276 -> 169.254.99.100:53665   [REPLY]
+hex: 10000001000000010000000000000000000000000000000000000001000000062f0043002f00000000000001000000173136392e3235342e302e302f3235352e3235352e302e30000000000000000000
+decode:
+  xid=0x10000001  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: exportlist (linked list of dir + groups, 1=follows / 0=end):
+    dirpath opaque len=6 raw=2f0043002f00  UTF-16LE='/C/'
+      group opaque len=23 (ASCII): '169.254.0.0/255.255.0.0'
+      groups terminator 00000000
+    exports terminator 00000000
+
+  -> the groups string is ASCII while the dirpath is UTF-16LE, in the same message.
+     Only the POPULATED slot is listed: this deck had a USB stick and no SD card, so
+     only '/C/' appears and there is no '/B/' entry. That is what makes polling EXPORT
+     a usable media-presence probe (F15).
+     The group is the whole link-local /16 -- which is why passive access works at all.
+-- 5b. EXPORT in dysentery's LinkInfo.pcapng -- an older/other Pioneer player. TWO entries,
+   path '/C/EXPORT', and the groups are single-host /32 masks, one per peer that has
+   mounted. So the export list is per-client there, not a static /16.
+capture: research/ref-repos/dysentery/doc/assets/LinkInfo.pcapng  frame 157  169.254.192.112:1053 -> 169.254.99.60:48276   [CALL]
+hex: 000000020000000000000002000186a5000000010000000500000001000000149922e112000000000000000000000000000000000000000000000000
+decode:
+  xid=0x00000002  mtype=CALL(0)  rpcvers=2  prog=100005 (MOUNT)  vers=1  proc=5 (EXPORT)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x9922e112 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  (void)
+
+capture: research/ref-repos/dysentery/doc/assets/LinkInfo.pcapng  frame 158  169.254.99.60:48276 -> 169.254.192.112:1053   [REPLY]
+hex: 00000002000000010000000000000000000000000000000000000001000000122f0043002f004500580050004f00520054000000000000010000001f3136392e3235342e3234342e3138312f3235352e3235352e3235352e323535000000000000000001000000122f0043002f004500580050004f00520054000000000000010000001f3136392e3235342e3139322e3131322f3235352e3235352e3235352e323535000000000000000000
+decode:
+  xid=0x00000002  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: exportlist (linked list of dir + groups, 1=follows / 0=end):
+    dirpath opaque len=18 raw=2f0043002f004500580050004f0052005400  UTF-16LE='/C/EXPORT'
+      group opaque len=31 (ASCII): '169.254.244.181/255.255.255.255'
+      groups terminator 00000000
+    dirpath opaque len=18 raw=2f0043002f004500580050004f0052005400  UTF-16LE='/C/EXPORT'
+      group opaque len=31 (ASCII): '169.254.192.112/255.255.255.255'
+      groups terminator 00000000
+    exports terminator 00000000
+
+
+### 6. NFS LOOKUP call + reply
+
+Filenames on the wire are UTF-16LE too, same as the mount path.
+
+-- 6a. LOOKUP with a non-trivial filename. deck B -> deck A. BOTH SIDES REAL HARDWARE.
+capture: captures/S13-format-ground-truth/run.pcap  frame 748  169.254.202.84:1298 -> 169.254.103.172:2049   [CALL]
+hex: 000000070000000000000002000186a300000002000000040000000100000014f0629c320000000000000000000000000000000000000000000000000131195401301b94012538a80301000000001b58000000000103010000000266000000343000330020004d005000330020004d00500045004700310020003100320038006b002000340034006b0031002e006d0070003300
+decode:
+  xid=0x00000007  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=4 (LOOKUP)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xf0629c32 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dir fhandle (32) = 0131195401301b94012538a80301000000001b58000000000103010000000266
+         name opaque<> length = 52
+         name raw bytes = 3000330020004d005000330020004d00500045004700310020003100320038006b002000340034006b0031002e006d0070003300
+         name UTF-16LE  = '03 MP3 MPEG1 128k 44k1.mp3'   (26 chars)
+         XDR padding    = 0 byte(s)
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 749  169.254.103.172:2049 -> 169.254.202.84:1298   [REPLY]
+hex: 000000070000000100000000000000000000000000000000000000000132184401311954012538a800000000000000000000000000000000000000000000000100008000000000010000000000000000006974940000020000000001000034bb000000020132184463b0cd000000000063b0cd000000000063b0cd0000000000
+decode:
+  xid=0x00000007  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 0 (NFS_OK)
+          fhandle (32 bytes) = 0132184401311954012538a80000000000000000000000000000000000000000
+    fattr (68 bytes):
+      type      = 1 (NFREG)
+      mode      = 32768 = 0o100000 = 0x8000
+      nlink     = 1
+      uid       = 0
+      gid       = 0
+      size      = 6911124
+      blocksize = 512
+      rdev      = 1
+      blocks    = 13499
+      fsid      = 2
+      fileid    = 20060228
+      atime     = 1672531200.000000
+      mtime     = 1672531200.000000
+      ctime     = 1672531200.000000
+
+-- 6b. LOOKUP 'Contents' (the directory step that precedes it), same session.
+capture: captures/S13-format-ground-truth/run.pcap  frame 742  169.254.202.84:1298 -> 169.254.103.172:2049   [CALL]
+hex: 000000040000000000000002000186a300000002000000040000000100000014dc1ac513000000000000000000000000000000000000000000000000012538a8012538a8012538a80301000000001b580000000001030100000002660000001043006f006e00740065006e0074007300
+decode:
+  xid=0x00000004  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=4 (LOOKUP)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xdc1ac513 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dir fhandle (32) = 012538a8012538a8012538a80301000000001b58000000000103010000000266
+         name opaque<> length = 16
+         name raw bytes = 43006f006e00740065006e0074007300
+         name UTF-16LE  = 'Contents'   (8 chars)
+         XDR padding    = 0 byte(s)
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 743  169.254.103.172:2049 -> 169.254.202.84:1298   [REPLY]
+hex: 00000004000000010000000000000000000000000000000000000000012f1d54012538a8012538a8000000000000000000000000000000000000000000000002000041b60000000100000000000000000000000000000200000000010000000100000002012f1d5463b0cd000000000063b0cd000000000063b0cd0000000000
+decode:
+  xid=0x00000004  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 0 (NFS_OK)
+          fhandle (32 bytes) = 012f1d54012538a8012538a80000000000000000000000000000000000000000
+    fattr (68 bytes):
+      type      = 2 (NFDIR)
+      mode      = 16822 = 0o40666 = 0x41b6
+      nlink     = 1
+      uid       = 0
+      gid       = 0
+      size      = 0
+      blocksize = 512
+      rdev      = 1
+      blocks    = 1
+      fsid      = 2
+      fileid    = 19864916
+      atime     = 1672531200.000000
+      mtime     = 1672531200.000000
+      ctime     = 1672531200.000000
+
+-- 6c. A LOOKUP with non-ASCII (Japanese) in the name -- proves the encoding really is
+       UTF-16LE and not ASCII-with-interleaved-zeros. Call is a REAL DECK's bytes.
+capture: captures/S10h-serve-to-cdj/run.pcap  frame 1686  169.254.202.84:9658 -> 169.254.99.100:61886   [CALL]
+hex: 000000860000000000000002000186a300000002000000040000000100000014499710140000000000000000000000000000000000000000000000008d518a807bb194a16b4070bd0301d20000001b580000000003030100000002cc00000026300032002e00200041006b0069006200610020002d002000ab30ac30df302e006d00700033008930
+decode:
+  xid=0x00000086  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=4 (LOOKUP)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x49971014 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dir fhandle (32) = 8d518a807bb194a16b4070bd0301d20000001b580000000003030100000002cc
+         name opaque<> length = 38
+         name raw bytes = 300032002e00200041006b0069006200610020002d002000ab30ac30df302e006d0070003300
+         name UTF-16LE  = '02. Akiba - カガミ.mp3'   (19 chars)
+         XDR padding    = 2 byte(s)
+
+capture: captures/S10h-serve-to-cdj/run.pcap  frame 1687  169.254.99.100:61886 -> 169.254.202.84:9658   [REPLY]
+hex: 000000860000000100000000000000000000000000000000000000006edb62ab06c0a8e1095898a854a26e902a0fe64a0b7cd490b31498aa1dc0ddcb00000001000081a400000001000000000000000000554245000002000000000000002aa200000001000000d05f5e1000000000005f5e1000000000005f5e100000000000
+decode:
+  xid=0x00000086  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 0 (NFS_OK)
+          fhandle (32 bytes) = 6edb62ab06c0a8e1095898a854a26e902a0fe64a0b7cd490b31498aa1dc0ddcb
+    fattr (68 bytes):
+      type      = 1 (NFREG)
+      mode      = 33188 = 0o100644 = 0x81a4
+      nlink     = 1
+      uid       = 0
+      gid       = 0
+      size      = 5587525
+      blocksize = 512
+      rdev      = 0
+      blocks    = 10914
+      fsid      = 1
+      fileid    = 208
+      atime     = 1600000000.000000
+      mtime     = 1600000000.000000
+      ctime     = 1600000000.000000
+
+       The name bytes decode as: '02. Akiba - ' then U+30AB U+30AC U+30DF ('KAGAMI' in
+       katakana, ab30 ac30 df30 little-endian) then '.mp3'. Any codec that assumes ASCII
+       every other byte will corrupt this.
+
+-- 6d. A LOOKUP that FAILED, for the error-path shape. Reply is 28 bytes, no fh, no fattr.
+capture: captures/S10f-serve-to-cdj/run.pcap  frame 580  169.254.202.84:9355 -> 169.254.99.100:63397   [CALL]
+hex: 000000260000000000000002000186a300000002000000040000000100000014a29dce09000000000000000000000000000000000000000000000000bb1a86efaafed0590437b5f803015a0000001b5800000000030301000000038600000050270042275200410049004e004400410041004d0041004700450027002f2768006f007700200064006f00200079006f00750020006c0069006b006500200079006f007500720020007400650061005f00
+decode:
+  xid=0x00000026  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=4 (LOOKUP)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xa29dce09 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  dir fhandle (32) = bb1a86efaafed0590437b5f803015a0000001b58000000000303010000000386
+         name opaque<> length = 80
+         name raw bytes = 270042275200410049004e004400410041004d0041004700450027002f2768006f007700200064006f00200079006f00750020006c0069006b006500200079006f007500720020007400650061005f00
+         name UTF-16LE  = "'❂RAINDAAMAGE'✯how do you like your tea_"   (40 chars)
+         XDR padding    = 0 byte(s)
+
+capture: captures/S10f-serve-to-cdj/run.pcap  frame 581  169.254.99.100:63397 -> 169.254.202.84:9355   [REPLY]
+hex: 00000026000000010000000000000000000000000000000000000002
+decode:
+  xid=0x00000026  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 2 (NFSERR_NOENT)
+          (error status: nothing follows -- the reply is 28 bytes)
+
+Total LOOKUP calls in corpus: 3,453 (3,450 deck-originated).
+
+### 7. NFS GETATTR call + reply
+
+-- deck B -> deck A. BOTH SIDES REAL HARDWARE. This is the fully decoded fattr example
+   asked for at the end of this report.
+capture: captures/S13-format-ground-truth/run.pcap  frame 798  169.254.202.84:1300 -> 169.254.103.172:2049   [CALL]
+hex: 000000080000000000000002000186a300000002000000010000000100000014bc6903100000000000000000000000000000000000000000000000000132184401311954012538a80000000000000000000000000000000000000000
+decode:
+  xid=0x00000008  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=1 (GETATTR)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xbc690310 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  fhandle (32 bytes) = 0132184401311954012538a80000000000000000000000000000000000000000
+         (deck-shaped: three 32-bit words then 20 zero bytes)
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 799  169.254.103.172:2049 -> 169.254.202.84:1300   [REPLY]
+hex: 000000080000000100000000000000000000000000000000000000000000000100008000000000010000000000000000006974940000020000000001000034bb000000020132184463b0cd000000000063b0cd000000000063b0cd0000000000
+decode:
+  xid=0x00000008  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 0 (NFS_OK)
+    fattr (68 bytes):
+      type      = 1 (NFREG)
+      mode      = 32768 = 0o100000 = 0x8000
+      nlink     = 1
+      uid       = 0
+      gid       = 0
+      size      = 6911124
+      blocksize = 512
+      rdev      = 1
+      blocks    = 13499
+      fsid      = 2
+      fileid    = 20060228
+      atime     = 1672531200.000000
+      mtime     = 1672531200.000000
+      ctime     = 1672531200.000000
+
+A GETATTR call is always 92 bytes; an OK GETATTR reply is always 96 bytes
+(24 header + 4 status + 68 fattr). Total GETATTR calls in corpus: 38, all deck-originated.
+
+### 8. NFS READ call + reply
+
+-- 8a. READ with count=8192 (the F19 value). deck A -> deck B. BOTH SIDES REAL HARDWARE.
+capture: captures/S06-load-and-play/run.pcap  frame 1036  169.254.103.172:3442 -> 169.254.202.84:2049   [CALL]
+hex: 0000000c0000000000000002000186a300000002000000060000000100000014b0b631140000000000000000000000000000000000000000000000000134155401341300012b2810000000000000000000000000000000000000000000000c8d0000200000000000
+decode:
+  xid=0x0000000c  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=6 (READ)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xb0b63114 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  fhandle (32) = 0134155401341300012b28100000000000000000000000000000000000000000
+         offset      = 3213
+         count       = 8192
+         totalcount  = 0   (RFC 1094 says 'unused'; a CDJ always sends 0)
+
+capture: captures/S06-load-and-play/run.pcap  frame 1042  169.254.202.84:2049 -> 169.254.103.172:3442   [REPLY]
+hex: 0000000c000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000134155400000000000000000000000000000000000000000000000000002000
+     ...TRUNCATED... full datagram is 8292 bytes (16584 hex chars); only the first 100 bytes are shown above.
+decode:
+  xid=0x0000000c  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 0 (NFS_OK)
+    fattr (68 bytes):
+      type      = 0 (NFNON)
+      mode      = 0 = 0o0 = 0x0000
+      nlink     = 0
+      uid       = 0
+      gid       = 0
+      size      = 0
+      blocksize = 0
+      rdev      = 0
+      blocks    = 0
+      fsid      = 0
+      fileid    = 20190548
+      atime     = 0.000000
+      mtime     = 0.000000
+      ctime     = 0.000000
+          data opaque<> length = 8192
+          then 8192 bytes of file data (padded to a multiple of 4).
+
+   ^ THE REPLY HEX ABOVE IS TRUNCATED to the first 100 bytes. Those 100 bytes are exactly:
+     24 bytes RPC reply header + 4 bytes status + 68 bytes fattr + 4 bytes data length.
+     Byte 100 onward is the 8192 bytes of file payload. Full datagram = 8292 bytes.
+     On a 1500-byte MTU this arrives as 6 IP fragments.
+
+!! MAJOR OBSERVATION -- the fattr in a CDJ's READ reply is ALL ZEROS except `fileid`.
+   Every one of the 7,884 READ replies a real CDJ sends in this corpus has type=0, mode=0,
+   nlink=0, uid=0, gid=0, size=0, blocksize=0, rdev=0, blocks=0, fsid=0 and all three
+   timestamps 0. Only `fileid` is populated, and it is exactly the FIRST 4 BYTES of the
+   filehandle from the call (7884/7884 matches). Pioneer does not bother re-stating the
+   attributes on every read. A client MUST NOT trust the fattr of a READ reply -- in
+   particular it must not conclude size==0 means end of file. Contrast LOOKUP and GETATTR
+   replies (items 6 and 7), which carry a complete, correct fattr.
+
+-- 8b. A READ CALL is ALWAYS EXACTLY 104 BYTES. All 53,322 READ calls in the corpus are
+       104 bytes: 24 hdr + 8 cred-hdr + 20 cred + 8 verf + 32 fh + 4 off + 4 count + 4 total.
+
+-- 8c. The largest read seen: count=28556 (0x6f8c), deck B -> deck A, S13.
+       This BREAKS the assumption that 8192 is the ceiling. The serving deck honoured it in
+       full: a 28,656-byte UDP datagram, ~20 IP fragments, data_len = 28556.
+capture: captures/S13-format-ground-truth/run.pcap  frame 5060  169.254.202.84:1302 -> 169.254.103.172:2049   [CALL]
+hex: 0000025c0000000000000002000186a300000002000000060000000100000014fffbb503000000000000000000000000000000000000000000000000012542e401311954012538a800000000000000000000000000000000000000000000002c00006f8c00000000
+decode:
+  xid=0x0000025c  mtype=CALL(0)  rpcvers=2  prog=100003 (NFS)  vers=2  proc=6 (READ)
+  cred:  AUTH_UNIX(1) len=20  stamp=0xfffbb503 machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  fhandle (32) = 012542e401311954012538a80000000000000000000000000000000000000000
+         offset      = 44
+         count       = 28556
+         totalcount  = 0   (RFC 1094 says 'unused'; a CDJ always sends 0)
+
+capture: captures/S13-format-ground-truth/run.pcap  frame 5080  169.254.103.172:2049 -> 169.254.202.84:1302   [REPLY]
+hex: 0000025c00000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012542e400000000000000000000000000000000000000000000000000006f8c
+     ...TRUNCATED... full datagram is 28656 bytes (57312 hex chars); only the first 100 bytes are shown above.
+decode:
+  xid=0x0000025c  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: status = 0 (NFS_OK)
+    fattr (68 bytes):
+      type      = 0 (NFNON)
+      mode      = 0 = 0o0 = 0x0000
+      nlink     = 0
+      uid       = 0
+      gid       = 0
+      size      = 0
+      blocksize = 0
+      rdev      = 0
+      blocks    = 0
+      fsid      = 0
+      fileid    = 19219172
+      atime     = 0.000000
+      mtime     = 0.000000
+      ctime     = 0.000000
+          data opaque<> length = 28556
+          then 28556 bytes of file data (padded to a multiple of 4).
+
+
+### 9. NFS STATFS (proc 17) call + reply
+
+NOT PRESENT IN CORPUS. Zero STATFS calls across 56,966 RPC calls in all 38 capture files
+and all 26 journals. Neither a CDJ nor our own tooling ever calls it.
+
+### 10. NFS READDIR (proc 16) call + reply
+
+NOT PRESENT IN CORPUS. Zero READDIR calls, therefore also zero READDIR replies, so there is
+no evidence one way or the other about a PROC_UNAVAIL response -- we simply never provoked
+one. A real CDJ does NOT call READDIR: it already knows every path it wants from the .pdb
+database it READs, so it goes straight from MNT to a chain of LOOKUPs. The only procedures
+a CDJ ever issues are GETPORT, MNT, UMNT, LOOKUP, GETATTR and READ (see item 12 below).
+
+### 11. NFS NULL / portmap NULL calls
+
+NFS NULL (100003 proc 0): NOT PRESENT IN CORPUS.
+MOUNT NULL (100005 proc 0): NOT PRESENT IN CORPUS.
+PORTMAP NULL (100000 proc 0): 3 calls, all from our own probe; the replies are real deck bytes.
+
+-- portmap NULL to deck A (CDJ-2000NXS).
+capture: captures/S04-media-insert/run.pcap  frame 103  169.254.99.100:64841 -> 169.254.103.172:111   [CALL]
+hex: 100000000000000000000002000186a00000000200000000000000010000001483fd243d000000000000000000000000000000000000000000000000
+decode:
+  xid=0x10000000  mtype=CALL(0)  rpcvers=2  prog=100000 (PORTMAP)  vers=2  proc=0 (NULL)
+  cred:  AUTH_UNIX(1) len=20  stamp=0x83fd243d machine_name=""(len 0) uid=0 gid=0 n_gids=0
+  verf:  AUTH_NULL(0) len=0
+  args:  (void). The call is 60 bytes: 24 hdr + 8 + 20 cred + 8 verf, no args.
+
+capture: captures/S04-media-insert/run.pcap  frame 104  169.254.103.172:111 -> 169.254.99.100:64841   [REPLY]
+hex: 100000000000000100000000000000000000000000000000
+decode:
+  xid=0x10000000  mtype=REPLY(1)  reply_stat=0 (MSG_ACCEPTED)
+  verf:  AUTH_NULL(0) len=0
+  accept_stat=0 (SUCCESS)
+  result: (void). 24-byte reply -- the minimal accepted RPC reply:
+          xid / mtype=1 / MSG_ACCEPTED=0 / AUTH_NULL 0 / len 0 / SUCCESS=0
+
+
+====================================================================================================
+CORPUS STATISTICS
+====================================================================================================
+
+### 12. Distinct (program, version, procedure) triples in calls
+
+   prog vers proc  name                 total  from a CDJ  from our Mac  other
+ 100000    2    0  PORTMAP NULL             3           0             3      0
+ 100000    2    3  PORTMAP GETPORT        106          91            10      5
+ 100000    2    4  PORTMAP DUMP             3           0             3      0
+ 100003    2    1  NFS GETATTR             38          38             0      0
+ 100003    2    4  NFS LOOKUP            3453        3450             3      0
+ 100003    2    6  NFS READ             53322       52480           842      0
+ 100005    1    1  MOUNT MNT               33          30             1      2
+ 100005    1    3  MOUNT UMNT               5           4             0      1
+ 100005    1    5  MOUNT EXPORT             3           0             2      1
+                   TOTAL                56966
+
+Only NINE triples exist in the entire corpus. The program versions are invariant:
+PORTMAP is always v2, MOUNT always v1, NFS always v2. No NFSv3 anywhere.
+A CDJ, in 56,093 calls, uses only SIX of them: GETPORT, MNT, UMNT, LOOKUP, GETATTR, READ.
+The other three (portmap NULL, portmap DUMP, MOUNT EXPORT) are exclusively our own probe.
+
+### 13. AUTH_UNIX credentials -- and a CORRECTION to finding C8
+
+Calls carrying a credential:             56966
+Calls with flavour AUTH_UNIX (1):        56966   (100.0000%)
+Calls with any other credential flavour: 0
+
+Every single credential body is 20 bytes with this exact shape:
+    stamp        u32   <-- varies per call
+    machine_name opaque<> length = 0, no bytes, no padding   -> machine_name == ""
+    uid          u32 = 0
+    gid          u32 = 0
+    gids         array count = 0, no elements
+i.e. the body is `SSSSSSSS 00000000 00000000 00000000 00000000` and only SSSSSSSS moves.
+
+  distinct machine_name values : {'': 56966}
+  distinct uid values          : {0: 56966}
+  distinct gid values          : {0: 56966}
+  distinct gids-array lengths  : {0: 56966}
+  distinct cred body lengths   : {20: 56966}
+CONFIRMED, exactly as C8 states: machine_name is the empty string, uid=0, gid=0, gids is
+empty. No exceptions in 56,966 calls.
+
+STAMP STATISTICS, as requested:
+  total calls                       : 56966
+  DISTINCT stamp values             : 46270
+  ratio distinct/total              : 0.8122
+  CDJ-originated calls              : 56093    distinct stamps: 45406
+  our-Mac-originated calls          : 864      distinct stamps: 864
+  dysentery-host calls              : 9        distinct stamps: 9
+  stamp values seen more than once  : 9953
+  maximum repeat count for one stamp: 28
+
+So on the raw count C8 looks right: the stamp changes on essentially every call and it is
+certainly not one magic constant. BUT the repeats are not noise, and chasing them down
+produces a stronger and quite different result.
+
+*** THE STAMP IS A DETERMINISTIC FUNCTION OF THE XID. ***
+
+  Pioneer-originated calls examined                       : 56102
+  distinct xid values among them                          : 45415
+  xid values that recur (different session, or different
+    device, or ten years apart)                           : 9947
+  calls covered by a recurring xid                        : 20634
+  xid values that map to MORE THAN ONE stamp              : 0
+
+  Zero violations. Every time a Pioneer device emits xid N it emits the same stamp.
+
+  CROSS-DEVICE, CROSS-DECADE CHECK. dysentery's LinkInfo.pcapng was recorded in 2016 off
+  different Pioneer hardware; ours in 2026 off a CDJ-2000NXS on fw v1.44:
+    xid 1: dysentery 0x967b8703   our CDJ-2000NXS 0x967b8703   MATCH
+    xid 2: dysentery 0x9922e112   our CDJ-2000NXS 0x9922e112   MATCH
+    xid 3: dysentery 0xa4921306   our CDJ-2000NXS 0xa4921306   MATCH
+    xid 4: dysentery 0xdc1ac513   our CDJ-2000NXS 0xdc1ac513   MATCH
+    xid 5: dysentery 0x2a994a03   our CDJ-2000NXS 0x2a994a03   MATCH
+    xid 6: dysentery 0x0d988520   our CDJ-2000NXS 0x0d988520   MATCH
+    xid 7: dysentery 0xf0629c32   our CDJ-2000NXS 0xf0629c32   MATCH
+    xid 8: dysentery 0xbc690310   our CDJ-2000NXS 0xbc690310   MATCH
+    xid 9: dysentery 0xf0af010a   our CDJ-2000NXS 0xf0af010a   MATCH
+
+  And the xid itself is a boot-relative counter: a deck's first RPC call after power-on is
+  xid=1 and it increments by one per call thereafter, across all three programs and across
+  different UDP source ports. Two captures in this corpus caught a deck from cold boot
+  (S13-format-ground-truth and S24b-e9-control); both start at xid=0x00000001 with stamp
+  0x967b8703 -- which is exactly the value prolink-connect hard-codes and research/06
+  called 'a magic constant'.
+
+  CONCLUSION, superseding C8:
+    * The stamp is NOT a nonce and NOT random. It is a fixed sequence indexed by the
+      call number since boot, identical on every Pioneer device tested.
+    * research/06 was half right: 0x967b8703 IS a constant -- entry 1 of the sequence.
+      A client that always sends 0x967b8703 is simply reproducing a freshly-booted deck's
+      first call, which is why prolink-connect works.
+    * C8's practical advice still stands and is now better grounded: a SERVER must never
+      validate the stamp, and a CLIENT may send anything. But a test CAN assert the exact
+      stamp for a given call index, and a capture's stamp tells you how many RPC calls the
+      deck has made since it was powered on.
+
+  The first 32 entries of the sequence (xid -> stamp), from real captured bytes:
+      1 -> 0x967b8703     2 -> 0x9922e112     3 -> 0xa4921306     4 -> 0xdc1ac513
+      5 -> 0x2a994a03     6 -> 0x0d988520     7 -> 0xf0629c32     8 -> 0xbc690310
+      9 -> 0xf0af010a    10 -> 0x177a4420    11 -> 0xe0f39f14    12 -> 0xb0b63114
+     13 -> 0x64322e08    14 -> 0x561ec900    15 -> 0xd0409301    16 -> 0x0e05c008
+     17 -> 0xceb51a0d    18 -> 0x92508c07    19 -> 0xb8befb0d    20 -> 0xa95ee233
+     21 -> 0xfec99811    22 -> 0xb08ce104    23 -> 0xe8ef9718    24 -> 0x3c8ef516
+     25 -> 0xf156f120    26 -> 0xef2d6300    27 -> 0x44a2ed03    28 -> 0x9cc98c03
+     29 -> 0x44f3b503    30 -> 0x8d961401    31 -> 0x1fde921f    32 -> 0x2087c50b
+
+  (Our own tool's stamps are genuinely random and its xids start at 0x10000001; they do
+   NOT follow this table, which is why the corpus-wide 'distinct stamps' ratio is not 1.0.)
+
+### 14. Is the verifier always AUTH_NULL with an empty body?
+
+  CALL verifiers:
+    flavor=0 (AUTH_NULL) body_len=0  ->  56966 calls
+  REPLY verifiers (accepted replies):
+    flavor=0 (AUTH_NULL) body_len=0  ->  56934 replies
+
+  YES -- unconditionally. In 56,966 calls and 56934 accepted replies the verifier is
+  AUTH_NULL(0) with a zero-length body every time: the 8 bytes `00000000 00000000`.
+  MSG_DENIED replies: 0.
+  accept_stat distribution: {'SUCCESS': 56934}
+
+### 15. Evidence for F28 -- a CDJ truncates a filehandle to its first 12 bytes
+
+Setup: in the S10*-serve-to-cdj / S17..S24b captures WE are the NFS server (169.254.99.100)
+and a real CDJ-2000NXS is the client. Our filehandles are 32 pseudo-random bytes, so any
+structure the deck imposes on them is visible immediately.
+
+  calls from a deck to our server carrying a handle we had served, VERBATIM : 45461
+  calls carrying a handle whose FIRST 12 BYTES match one we served but whose
+  REMAINING 20 BYTES were overwritten                                       : 3066
+  distinct (served, returned) pairs                                          : 2865
+  calls carrying a handle matching in fewer than 12 bytes                    : 0
+
+F28 CONFIRMED. The break is exactly at byte 12, never anywhere else. Worked example,
+byte for byte, reproducing the handle quoted in docs/FINDINGS.md F28:
+
+  capture: captures/S10e-serve-to-cdj/run.pcap
+  served  by us  at frame 59 in the reply to MOUNT MNT '/C/'
+  returned by the deck at frame 3668 in the NFS LOOKUP call for 'Contents'
+
+    served:   8a5edab282632443219e051e 4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+    returned: 8a5edab282632443219e051e 03012d0000001b58000000000303010000000162
+              |___ first 12 kept ___| |______ replaced by the player _______|
+
+A representative sample of distinct pairs, showing the pattern is systematic and that
+the 20 replacement bytes are the DECK'S OWN handle format (03 01 xx 00 / 00001b58 / ...):
+
+  S10e-serve-to-cdj        f3668   NFS LOOKUP 'Contents'
+      served   (MOUNT MNT '/C/'): 8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+      returned                       : 8a5edab282632443219e051e03012d0000001b58000000000303010000000162
+  S10f-serve-to-cdj        f501    NFS LOOKUP 'Contents'
+      served   (MOUNT MNT '/C/'): 8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+      returned                       : 8a5edab282632443219e051e03012d0000001b5800000000030301000000033d
+  S10f-serve-to-cdj        f506    NFS LOOKUP '6 SENSE'
+      served   (NFS LOOKUP 'Contents'): bb1a86efaafed0590437b5f8e9b05ad693f4daedc06c40e62f9a8ab21bc0813d
+      returned                       : bb1a86efaafed0590437b5f803015a0000001b5800000000030301000000033d
+  S10f-serve-to-cdj        f509    NFS LOOKUP 'ASW Various Artists 3'
+      served   (NFS LOOKUP '6 SENSE'): 6d4aafc45611b800dd347f773c79dba155da6d7631d276ce4c6bb35e93052d77
+      returned                       : 6d4aafc45611b800dd347f770301db0000001b5800000000030301000000033d
+  S10f-serve-to-cdj        f511    NFS LOOKUP '6 SENSE - Mechanical Mania.mp3'
+      served   (NFS LOOKUP 'ASW Various Artists 3'): 7bebb41ebd2a9f39684335c7383ee14ed8e815998b0912a3933ad9b90ecc9a19
+      returned                       : 7bebb41ebd2a9f39684335c70301e10000001b5800000000030301000000033d
+  S10f-serve-to-cdj        f577    NFS LOOKUP 'Contents'
+      served   (MOUNT MNT '/C/'): 8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+      returned                       : 8a5edab282632443219e051e03012d0000001b58000000000303010000000386
+  S10f-serve-to-cdj        f580    NFS LOOKUP "'❂RAINDAAMAGE'✯how do you like you"
+      served   (NFS LOOKUP 'Contents'): bb1a86efaafed0590437b5f8e9b05ad693f4daedc06c40e62f9a8ab21bc0813d
+      returned                       : bb1a86efaafed0590437b5f803015a0000001b58000000000303010000000386
+  S10g-serve-to-cdj        f354    NFS LOOKUP 'Contents'
+      served   (MOUNT MNT '/C/'): 8a5edab282632443219e051e4ade2d1d5bbc671c781051bf1437897cbdfea0f1
+      returned                       : 8a5edab282632443219e051e03012d0000001b580000000003030100000000b6
+  S10g-serve-to-cdj        f360    NFS LOOKUP '6 SENSE'
+      served   (NFS LOOKUP 'Contents'): bb1a86efaafed0590437b5f8e9b05ad693f4daedc06c40e62f9a8ab21bc0813d
+      returned                       : bb1a86efaafed0590437b5f803015a0000001b580000000003030100000000b6
+  S10g-serve-to-cdj        f362    NFS LOOKUP 'ASW Various Artists 3'
+      served   (NFS LOOKUP '6 SENSE'): 6d4aafc45611b800dd347f773c79dba155da6d7631d276ce4c6bb35e93052d77
+      returned                       : 6d4aafc45611b800dd347f770301db0000001b580000000003030100000000b6
+
+Reading the 20 replacement bytes (from the first example):
+    03 01 2d 00   00 00 1b 58   00 00 00 00   03 03 01 00   00 00 01 62
+  the deck writes its own directory/inode bookkeeping there. 00001b58 (=7000) and the
+  0000 0000 word are invariant everywhere in the corpus; the byte at offset 2, the byte
+  before 030100, and the trailing 32-bit counter vary per session and per directory.
+
+PRACTICAL CONSEQUENCE for anyone writing a server for a CDJ: your filehandle MUST be
+self-describing in its first 12 bytes. Bytes 12..31 are scratch space the client owns.
+
+-- F28 ALSO HAPPENS DECK-TO-DECK. This is the strongest form of the evidence, because
+   both ends are Pioneer firmware and no code of ours is involved.
+
+  deck -> deck NFS calls carrying a filehandle          : 7441
+    echoed verbatim                                     : 7057
+    first 12 bytes kept, last 20 overwritten            : 372
+    handle we never saw served (capture started mid-flow): 12
+    distinct 20-byte tails a deck writes                : 14
+
+  The whole chain from S13-format-ground-truth, deck B walking deck A's USB. Deck A always
+  serves 12 meaningful bytes + 20 ZERO bytes; deck B always sends back those 12 bytes + its
+  own 20:
+
+    MNT '/C/'        A served: 012538a8 012538a8 012538a8 | 00 x20
+    LOOKUP 'Contents'          B sent:   012538a8 012538a8 012538a8 | 0301000000001b58000000000103010000000266
+                     A served: 012f1d54 012538a8 012538a8 | 00 x20
+    LOOKUP 'FORMAT TEST'       B sent:   012f1d54 012538a8 012538a8 | 0301000000001b58000000000103010000000266
+                     A served: 01301b94 012f1d54 012538a8 | 00 x20
+    LOOKUP 'TriMixxx'          B sent:   01301b94 012f1d54 012538a8 | 0301000000001b58000000000103010000000266
+                     A served: 01311954 01301b94 012538a8 | 00 x20
+    LOOKUP '03 MP3 ....mp3'    B sent:   01311954 01301b94 012538a8 | 0301000000001b58000000000103010000000266
+                     A served: 01321844 01311954 012538a8 | 00 x20
+
+  Two things fall out of that, both useful:
+  (a) A Pioneer filehandle's meaningful 12 bytes are THREE 32-bit ids: [self, parent,
+      mount-root]. That is why exactly 12 bytes survive -- it is the deck's whole idea of
+      what a handle is. Pioneer's own nfsd tolerates the rewrite because it only ever
+      reads those 12 bytes.
+  (b) The 20 bytes a deck writes are client-side state, near-constant within a session:
+      0301 0000 | 00001b58 | 00000000 | xx030100 | <counter>
+      The most common tails across the corpus:
+        0301000000001b58000000000103010000000266  (116 calls)
+        0301000000001b58000000000103010000000280  (48 calls)
+        0301000000001b58000000000103010000000288  (48 calls)
+        0301000000001b58000000000103010000000284  (44 calls)
+        0301000000001b580000000002030100000000c8  (36 calls)
+        0301000000001b5800000000010201000000001a  (28 calls)
+
+### 15b. XID behaviour (useful when writing a client)
+
+  captures/S13-format-ground-truth/run.pcap
+    first deck xids: ['0x1', '0x2', '0x3', '0x4', '0x5', '0x6', '0x7', '0x8', '0x9', '0xa']
+    monotonically non-decreasing across the whole capture: True
+  captures/S10-serve-to-cdj/run.pcap
+    first deck xids: ['0xd', '0xe', '0xf']
+    monotonically non-decreasing across the whole capture: True
+  A CDJ starts its xid at 1 at boot and increments by one per call, across ALL programs
+  and across different source ports -- it is a single global counter, not per-socket and
+  not random. Our own probe uses 0x10000001 upward. A server must not assume randomness.
+
+### 16. READ count histogram
+
+-- a real CDJ -> another real CDJ nfsd   (7043 READ calls, 127 distinct count values)
+     count=9408     5097  (72.37%)  ###########################################
+     count=8192     1283  (18.22%)  ##########
+     count=2048      264  ( 3.75%)  ##
+     count=28556      95  ( 1.35%)  
+     count=28396      63  ( 0.89%)  
+     count=4096       48  ( 0.68%)  
+     count=84         15  ( 0.21%)  
+     count=28584      14  ( 0.20%)  
+     count=160         8  ( 0.11%)  
+     count=4           5  ( 0.07%)  
+     count=12          5  ( 0.07%)  
+     count=16          5  ( 0.07%)  
+     count=28          4  ( 0.06%)  
+     count=6737        3  ( 0.04%)  
+     ... 113 further distinct values totalling 134 calls;
+         min=4 max=28584
+
+-- a real CDJ -> our NFS server   (45437 READ calls, 92 distinct count values)
+     count=2048    41366  (91.04%)  ######################################################
+     count=8192     2465  ( 5.43%)  ###
+     count=9408     1300  ( 2.86%)  #
+     count=28556      72  ( 0.16%)  
+     count=160        21  ( 0.05%)  
+     count=8030       12  ( 0.03%)  
+     count=6238       11  ( 0.02%)  
+     count=7134       11  ( 0.02%)  
+     count=6494        8  ( 0.02%)  
+     count=7646        8  ( 0.02%)  
+     count=6622        7  ( 0.02%)  
+     count=7518        7  ( 0.02%)  
+     count=8158        7  ( 0.02%)  
+     count=7262        6  ( 0.01%)  
+     ... 78 further distinct values totalling 136 calls;
+         min=4 max=28556
+
+-- our client -> a deck nfsd (our own tool, for contrast)   (842 READ calls, 2 distinct count values)
+     count=1280      841  (99.88%)  ###########################################################
+     count=768         1  ( 0.12%)  
+
+-- ALL CDJ-originated READs combined: 52480 calls, 199 distinct counts
+     count=2048    41630  (79.33%)
+     count=9408     6397  (12.19%)
+     count=8192     3748  ( 7.14%)
+     count=28556     167  ( 0.32%)
+     count=28396      63  ( 0.12%)
+     count=4096       52  ( 0.10%)
+     count=160        29  ( 0.06%)
+     count=84         18  ( 0.03%)
+     count=28584      14  ( 0.03%)
+     count=8030       12  ( 0.02%)
+
+READ INTERPRETATION -- this refines F19:
+  * 8192 is NOT the ceiling. A CDJ asks for 9408 and, for the first read of a file, values
+    up to 28584. Its peer answers in full: a single 28,656-byte UDP datagram.
+  * 2048 dominates overall (41,630 / 52,480 CDJ reads) but that is almost entirely traffic
+    against OUR server, whose replies the deck evidently probes down to a safe size.
+  * Deck-to-deck (pure Pioneer, 7043 reads) the picture is different: 9408 is the modal value
+    (5,097), then 8192 (1,283), then 2048 (264).
+  * `totalcount` is 0 in every single one of the 53,322 READ calls.
+  * offset is a plain byte offset and IS NOT always block-aligned: a track read typically
+    starts at offset 44 (past a WAV/ID3-ish header) and then advances by the count.
+  * A real deck therefore relies on IP fragmentation as a matter of course.
+
+### 17. fattr values a real CDJ sends in replies
+
+Sample: 8285 NFS replies from a real CDJ-2000NXS (169.254.202.84 / 169.254.103.172)
+carrying an fattr. THE ANSWER DEPENDS ON THE PROCEDURE, so they are reported separately.
+
+-- LOOKUP replies (387 samples)
+     type       CONSTANT/near-constant: 2(290), 1(97)
+     mode       CONSTANT/near-constant: 16822(290), 32768(97)
+     nlink      CONSTANT/near-constant: 1(387)
+     uid        CONSTANT/near-constant: 0(387)
+     gid        CONSTANT/near-constant: 0(387)
+     blocksize  CONSTANT/near-constant: 512(387)
+     rdev       CONSTANT/near-constant: 1(387)
+     fsid       CONSTANT/near-constant: 2(387)
+     size       distinct=16  min=0 max=122400274
+     blocks     distinct=16  min=1 max=239064
+     fileid     distinct=35  min=19216912 max=52775648
+     atime      distinct=1: 1672531200.000000(387)
+     mtime      distinct=1: 1672531200.000000(387)
+     ctime      distinct=1: 1672531200.000000(387)
+     fileid == first 4 bytes of the CALL filehandle: 0/387
+
+-- GETATTR replies (14 samples)
+     type       CONSTANT/near-constant: 1(14)
+     mode       CONSTANT/near-constant: 32768(14)
+     nlink      CONSTANT/near-constant: 1(14)
+     uid        CONSTANT/near-constant: 0(14)
+     gid        CONSTANT/near-constant: 0(14)
+     blocksize  CONSTANT/near-constant: 512(14)
+     rdev       CONSTANT/near-constant: 1(14)
+     fsid       CONSTANT/near-constant: 2(14)
+     size       distinct=14  min=3510607 max=122400274
+     blocks     distinct=14  min=6857 max=239064
+     fileid     distinct=14  min=19217024 max=52775044
+     atime      distinct=1: 1672531200.000000(14)
+     mtime      distinct=1: 1672531200.000000(14)
+     ctime      distinct=1: 1672531200.000000(14)
+     fileid == first 4 bytes of the CALL filehandle: 14/14
+
+-- READ replies (7884 samples)
+     type       CONSTANT/near-constant: 0(7884)
+     mode       CONSTANT/near-constant: 0(7884)
+     nlink      CONSTANT/near-constant: 0(7884)
+     uid        CONSTANT/near-constant: 0(7884)
+     gid        CONSTANT/near-constant: 0(7884)
+     blocksize  CONSTANT/near-constant: 0(7884)
+     rdev       CONSTANT/near-constant: 0(7884)
+     fsid       CONSTANT/near-constant: 0(7884)
+     size       distinct=1  min=0 max=0
+     blocks     distinct=1  min=0 max=0
+     fileid     distinct=15  min=19217024 max=52775044
+     atime      distinct=1: 0.000000(7884)
+     mtime      distinct=1: 0.000000(7884)
+     ctime      distinct=1: 0.000000(7884)
+     fileid == first 4 bytes of the CALL filehandle: 7884/7884
+
+CONFIRMED CONSTANTS in a real CDJ's LOOKUP and GETATTR fattr (401 samples, no exceptions):
+  uid       = 0
+  gid       = 0
+  nlink     = 1
+  blocksize = 512
+  rdev      = 1          <-- NOT 0. A regular file with rdev 1.
+  fsid      = 2          <-- the same 2 for both the /C/ and /B/ mounts
+  atime = mtime = ctime = 1672531200.000000 = 2023-01-01T00:00:00Z, a hard-coded epoch.
+                          The deck never reports a real file time.
+  mode      = two values only:
+                0o100000 (0x8000) = S_IFREG with ZERO permission bits, for a file
+                0o040666 (0x41b6) = S_IFDIR with 0666, for a directory
+              i.e. a file appears mode 000 and a directory appears mode 666. A client that
+              checks permission bits before reading will refuse every track.
+  type      = 1 (NFREG) for files, 2 (NFDIR) for directories, matching mode.
+  size      = the true byte size for a file; ALWAYS 0 for a directory.
+  blocks    = ceil(size/512) for a file (110 of 111 file samples; one sample differs by
+              one block, so treat it as advisory); ALWAYS 1 for a directory.
+  fileid    = a FAT-derived id, and it is ALWAYS the first 4 bytes of the filehandle that
+              describes the object:
+                GETATTR reply : fileid == first 4 bytes of the CALL handle   (14/14)
+                LOOKUP  reply : fileid == first 4 bytes of the RETURNED handle (387/387)
+                READ    reply : fileid == first 4 bytes of the CALL handle   (7884/7884)
+
+AND THE EXCEPTION: in a READ reply the fattr is entirely zero except fileid (see item 8).
+
+One concrete example, fully decoded (this is the S13 GETATTR reply from item 7):
+
+  capture: captures/S13-format-ground-truth/run.pcap  frame 799  169.254.103.172:2049 -> 169.254.202.84:1300
+  hex: 000000080000000100000000000000000000000000000000000000000000000100008000000000010000000000000000006974940000020000000001000034bb000000020132184463b0cd000000000063b0cd000000000063b0cd0000000000
+  decode:
+    00000000..03  xid          = 0x00000008
+    00000004..07  mtype        = 1 (REPLY)
+    00000008..0b  reply_stat   = 0 (MSG_ACCEPTED)
+    0000000c..0f  verf flavor  = 0 (AUTH_NULL)
+    00000010..13  verf length  = 0
+    00000014..17  accept_stat  = 0 (SUCCESS)
+    00000018..1b  nfs status   = 0 (NFS_OK)
+    0000001c..1f  type         = 1
+    00000020..23  mode         = 32768 (0o100000, NFREG)
+    00000024..27  nlink        = 1
+    00000028..2b  uid          = 0
+    0000002c..2f  gid          = 0
+    00000030..33  size         = 6911124
+    00000034..37  blocksize    = 512
+    00000038..3b  rdev         = 1
+    0000003c..3f  blocks       = 13499
+    00000040..43  fsid         = 2
+    00000044..47  fileid       = 20060228
+    00000048..4f  atime        = seconds 1672531200, useconds 0
+    00000050..57  mtime        = seconds 1672531200, useconds 0
+    00000058..5f  ctime        = seconds 1672531200, useconds 0
+    total = 96 bytes = 24 header + 4 status + 68 fattr
+
+====================================================================================================
+SUMMARY OF WHAT IS AND IS NOT IN THE CORPUS
+====================================================================================================
+
+PRESENT (with real bytes quoted above):
+  portmap NULL call+reply .................. yes (call ours, reply real deck)
+  portmap GETPORT call+reply ............... yes, both mountd and nfs, deck<->deck
+  portmap DUMP call+reply .................. yes (call ours, reply real deck)
+  MOUNT MNT call+reply ..................... yes, '/C/', '/B/', and '/C/EXPORT'
+  MOUNT UMNT call+reply .................... yes, deck<->deck
+  MOUNT EXPORT call+reply .................. yes, but NEVER deck-originated (F37 holds)
+  NFS LOOKUP call+reply .................... yes, incl. non-ASCII names
+  NFS GETATTR call+reply ................... yes, deck<->deck
+  NFS READ call+reply ...................... yes, 53,322 calls
+
+NOT PRESENT IN CORPUS:
+  NFS NULL (100003 proc 0)
+  NFS SETATTR / ROOT / READLINK / WRITECACHE / WRITE / CREATE / REMOVE / RENAME /
+    LINK / SYMLINK / MKDIR / RMDIR    (procs 2,3,5,7,8,9,10,11,12,13,14,15)
+  NFS READDIR (proc 16)
+  NFS STATFS (proc 17)
+  MOUNT NULL (proc 0), MOUNT DUMP (proc 2), MOUNT UMNTALL (proc 4)
+  portmap SET (proc 1), UNSET (proc 2), CALLIT (proc 5)
+  NFSv3 or NFSv4 of any kind; MOUNT v3; portmap v3/v4 (rpcbind)
+  TCP-transported RPC of any kind -- everything is UDP
+  any credential flavour other than AUTH_UNIX; any verifier other than empty AUTH_NULL
+  any MSG_DENIED reply; any accept_stat other than SUCCESS
+
