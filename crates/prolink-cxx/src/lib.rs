@@ -624,6 +624,13 @@ pub mod ffi {
         /// megabytes over NFS wants to show the user why rather than unwind.
         fn read_pdb(path: &str) -> PdbContents;
 
+        /// Read a rekordbox `export.pdb` a host already has in memory.
+        ///
+        /// The same contract as `read_pdb`. This is the one a host that
+        /// fetched the database itself wants, so that reading the file and
+        /// parsing it stay separate failures with separate messages.
+        fn read_pdb_bytes(bytes: &[u8]) -> PdbContents;
+
         /// Start a session. Throws on failure, with the reason.
         fn open(config: &Config) -> Result<Box<Session>>;
 
@@ -828,5 +835,5 @@ pub fn empty_player_for_test() -> Player {
 pub fn row_for_test(item: &prolink_proto::dbserver::MenuItem) -> Row {
     convert::row(item)
 }
-pub use pdb::read_pdb;
+pub use pdb::{read_pdb, read_pdb_bytes};
 pub use session::{default_config, interfaces, open};

@@ -24,9 +24,20 @@ pub fn read_pdb(path: &str) -> PdbContents {
         Ok(bytes) => bytes,
         Err(error) => return failed(format!("reading {path}: {error}")),
     };
-    let library = match prolink_rekordbox::Library::parse(&bytes) {
+    parse(&bytes, path)
+}
+
+/// Read a rekordbox `export.pdb` a host already has in memory.
+#[must_use]
+pub fn read_pdb_bytes(bytes: &[u8]) -> PdbContents {
+    parse(bytes, "the database")
+}
+
+/// The shared body, named for whatever the caller can say about the source.
+fn parse(bytes: &[u8], what: &str) -> PdbContents {
+    let library = match prolink_rekordbox::Library::parse(bytes) {
         Ok(library) => library,
-        Err(error) => return failed(format!("parsing {path}: {error}")),
+        Err(error) => return failed(format!("parsing {what}: {error}")),
     };
 
     PdbContents {

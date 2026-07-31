@@ -249,11 +249,21 @@ fn a_real_export_pdb_reads_through_the_bridge() {
         "a fetch takes this verbatim, leading slash and all: {}",
         track.file_path
     );
-    assert!(
-        track.analyze_path.ends_with(".DAT"),
-        "{}",
-        track.analyze_path
-    );
+    // Case-sensitive on purpose, which is what clippy would otherwise object
+    // to: rekordbox writes the extension upper-case, and a deck asks for it
+    // that way. Matching `.dat` too would let a regression in the casing
+    // through unnoticed.
+    #[expect(
+        clippy::case_sensitive_file_extension_comparisons,
+        reason = "the medium spells it .DAT and nothing else is correct"
+    )]
+    {
+        assert!(
+            track.analyze_path.ends_with(".DAT"),
+            "{}",
+            track.analyze_path
+        );
+    }
 
     // A playlist keeps the DJ's order rather than being sorted.
     assert!(
