@@ -33,7 +33,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 20 | `prolink`: serve facade — two media as USB + SD, wired to the virtual CDJ | done | `ProLinkServer`, plus an end-to-end loopback test of server against client |
 | 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap`, `status` | done | ten commands, covering every capability on the acceptance list |
 | 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | done | plus `CONVENTIONS.md`, CI and a dependency licence gate |
-| 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | wip | |
+| 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | done | 596 tests, clippy silent, rustdoc clean, pushed to `origin/main` |
 | 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
 
 ## Acceptance: what the CLI must be able to do
@@ -61,6 +61,20 @@ Capabilities 3–6 additionally need a **browsable device number in 1–4** and 
 **portmapper on UDP/111** — the latter is privileged, so on Linux either run as
 root or set `net.ipv4.ip_unprivileged_port_start=111`; macOS cannot serve it
 without elevation (F45, F46).
+
+## What is still unproven
+
+Everything below is implemented and tested without hardware. None of it has met
+a real CDJ, and these are the places where that matters most:
+
+| | |
+|---|---|
+| **The claim chain's back-off** | No capture in the corpus contains a type-`0x08` conflict packet — nothing has ever contested a number on that rig — so our response to one is written from the specification and never observed. The corpus test asserts the absence, so the day a capture contains one, it says so. |
+| **`0x3d03`** | Acknowledged with a reply shaped like the one a deck sends for `0x3100`. No capture shows a real answer. Erroring is known to be worse (F25). |
+| **The `0x35` settings variants** | Four `*SETTING*.DAT` files exist and nothing in the request obviously selects between them. We answer with `MYSETTING.DAT`, which is what the one captured exchange carried. |
+| **Serving on macOS** | UDP/111 needs root there and there is no sysctl equivalent. Tested only on ephemeral ports. |
+| **Two media at once** | Modelled from F37 and exercised over loopback, but never in front of a deck switching slots mid-browse. |
+| **The `PSSI` and colour-waveform tags** | Parsed, but nothing in the serve path uses them, and no deck we have has asked. |
 
 ## Decisions taken along the way
 
