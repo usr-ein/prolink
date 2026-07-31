@@ -24,8 +24,9 @@
 use std::time::Duration;
 
 use prolink_proto::dbserver::{
-    Arguments, Descriptor, Drill, FILTER_ALL, ItemType, METADATA_ITEMS, MediaInfo, MenuTarget,
-    ROOT_CATEGORIES, SORT_MENU, SortOrder, TRACK_INFO_ITEMS, TrackType, drill_kind, menu_label,
+    Arguments, Descriptor, Drill, FILTER_ALL, Field, ItemType, METADATA_ITEMS, MediaInfo,
+    MenuTarget, ROOT_CATEGORIES, SORT_MENU, SortOrder, TRACK_INFO_ITEMS, TrackType, drill_kind,
+    menu_label,
 };
 use prolink_rekordbox::Library;
 use tokio::net::TcpStream;
@@ -425,6 +426,7 @@ fn other_library() -> Library {
 
 fn shared(media: impl IntoIterator<Item = Arc<Medium>>) -> Shared {
     Shared {
+        tags: TagLists::default(),
         device: BrowsableDeviceNumber::new(2).expect("device 2 is browsable"),
         media: media
             .into_iter()
@@ -689,7 +691,7 @@ fn the_root_menu_is_what_a_real_deck_sends_minus_the_category_we_cannot_answer()
         .collect();
     assert_eq!(real.len(), 12, "a real root menu is all twelve");
 
-    let ours = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None)
+    let ours = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None, &[])
         .expect("the root menu needs no medium");
     let expected: Vec<MenuItem> = real
         .into_iter()
@@ -706,7 +708,7 @@ fn the_root_menu_is_what_a_real_deck_sends_minus_the_category_we_cannot_answer()
 fn the_sort_menu_re_encodes_byte_for_byte_as_a_real_deck_sent_it() {
     // A round trip between our own encoder and our own decoder proves they
     // agree with each other, which is not the same as agreeing with a CDJ.
-    let ours = menu::build(MessageKind::MENU_SORT, &Arguments::default(), None)
+    let ours = menu::build(MessageKind::MENU_SORT, &Arguments::default(), None, &[])
         .expect("the sort menu needs no medium");
     assert_eq!(ours.len(), REAL_SORT_MENU.len());
     for (item, text) in ours.iter().zip(REAL_SORT_MENU) {
@@ -724,7 +726,7 @@ fn the_sort_menu_re_encodes_byte_for_byte_as_a_real_deck_sent_it() {
 fn we_advertise_no_category_we_cannot_answer() {
     // An unimplemented category and an empty one are indistinguishable on a
     // deck's screen, so every row of our root menu must lead somewhere (F40).
-    let root = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None).expect("root");
+    let root = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None, &[]).expect("root");
     let labels: Vec<&str> = ROOT_CATEGORIES
         .iter()
         .filter(|category| {
@@ -2086,4 +2088,219 @@ mod eviction {
             session.menus.len(),
         );
     }
+}
+
+/// Page the set a menu request just established, the way a deck does.
+fn render_all(session: &mut Session, total: u32) -> Vec<MenuItem> {
+    let mut out = Vec::new();
+    let request = Message::render_of(
+        500,
+        descriptor(Slot::USB, MenuTarget::MAIN),
+        0,
+        total,
+        total,
+    );
+    session.render(&request, &mut out);
+    let mut offset = 0;
+    let mut items = Vec::new();
+    while let Some(rest) = out.get(offset..).filter(|rest| !rest.is_empty()) {
+        let (message, used) = Message::decode(rest).expect("our own replies decode");
+        offset += used;
+        if let Some(item) = MenuItem::from_message(&message) {
+            items.push(item);
+        }
+    }
+    items
+}
+
+// -- the tag list -----------------------------------------------------------
+
+/// A request carrying our descriptor and the given arguments.
+fn tagged_request(kind: MessageKind, transaction: u32, args: &[u32]) -> Message {
+    let descriptor = descriptor(Slot::USB, MenuTarget::MAIN);
+    let mut fields = vec![Field::U32(descriptor.to_raw())];
+    fields.extend(args.iter().map(|value| Field::U32(*value)));
+    Message::new(
+        transaction,
+        kind,
+        Arguments::new(fields).expect("a short argument list"),
+    )
+}
+
+#[test]
+fn a_tagged_track_comes_back_in_the_tag_list() {
+    // `0x3002` is "put this track in the tag list" and `0x100f` is "give me the
+    // tag list" — the second answered with track rows, not with a category
+    // listing (F53). Acknowledging the first without storing anything is what
+    // left the menu permanently empty.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+
+    let empty = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 1, &[0]),
+    );
+    assert_eq!(empty[0].number(1), Some(0), "nothing is tagged yet");
+
+    for (index, track) in [2u32, 1].iter().enumerate() {
+        let replies = ask(
+            &mut session,
+            &shared,
+            &tagged_request(
+                MessageKind::TAG_LIST_ADD,
+                10 + u32::try_from(index).unwrap_or(0),
+                &[*track, 1],
+            ),
+        );
+        assert_eq!(replies.len(), 1, "tagging draws one acknowledgement");
+        assert_eq!(replies[0].kind, MessageKind::SUCCESS);
+        assert_eq!(replies[0].number(1), Some(0), "the count is zero, not one");
+    }
+
+    let listed = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 2, &[0]),
+    );
+    assert_eq!(
+        listed[0].number(1),
+        Some(2),
+        "both tagged tracks are listed"
+    );
+}
+
+#[test]
+fn the_tag_list_keeps_the_order_the_dj_tagged_in() {
+    // Not sorted: the list is what the DJ built. A real deck's reply looks
+    // alphabetical only because the tracks were tagged that way, and its exact
+    // collation is unresolved — it puts "antidepressant o44" before "Anti
+    // Gravity Racing", which no space-respecting comparison does (F53).
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    for track in [3u32, 1, 2] {
+        ask(
+            &mut session,
+            &shared,
+            &tagged_request(MessageKind::TAG_LIST_ADD, track, &[track, 1]),
+        );
+    }
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 100, &[0]),
+    );
+    let rendered = render_all(&mut session, 3);
+    let ids: Vec<u32> = rendered.iter().map(|item| item.id).collect();
+    assert_eq!(ids, vec![3, 1, 2], "tag order, not id or title order");
+}
+
+#[test]
+fn tagging_the_same_track_twice_does_not_duplicate_it() {
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    for transaction in 0..3 {
+        ask(
+            &mut session,
+            &shared,
+            &tagged_request(MessageKind::TAG_LIST_ADD, transaction, &[1, 1]),
+        );
+    }
+    let listed = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 9, &[0]),
+    );
+    assert_eq!(listed[0].number(1), Some(1));
+}
+
+#[test]
+fn a_tagged_track_carries_its_marker_in_every_menu_it_appears_in() {
+    // Bit 0 of a track row's flags. Established by elimination: it is set on
+    // 446 rows in the corpus and every one of them is in the session where
+    // tracks were being tagged (F53).
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::TAG_LIST_ADD, 1, &[2, 1]),
+    );
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TRACK, 2, &[0]),
+    );
+    let rows = render_all(&mut session, 3);
+    assert!(
+        rows.len() > 1,
+        "the whole track list, not just the tagged one"
+    );
+    for row in &rows {
+        let tagged = row.flags & MenuItem::TAGGED != 0;
+        assert_eq!(
+            tagged,
+            row.id == 2,
+            "row {} carries the wrong marker",
+            row.id
+        );
+        assert!(
+            row.flags & MenuItem::TRACK_FLAGS != 0,
+            "the marker must not displace the track bit"
+        );
+    }
+}
+
+#[test]
+fn two_decks_keep_separate_tag_lists() {
+    // The descriptor's requesting-device byte is what the list is keyed on:
+    // the TAG LIST button means "what I tagged" on each deck.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let other = Descriptor::new(
+        BrowsableDeviceNumber::new(3).expect("device 3 is browsable"),
+        Slot::USB,
+        MenuTarget::MAIN,
+        TrackType::REKORDBOX,
+    );
+
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::TAG_LIST_ADD, 1, &[1, 1]),
+    );
+    let theirs = ask(
+        &mut session,
+        &shared,
+        &Message::new(
+            2,
+            MessageKind::MENU_TAG_LIST,
+            [Field::U32(other.to_raw()), Field::U32(0)],
+        ),
+    );
+    assert_eq!(theirs[0].number(1), Some(0), "device 3 tagged nothing");
+}
+
+#[test]
+fn untagging_removes_a_track() {
+    // Argument 2 is `1` in every captured request, so removal is this
+    // library's reading of `0` rather than an observation (F53).
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::TAG_LIST_ADD, 1, &[1, 1]),
+    );
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::TAG_LIST_ADD, 2, &[1, 0]),
+    );
+    let listed = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 3, &[0]),
+    );
+    assert_eq!(listed[0].number(1), Some(0));
 }

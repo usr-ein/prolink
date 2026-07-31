@@ -66,7 +66,7 @@
 //!
 //! ```no_run
 //! # async fn example() -> prolink::Result<()> {
-//! use std::sync::Arc;
+//! use std::sync::{Arc, Mutex};
 //! use prolink::serve::dbserver::{DbServer, DbServerConfig};
 //! use prolink::serve::{Medium, ServedSlot};
 //!
@@ -84,7 +84,7 @@ mod menu;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use prolink_proto::dbserver::{
@@ -165,10 +165,58 @@ pub struct DbServer {
     tasks: Vec<JoinHandle<()>>,
 }
 
+/// The tracks each deck has tagged, per medium.
+///
+/// Lives here rather than on a [`Session`] because a deck tags on one
+/// connection and opens the TAG LIST on another — a per-connection list would
+/// be empty every time it was asked for.
+///
+/// In memory only, and deliberately: a real deck writes its tag list back to
+/// the medium, and this server treats the medium as read-only. The list is
+/// therefore lost when the server stops, which is the documented behaviour
+/// rather than an omission.
+#[derive(Debug, Default)]
+struct TagLists {
+    /// `(requesting device, slot)` → the track ids it tagged, in tag order.
+    by_device: Mutex<BTreeMap<(u8, Slot), Vec<u32>>>,
+}
+
+impl TagLists {
+    /// Add a track, or remove it when `add` is false. Returns nothing: the
+    /// deck's reply is a bare acknowledgement either way.
+    fn set(&self, device: u8, slot: Slot, track: u32, add: bool) {
+        let Ok(mut lists) = self.by_device.lock() else {
+            return;
+        };
+        let list = lists.entry((device, slot)).or_default();
+        match (add, list.iter().position(|&id| id == track)) {
+            // Tagging a track already tagged leaves the order alone, so a deck
+            // that repeats the request does not shuffle its own list.
+            (true, None) => list.push(track),
+            (false, Some(at)) => {
+                list.remove(at);
+            }
+            _ => {}
+        }
+    }
+
+    /// One deck's tagged track ids on one medium.
+    fn get(&self, device: u8, slot: Slot) -> Vec<u32> {
+        self.by_device
+            .lock()
+            .ok()
+            .and_then(|lists| lists.get(&(device, slot)).cloned())
+            .unwrap_or_default()
+    }
+}
+
 /// Everything a connection task needs, and nothing it may mutate.
 #[derive(Debug)]
 struct Shared {
     device: BrowsableDeviceNumber,
+    /// What each deck has tagged. The one piece of mutable server state, and
+    /// the reason it is behind a lock rather than owned by a connection.
+    tags: TagLists,
     /// Slot → medium. Resolved per *message* and never cached on a connection
     /// (F37).
     media: BTreeMap<Slot, Arc<Medium>>,
@@ -216,6 +264,7 @@ impl DbServer {
         let port = local_port(&listener)?;
         let shared = Arc::new(Shared {
             device: config.device,
+            tags: TagLists::default(),
             media,
             started: Instant::now(),
         });
@@ -536,6 +585,22 @@ impl Session {
                 self.render(message, out);
                 return Flow::Continue;
             }
+            // Tagging is the one request that changes server state. The reply
+            // is a bare acknowledgement carrying zero, exactly as a real deck
+            // answers it (F53).
+            MessageKind::TAG_LIST_ADD => {
+                if let (Some(descriptor), Some(track)) = (descriptor, message.number(1)) {
+                    // Argument 2 is `1` in every observed request. Anything
+                    // else is read as "untag", which is a guess — see
+                    // `MessageKind::TAG_LIST_ADD`.
+                    let add = message.number(2) != Some(0);
+                    shared
+                        .tags
+                        .set(descriptor.device.get(), descriptor.slot, track, add);
+                }
+                push(out, &Message::success(transaction, kind, 0));
+                return Flow::Continue;
+            }
             _ => {}
         }
 
@@ -546,7 +611,12 @@ impl Session {
             return Flow::Continue;
         }
 
-        if let Some(items) = menu::build(kind, &message.args, medium) {
+        // The requesting deck's tag list, so a tagged row can carry its
+        // marker in whatever menu it turns up in.
+        let tags = descriptor.map_or_else(Vec::new, |descriptor| {
+            shared.tags.get(descriptor.device.get(), descriptor.slot)
+        });
+        if let Some(items) = menu::build(kind, &message.args, medium, &tags) {
             let count = u32::try_from(items.len()).unwrap_or(u32::MAX);
             let raw = descriptor.map_or(0, Descriptor::to_raw);
             self.remember(raw, count, items);

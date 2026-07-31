@@ -120,6 +120,28 @@ pub(super) fn build(
     kind: MessageKind,
     args: &Arguments,
     medium: Option<&Medium>,
+    tags: &[u32],
+) -> Option<Vec<MenuItem>> {
+    let mut items = build_unmarked(kind, args, medium, tags)?;
+    // Every track row the requesting deck has tagged is marked, whatever menu
+    // it appears in — a tagged track shows the marker in the artist list as
+    // well as in the tag list itself (F53).
+    if !tags.is_empty() {
+        for item in &mut items {
+            if item.flags & MenuItem::TRACK_FLAGS != 0 && tags.contains(&item.id) {
+                item.flags |= MenuItem::TAGGED;
+            }
+        }
+    }
+    Some(items)
+}
+
+/// [`build`] before the tag marker is applied.
+fn build_unmarked(
+    kind: MessageKind,
+    args: &Arguments,
+    medium: Option<&Medium>,
+    tags: &[u32],
 ) -> Option<Vec<MenuItem>> {
     // These two are answered identically whatever the medium, and `MENU_SORT`
     // is answered identically whatever argument 2 names.
@@ -150,6 +172,12 @@ pub(super) fn build(
         MessageKind::MENU_BITRATE => named(library, Filter::Bitrate),
         MENU_DATE_ADDED => named(library, Filter::DateAdded),
         MessageKind::MENU_HISTORY => history(library),
+        // In tag order, not sorted: the list is what the DJ built, and a real
+        // deck's reply is close to alphabetical only because tracks were
+        // tagged that way. Its exact collation is unresolved — it orders
+        // "antidepressant o44" before "Anti Gravity Racing", which no
+        // space-respecting comparison does (F53).
+        MessageKind::MENU_TAG_LIST => tag_list(library, tags),
         MessageKind::MENU_PLAYLIST => playlist(library, args, sort),
         MessageKind::MENU_SEARCH => search(library, args.text(3).unwrap_or_default()),
         MessageKind::GET_METADATA | MessageKind::GET_GENERIC_METADATA => {
@@ -543,6 +571,19 @@ fn history_tracks(library: &Library, playlist_id: u32, sort: SortOrder) -> Vec<M
         _ => sorted(tracks, sort),
     };
     track_items(tracks, sort, Position::InList)
+}
+
+/// The tracks one deck has tagged, in the order it tagged them.
+///
+/// An id that names nothing is dropped rather than served as a blank row: the
+/// medium can be swapped under a tag list this server is still holding, and a
+/// row the deck cannot load is worse than a shorter list.
+fn tag_list(library: &Library, tags: &[u32]) -> Vec<MenuItem> {
+    let tracks: Vec<&Track> = tags
+        .iter()
+        .filter_map(|id| library.tracks.get(id))
+        .collect();
+    track_items(tracks, SortOrder::DEFAULT, Position::InList)
 }
 
 // -- playlists ------------------------------------------------------------

@@ -680,6 +680,19 @@ impl MessageKind {
     pub const MENU_FILENAME: Self = Self(0x1013);
     /// All keys. Drilling into one reaches a harmonic tolerance first (F44).
     pub const MENU_KEY: Self = Self(0x1014);
+    /// "Give me the tag list" — the tracks tagged with the TAG TRACK button.
+    ///
+    /// Answered with ordinary track rows, not with a category listing. Named
+    /// from a real deck: the only two occurrences in this corpus are in the
+    /// session where tracks were being tagged, and the deck answered both with
+    /// title rows for tagged tracks while `MENU_KEY` in the same corpus is
+    /// answered with key names (F53).
+    ///
+    /// **The tag list is the server's state, not the browsing deck's.** A deck
+    /// asks its source for the list rather than remembering what it tagged, so
+    /// a server that acknowledges [`Self::TAG_LIST_ADD`] without storing
+    /// anything leaves the menu permanently empty — which is what it does.
+    pub const MENU_TAG_LIST: Self = Self(0x100f);
     /// Playlists and playlist folders. Argument 1 is the sort order (F43).
     pub const MENU_PLAYLIST: Self = Self(0x1105);
     /// Search as you type: `[descriptor, sort, byte length, text, 0]`, one
@@ -752,6 +765,17 @@ impl MessageKind {
     /// Page through the result set a menu request established:
     /// `[descriptor, offset, limit, 0, total, 0]`.
     pub const RENDER_MENU: Self = Self(0x3000);
+    /// "Put this track in the tag list": `[descriptor, track id, 1]`.
+    ///
+    /// Answered with a bare `SUCCESS` carrying zero. Nine of these appear in
+    /// the tagging session, one per track tagged, from both decks; argument 2
+    /// is `1` in every one, so **removal has never been observed** and `0` is
+    /// this library's guess at it rather than a reading (F53).
+    ///
+    /// The descriptor's requesting-device byte is what the list is keyed on:
+    /// two decks tagging from the same medium keep separate lists, which is
+    /// what the TAG LIST button means on each of them.
+    pub const TAG_LIST_ADD: Self = Self(0x3002);
     /// Undocumented. Sent mid-load, between `GET_TRACK_INFO` and the analysis
     /// fetches; four arguments, `[descriptor, n, 0, 0]`. A real deck answers
     /// with a bare `SUCCESS` echoing the type, and so must we.
@@ -824,6 +848,7 @@ impl MessageKind {
             Self::MENU_HISTORY => "menu_history",
             Self::MENU_FILENAME => "menu_filename",
             Self::MENU_KEY => "menu_key",
+            Self::MENU_TAG_LIST => "menu_tag_list",
             Self::MENU_PLAYLIST => "menu_playlist",
             Self::MENU_SEARCH => "menu_search",
             Self::MENU_SORT => "menu_sort",
@@ -1944,6 +1969,23 @@ impl CamelotKey {
 impl MenuItem {
     /// The flags a row naming a track carries.
     pub const TRACK_FLAGS: u32 = 0x0100_0000;
+    /// Bit 0 of [`MenuItem::flags`]: this track is in the requesting deck's tag
+    /// list, and the row is drawn with the tag marker.
+    ///
+    /// Established by elimination across the corpus: the bit is set on 446 rows
+    /// and all of them are in the one session where tracks were being tagged.
+    /// Within a single reply the *same* musical key appears both set and clear,
+    /// so it is not the key-matching indicator, and the set of tagged keys
+    /// walks — `11A`, then `2A`, then `2A 7B`, then `7B` — exactly as tracks
+    /// were tagged and untagged one at a time (F53).
+    pub const TAGGED: u32 = 0x0000_0001;
+    /// Bit 8 of [`MenuItem::flags`]: this row is the track the deck has loaded.
+    ///
+    /// Set on 48 rows across three sessions, never more than one per reply, and
+    /// always on a track the sending deck's status packets show as loaded
+    /// (F53). Not written by this library — we do not know what the browsing
+    /// deck has loaded, and guessing would mark the wrong row.
+    pub const LOADED: u32 = 0x0000_0100;
     /// What argument 10 carries when [`MenuItem::flags`] is non-zero.
     pub const TRACK_ARGUMENT_10: u32 = 0x0100;
 
