@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# `cargo deny check` — the licence gate that matters for a GPL-3.0-only crate.
+#
+# A dependency under a GPL-incompatible licence would make the combined work
+# undistributable, and that is not the kind of thing to discover after release.
+# Notably: Apache-2.0 is compatible with GPLv3 but *not* with GPLv2, and MPL-2.0
+# is compatible with both. This project is GPL-3.0-only, so both are fine here.
+
+[licenses]
+# Every licence a dependency may carry. Anything else fails the build and has to
+# be considered deliberately rather than absorbed by accident.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+    "GPL-3.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[advisories]
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# No git dependencies. A crate that cannot be published is a crate nobody else
+# can depend on, which would defeat the point of splitting this into a workspace
+# other projects can reuse.
+allow-git = []
