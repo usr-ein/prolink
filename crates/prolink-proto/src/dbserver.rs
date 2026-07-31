@@ -1812,6 +1812,133 @@ pub struct MenuItem {
     pub artwork_id: u32,
     /// Argument 9 — position within a playlist.
     pub playlist_position: u32,
+    /// Argument 11 — the row's key, as a **Camelot wheel index**, and what the
+    /// deck draws its key-matching indicator from.
+    ///
+    /// *A new observation, not in the research record, which had this argument
+    /// down as a constant zero.* Decoded by correlating all 1265 track rows a
+    /// real deck served in `S27-sort-by-and-key` against those tracks' keys in
+    /// the medium's own `export.pdb`. Every row agreed:
+    ///
+    /// ```text
+    /// 1A→1  1B→2  2A→3  2B→4  …  8B→16  …  10A→19  11A→21  12A→23  12B→24
+    /// ```
+    ///
+    /// so the value is `2 × position − 1` for the A ring and `2 × position` for
+    /// the B ring — the wheel walked round in order, minor before major. Build
+    /// one with [`CamelotKey`].
+    ///
+    /// **The comparison is the deck's, not ours.** It knows what is playing and
+    /// we do not; all a server has to do is say which key each row is in.
+    /// Sending zero — which is what we did — is what leaves the indicator dark
+    /// beside every track.
+    pub key_index: u32,
+}
+
+/// A key as the Camelot wheel numbers it: a position of 1–12 and a ring.
+///
+/// Exists because the wire wants one number and a library holds a name, and the
+/// mapping between them is a fact about the protocol rather than about the
+/// library. Parsing accepts Camelot notation (`8A`, `12B`) and the classical
+/// names rekordbox writes when the DJ has that preference set (`Am`, `F#`), so
+/// the indicator works whichever notation a medium uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CamelotKey {
+    position: u8,
+    minor: bool,
+}
+
+impl CamelotKey {
+    /// Build from a wheel position (1–12) and ring, or `None` if out of range.
+    pub const fn new(position: u8, minor: bool) -> Option<Self> {
+        if position >= 1 && position <= 12 {
+            Some(Self { position, minor })
+        } else {
+            None
+        }
+    }
+
+    /// The wheel position, 1–12.
+    pub const fn position(self) -> u8 {
+        self.position
+    }
+
+    /// Whether this is the A ring (minor).
+    pub const fn is_minor(self) -> bool {
+        self.minor
+    }
+
+    /// The value argument 11 carries.
+    #[expect(
+        clippy::as_conversions,
+        reason = "u8 to u32 is lossless, and `position` is 1..=12 by construction"
+    )]
+    pub const fn index(self) -> u32 {
+        let ring = if self.minor { 1 } else { 2 };
+        // `position` is 1..=12 by construction, so the wheel index is 1..=24
+        // and nothing here can overflow.
+        (self.position.saturating_sub(1) as u32).saturating_mul(2) + ring
+    }
+
+    /// Read a key name in either notation rekordbox writes.
+    ///
+    /// `None` for anything unrecognised, which is the honest answer: a track
+    /// with no key, or a key in a notation we have never seen, has no indicator
+    /// rather than a wrong one.
+    pub fn parse(name: &str) -> Option<Self> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        // Camelot: a position then a ring letter.
+        let digits: String = trimmed.chars().take_while(char::is_ascii_digit).collect();
+        if !digits.is_empty() {
+            let rest = trimmed[digits.len()..].trim();
+            let minor = match rest {
+                "A" | "a" => true,
+                "B" | "b" => false,
+                _ => return Self::classical(trimmed),
+            };
+            return digits
+                .parse()
+                .ok()
+                .and_then(|position| Self::new(position, minor));
+        }
+        Self::classical(trimmed)
+    }
+
+    /// The classical names, which rekordbox writes when the DJ prefers them.
+    fn classical(name: &str) -> Option<Self> {
+        let key = name.to_ascii_lowercase();
+        let (position, minor) = match key.as_str() {
+            "abm" | "g#m" => (1, true),
+            "b" => (1, false),
+            "ebm" | "d#m" => (2, true),
+            "f#" | "gb" => (2, false),
+            "bbm" | "a#m" => (3, true),
+            "db" | "c#" => (3, false),
+            "fm" => (4, true),
+            "ab" | "g#" => (4, false),
+            "cm" => (5, true),
+            "eb" | "d#" => (5, false),
+            "gm" => (6, true),
+            "bb" | "a#" => (6, false),
+            "dm" => (7, true),
+            "f" => (7, false),
+            "am" => (8, true),
+            "c" => (8, false),
+            "em" => (9, true),
+            "g" => (9, false),
+            "bm" => (10, true),
+            "d" => (10, false),
+            "f#m" | "gbm" => (11, true),
+            "a" => (11, false),
+            "dbm" | "c#m" => (12, true),
+            "e" => (12, false),
+            _ => return None,
+        };
+        Self::new(position, minor)
+    }
 }
 
 impl MenuItem {
@@ -1831,7 +1958,15 @@ impl MenuItem {
             flags: Self::TRACK_FLAGS,
             artwork_id,
             playlist_position: 0,
+            key_index: 0,
         }
+    }
+
+    /// The same row with its key, so the deck can draw the match indicator.
+    #[must_use]
+    pub fn with_key(mut self, key: Option<CamelotKey>) -> Self {
+        self.key_index = key.map_or(0, CamelotKey::index);
+        self
     }
 
     /// A root-menu or sort-menu row: label wrapped, flags zero.
@@ -1845,6 +1980,7 @@ impl MenuItem {
             flags: 0,
             artwork_id: 0,
             playlist_position: 0,
+            key_index: 0,
         }
     }
 
@@ -1868,6 +2004,7 @@ impl MenuItem {
             flags: 0,
             artwork_id: 0,
             playlist_position: 0,
+            key_index: 0,
         }
     }
 
@@ -1898,7 +2035,7 @@ impl MenuItem {
                 Field::U32(self.artwork_id),
                 Field::U32(self.playlist_position),
                 Field::U32(self.argument10()),
-                Field::U32(0),
+                Field::U32(self.key_index),
             ],
         )
     }
@@ -1917,6 +2054,7 @@ impl MenuItem {
             flags: message.number(7)?,
             artwork_id: message.number(8).unwrap_or(0),
             playlist_position: message.number(9).unwrap_or(0),
+            key_index: message.number(11).unwrap_or(0),
         })
     }
 }
@@ -2673,6 +2811,81 @@ mod tests {
         raw[14] = 13;
         let err = Message::decode(&raw).expect_err("must not decode");
         assert!(matches!(err, Error::Malformed { .. }), "got {err}");
+    }
+
+    #[test]
+    fn a_camelot_key_indexes_the_wheel_the_way_a_real_deck_does() {
+        // Every one of these pairs was read off the wire: 1265 track rows a
+        // real deck served in `S27-sort-by-and-key`, correlated against those
+        // tracks' keys in the medium's own `export.pdb`. The wheel is walked
+        // round in order, minor before major.
+        for (name, expected) in [
+            ("1A", 1),
+            ("1B", 2),
+            ("2A", 3),
+            ("2B", 4),
+            ("3A", 5),
+            ("3B", 6),
+            ("4A", 7),
+            ("4B", 8),
+            ("5A", 9),
+            ("5B", 10),
+            ("6A", 11),
+            ("6B", 12),
+            ("7A", 13),
+            ("7B", 14),
+            ("8A", 15),
+            ("8B", 16),
+            ("9A", 17),
+            ("9B", 18),
+            ("10A", 19),
+            ("11A", 21),
+            ("11B", 22),
+            ("12A", 23),
+            ("12B", 24),
+        ] {
+            let key = CamelotKey::parse(name).unwrap_or_else(|| panic!("{name} must parse"));
+            assert_eq!(key.index(), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn the_classical_names_rekordbox_writes_land_on_the_same_wheel() {
+        // A medium written with the classical preference must light the same
+        // indicator as one written in Camelot.
+        for (classical, camelot) in [
+            ("Am", "8A"),
+            ("C", "8B"),
+            ("F#m", "11A"),
+            ("A", "11B"),
+            ("Abm", "1A"),
+            ("B", "1B"),
+            ("Dbm", "12A"),
+            ("E", "12B"),
+            ("G#m", "1A"),
+            ("Gb", "2B"),
+        ] {
+            assert_eq!(
+                CamelotKey::parse(classical).map(CamelotKey::index),
+                CamelotKey::parse(camelot).map(CamelotKey::index),
+                "{classical} should be {camelot}",
+            );
+        }
+    }
+
+    #[test]
+    fn a_track_with_no_key_gets_no_indicator_rather_than_a_wrong_one() {
+        assert_eq!(CamelotKey::parse(""), None);
+        assert_eq!(CamelotKey::parse("   "), None);
+        assert_eq!(CamelotKey::parse("13A"), None, "off the wheel");
+        assert_eq!(CamelotKey::parse("0A"), None);
+        assert_eq!(CamelotKey::parse("nonsense"), None);
+        assert_eq!(
+            MenuItem::track(1, "t", "", ItemType::TRACK_TITLE, 0)
+                .with_key(None)
+                .key_index,
+            0
+        );
     }
 
     #[test]

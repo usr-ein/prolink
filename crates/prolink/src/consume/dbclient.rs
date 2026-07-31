@@ -1238,6 +1238,7 @@ mod tests {
                 flags: MenuItem::TRACK_FLAGS,
                 artwork_id: 0xba,
                 playlist_position: 0,
+                key_index: 0,
             },
             MenuItem::named(0x7a, ItemType::ARTIST, "Tomcraft"),
             MenuItem::named(0x56, ItemType::ALBUM, "Loneliness"),
@@ -1278,6 +1279,7 @@ mod tests {
                 flags: 0,
                 artwork_id: 0,
                 playlist_position: 0,
+                key_index: 0,
             },
             MenuItem::named(1, ItemType::TRACK_INFO_UNKNOWN, ""),
         ]

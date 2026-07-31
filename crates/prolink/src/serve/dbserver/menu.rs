@@ -54,8 +54,8 @@
 use std::collections::BTreeMap;
 
 use prolink_proto::dbserver::{
-    Arguments, Drill, FILTER_ALL, ItemType, METADATA_ITEMS, MenuItem, MessageKind, ROOT_CATEGORIES,
-    SORT_MENU, SortOrder, TRACK_INFO_ITEMS,
+    Arguments, CamelotKey, Drill, FILTER_ALL, ItemType, METADATA_ITEMS, MenuItem, MessageKind,
+    ROOT_CATEGORIES, SORT_MENU, SortOrder, TRACK_INFO_ITEMS,
 };
 use prolink_rekordbox::{Library, Track};
 
@@ -674,7 +674,7 @@ fn search(library: &Library, term: &str) -> Vec<MenuItem> {
             track.artwork_id,
         );
         item.argument0 = SEARCH_TRACK;
-        item
+        item.with_key(CamelotKey::parse(&track.key))
     }));
     items
 }
@@ -800,7 +800,11 @@ fn track_items<'a>(
                 Position::TrackNumber => track.track_number,
                 Position::InList => u32::try_from(index).unwrap_or(u32::MAX).saturating_add(1),
             };
-            item
+            // The deck draws the key-matching indicator from this. It knows
+            // what is playing and we do not, so all a server does is say which
+            // key the row is in; sending zero leaves the indicator dark beside
+            // every track.
+            item.with_key(CamelotKey::parse(&track.key))
         })
         .collect()
 }

@@ -39,7 +39,7 @@ use prolink::serve::nfs::{NfsConfig as ServerNfsConfig, NfsServer};
 use prolink::serve::{Medium, ServedSlot, Vfs};
 use prolink::{BrowsableDeviceNumber, Slot};
 use prolink_proto::dbserver::{
-    Drill, ItemType, MediaInfo, MenuTarget, MessageKind, SortOrder, TrackType,
+    CamelotKey, Drill, ItemType, MediaInfo, MenuTarget, MessageKind, SortOrder, TrackType,
 };
 use prolink_rekordbox::Library;
 
@@ -389,6 +389,53 @@ async fn a_deck_asking_to_describe_the_medium_gets_a_description() {
     assert_eq!(
         info.track_count, 651,
         "the true count, the same one the UDP media query is answered with",
+    );
+}
+
+#[tokio::test]
+async fn every_track_row_carries_its_key_for_the_matching_indicator() {
+    // The twelfth argument is the row's key as a Camelot index, and the deck
+    // draws its key-matching indicator from it. We sent zero there, which
+    // leaves the indicator dark beside every track. Decoded by correlating all
+    // 1265 track rows a real deck served against those tracks' keys.
+    let (_server, port) = serve_usb().await;
+    let mut client = client(port).await;
+
+    let rows = client
+        .tracks(Slot::USB, SortOrder::DEFAULT)
+        .await
+        .expect("the track list");
+    let library = library();
+
+    let mut checked = 0;
+    for row in &rows {
+        let Some(track) = library.tracks.get(&row.id) else {
+            continue;
+        };
+        let expected = CamelotKey::parse(&track.key).map_or(0, CamelotKey::index);
+        assert_eq!(
+            row.key_index, expected,
+            "track {} in key {:?}",
+            row.id, track.key
+        );
+        if expected != 0 {
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 100,
+        "only {checked} rows carried a key; the fixture should have plenty"
+    );
+
+    // And the indices really are the wheel: 1A is 1, 12B is 24.
+    let indices: std::collections::BTreeSet<u32> = rows
+        .iter()
+        .map(|row| row.key_index)
+        .filter(|index| *index != 0)
+        .collect();
+    assert!(
+        indices.iter().all(|index| (1..=24).contains(index)),
+        "off the wheel: {indices:?}"
     );
 }
 
