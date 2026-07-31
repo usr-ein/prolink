@@ -692,14 +692,8 @@ fn the_root_menu_is_what_a_real_deck_sends_minus_the_category_we_cannot_answer()
         .collect();
     assert_eq!(real.len(), 12, "a real root menu is all twelve");
 
-    let ours = menu::build(
-        MessageKind::MENU_ROOT,
-        &Arguments::default(),
-        None,
-        &[],
-        None,
-    )
-    .expect("the root menu needs no medium");
+    let ours = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None, &[])
+        .expect("the root menu needs no medium");
     let expected: Vec<MenuItem> = real
         .into_iter()
         .filter(|item| item.label1 != menu_label("FOLDER"))
@@ -715,14 +709,8 @@ fn the_root_menu_is_what_a_real_deck_sends_minus_the_category_we_cannot_answer()
 fn the_sort_menu_re_encodes_byte_for_byte_as_a_real_deck_sent_it() {
     // A round trip between our own encoder and our own decoder proves they
     // agree with each other, which is not the same as agreeing with a CDJ.
-    let ours = menu::build(
-        MessageKind::MENU_SORT,
-        &Arguments::default(),
-        None,
-        &[],
-        None,
-    )
-    .expect("the sort menu needs no medium");
+    let ours = menu::build(MessageKind::MENU_SORT, &Arguments::default(), None, &[])
+        .expect("the sort menu needs no medium");
     assert_eq!(ours.len(), REAL_SORT_MENU.len());
     for (item, text) in ours.iter().zip(REAL_SORT_MENU) {
         let real = hex(text);
@@ -739,14 +727,7 @@ fn the_sort_menu_re_encodes_byte_for_byte_as_a_real_deck_sent_it() {
 fn we_advertise_no_category_we_cannot_answer() {
     // An unimplemented category and an empty one are indistinguishable on a
     // deck's screen, so every row of our root menu must lead somewhere (F40).
-    let root = menu::build(
-        MessageKind::MENU_ROOT,
-        &Arguments::default(),
-        None,
-        &[],
-        None,
-    )
-    .expect("root");
+    let root = menu::build(MessageKind::MENU_ROOT, &Arguments::default(), None, &[]).expect("root");
     let labels: Vec<&str> = ROOT_CATEGORIES
         .iter()
         .filter(|category| {
@@ -2034,11 +2015,11 @@ mod eviction {
 
     /// Page a set the way a deck does: `RENDER_MENU` naming its descriptor and
     /// the count it was answered with, never re-issuing the menu request.
-    fn page(session: &mut Session, descriptor: u32, total: u32) -> Vec<MenuItem> {
+    fn page(session: &mut Session, shared: &Shared, descriptor: u32, total: u32) -> Vec<MenuItem> {
         let mut out = Vec::new();
         let parsed = Descriptor::parse(descriptor).expect("a descriptor");
         let request = Message::render_of(1, parsed, 0, 6, total);
-        session.render(&request, &mut out);
+        session.render(shared, &request, &mut out);
         let mut offset = 0;
         let mut items = Vec::new();
         while offset < out.len() {
@@ -2064,6 +2045,7 @@ mod eviction {
         // blank until the DJ left LINK. One connection in that capture minted
         // 44 sets against a bound of 32.
         let mut session = Session::default();
+        let shared = shared([usb()]);
         let list = 0x0101_0301;
         let metadata = 0x0102_0301;
 
@@ -2077,7 +2059,7 @@ mod eviction {
             // same thirteen but the descriptor's menu target differs, and a DJ
             // scrolling albums mints one key per album size besides.
             session.remember(metadata + poll, 13, rows(13, poll));
-            let paged = page(&mut session, list, 500);
+            let paged = page(&mut session, &shared, list, 500);
             assert_eq!(
                 paged.len(),
                 6,
@@ -2110,27 +2092,38 @@ mod eviction {
     }
 }
 
-/// Page the set a menu request just established, the way a deck does.
-fn render_all(session: &mut Session, total: u32) -> Vec<MenuItem> {
-    let mut out = Vec::new();
-    let request = Message::render_of(
-        500,
-        descriptor(Slot::USB, MenuTarget::MAIN),
-        0,
-        total,
-        total,
-    );
-    session.render(&request, &mut out);
-    let mut offset = 0;
+/// Page the whole set a menu request just established, the way a deck does:
+/// repeated `RENDER_MENU`s at increasing offsets, never re-issuing the menu
+/// request.
+fn render_all(session: &mut Session, shared: &Shared, total: u32) -> Vec<MenuItem> {
+    let batch = MAX_RENDER_BATCH;
     let mut items = Vec::new();
-    while let Some(rest) = out.get(offset..).filter(|rest| !rest.is_empty()) {
-        let (message, used) = Message::decode(rest).expect("our own replies decode");
-        offset += used;
-        if let Some(item) = MenuItem::from_message(&message) {
-            items.push(item);
+    let mut at = 0u32;
+    loop {
+        let mut out = Vec::new();
+        let request = Message::render_of(
+            500,
+            descriptor(Slot::USB, MenuTarget::MAIN),
+            at,
+            batch,
+            total,
+        );
+        session.render(shared, &request, &mut out);
+        let mut offset = 0;
+        let mut page = 0u32;
+        while let Some(rest) = out.get(offset..).filter(|rest| !rest.is_empty()) {
+            let (message, used) = Message::decode(rest).expect("our own replies decode");
+            offset += used;
+            if let Some(item) = MenuItem::from_message(&message) {
+                items.push(item);
+                page += 1;
+            }
         }
+        if page < batch {
+            return items;
+        }
+        at += page;
     }
-    items
 }
 
 // -- the tag list -----------------------------------------------------------
@@ -2210,7 +2203,7 @@ fn the_tag_list_keeps_the_order_the_dj_tagged_in() {
         &shared,
         &tagged_request(MessageKind::MENU_TAG_LIST, 100, &[0]),
     );
-    let rendered = render_all(&mut session, 3);
+    let rendered = render_all(&mut session, &shared, 3);
     let ids: Vec<u32> = rendered.iter().map(|item| item.id).collect();
     assert_eq!(ids, vec![3, 1, 2], "tag order, not id or title order");
 }
@@ -2251,7 +2244,7 @@ fn a_tagged_track_carries_its_marker_in_every_menu_it_appears_in() {
         &shared,
         &tagged_request(MessageKind::MENU_TRACK, 2, &[0]),
     );
-    let rows = render_all(&mut session, 3);
+    let rows = render_all(&mut session, &shared, 3);
     assert!(
         rows.len() > 1,
         "the whole track list, not just the tagged one"
@@ -2440,7 +2433,7 @@ fn the_tag_list_honours_the_sort_the_deck_asks_for() {
         &shared,
         &tagged_request(MessageKind::MENU_TAG_LIST, 30, &[SortOrder::TITLE.0]),
     );
-    let sorted = render_all(&mut session, 3);
+    let sorted = render_all(&mut session, &shared, 3);
     let titles: Vec<&str> = sorted.iter().map(|item| item.label1.as_str()).collect();
     let mut expected = titles.clone();
     expected.sort_by_key(|title| title.to_lowercase());
@@ -2470,7 +2463,7 @@ fn the_loaded_track_row_is_marked_so_the_key_indicator_has_a_reference() {
         &shared,
         &tagged_request(MessageKind::MENU_TRACK, 1, &[0]),
     );
-    let rows = render_all(&mut session, 3);
+    let rows = render_all(&mut session, &shared, 3);
     assert!(rows.len() > 1, "the whole list, not just the loaded track");
     for row in &rows {
         let marked = row.flags & MenuItem::LOADED != 0;
@@ -2490,7 +2483,7 @@ fn nothing_is_marked_when_the_deck_has_loaded_nothing_from_us() {
         &shared,
         &tagged_request(MessageKind::MENU_TRACK, 1, &[0]),
     );
-    let rows = render_all(&mut session, 3);
+    let rows = render_all(&mut session, &shared, 3);
     assert!(
         rows.iter().all(|row| row.flags & MenuItem::LOADED == 0),
         "no row is marked when nothing was loaded from us"
@@ -2519,7 +2512,7 @@ fn the_mark_follows_the_slot_the_deck_is_browsing() {
     ask(&mut session, &shared, &sd_request);
     let mut out = Vec::new();
     let render = Message::render_of(2, descriptor(Slot::SD, MenuTarget::MAIN), 0, 4, 4);
-    session.render(&render, &mut out);
+    session.render(&shared, &render, &mut out);
     let mut offset = 0;
     while let Some(rest) = out.get(offset..).filter(|rest| !rest.is_empty()) {
         let (message, used) = Message::decode(rest).expect("our own replies decode");
@@ -2544,4 +2537,77 @@ fn a_deck_that_unloads_clears_the_mark() {
     assert_eq!(shared.loaded.track_on(device, Slot::USB), Some(2));
     shared.loaded.note(device, Slot::USB, 0);
     assert_eq!(shared.loaded.track_on(device, Slot::USB), None);
+}
+
+#[test]
+fn a_track_loaded_after_the_menu_was_built_still_marks_its_row() {
+    // The failure this was found by. A deck asks for the track list, loads a
+    // track *out of that list*, and keeps scrolling — without re-issuing the
+    // menu request (F27). Marking rows when the set was built therefore marks
+    // nothing the deck ever sees, and the key-matching indicator stays dark
+    // with every row otherwise byte-perfect against a real deck (F55).
+    //
+    // So the mark belongs at render time. The set is a snapshot of the
+    // library; what is loaded and what is tagged are live state.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let device = descriptor(Slot::USB, MenuTarget::MAIN).device.get();
+
+    // The menu is established first, with nothing loaded and nothing tagged.
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TRACK, 1, &[0]),
+    );
+    let before = render_all(&mut session, &shared, 3);
+    assert!(
+        before.iter().all(|row| row.flags & MenuItem::LOADED == 0),
+        "nothing is marked before anything is loaded"
+    );
+
+    // Only now does the deck load a track and tag another.
+    shared.loaded.note(device, Slot::USB, 2);
+    shared.tags.set(device, Slot::USB, 3, true);
+
+    // The same set, paged again — no new menu request, exactly as a deck does.
+    let after = render_all(&mut session, &shared, 3);
+    let loaded: Vec<u32> = after
+        .iter()
+        .filter(|row| row.flags & MenuItem::LOADED != 0)
+        .map(|row| row.id)
+        .collect();
+    let tagged: Vec<u32> = after
+        .iter()
+        .filter(|row| row.flags & MenuItem::TAGGED != 0)
+        .map(|row| row.id)
+        .collect();
+    assert_eq!(loaded, vec![2], "the loaded row is marked on the next page");
+    assert_eq!(tagged, vec![3], "and so is the tagged one");
+}
+
+#[test]
+fn unloading_clears_the_mark_on_a_menu_already_paged() {
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let device = descriptor(Slot::USB, MenuTarget::MAIN).device.get();
+    shared.loaded.note(device, Slot::USB, 2);
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TRACK, 1, &[0]),
+    );
+    assert_eq!(
+        render_all(&mut session, &shared, 3)
+            .iter()
+            .filter(|row| row.flags & MenuItem::LOADED != 0)
+            .count(),
+        1
+    );
+    shared.loaded.note(device, Slot::USB, 0);
+    assert!(
+        render_all(&mut session, &shared, 3)
+            .iter()
+            .all(|row| row.flags & MenuItem::LOADED == 0),
+        "the mark goes when the deck unloads, without a new menu request"
+    );
 }

@@ -77,6 +77,12 @@ A second USB stick presented with `--sd` appears to a CDJ as an SD card, which i
 exactly what it expects to see. Both media are served over one dbserver
 connection and told apart by the slot byte in each request.
 
+Ctrl-C **ejects** before it stops, the way pulling the stick out of a real deck
+does: the slot goes unmounting, the players reading from it send `UMNT` and let
+go, and only then do the servers close. Two to three seconds when a deck is
+actually reading, about half of one when none is. A second Ctrl-C skips the wait
+and leaves whoever was reading holding a stale mount.
+
 ### Offline
 
 ```sh

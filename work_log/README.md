@@ -40,6 +40,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 28 | Beat sync and tempo sharing: UDP 50001 `0x26` master request / `0x27` handoff response | done | [026](026-beat-sync-and-tempo-master.md); both packets modelled, plus the sync/pitch/yield status fields |
 | 29 | Tag list: tagging and the TAG LIST menu | done | [027](027-the-tag-list.md); `0x3002` adds, `0x100f` lists, flags bit 0 marks a tagged row. Playlist creation deliberately ignored |
 | 30 | How AUTO device numbering resolves when two decks boot simultaneously, both on AUTO | todo | S26, from a cold boot of both |
+| 31 | Stopping cleanly: eject the media on ctrl-c so consumers unmount | done | [028](028-stopping-cleanly.md); `0x02` for 1.5 s then `0x03`, which is what draws the deck's `UMNT` — 9 and 16 ms later in S15b |
 | 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
 
 ## Acceptance: what the CLI must be able to do

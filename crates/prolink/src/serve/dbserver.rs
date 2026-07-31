@@ -609,7 +609,7 @@ impl Session {
                 return Flow::Continue;
             }
             MessageKind::RENDER_MENU => {
-                self.render(message, out);
+                self.render(shared, message, out);
                 return Flow::Continue;
             }
             // Tagging is the one request that changes server state. The reply
@@ -652,14 +652,7 @@ impl Session {
         let tags = descriptor.map_or_else(Vec::new, |descriptor| {
             shared.tags.get(descriptor.device.get(), descriptor.slot)
         });
-        // The track this deck has loaded from the slot it is browsing, so its
-        // row can carry the mark the deck reads its reference key from (F55).
-        let playing = descriptor.and_then(|descriptor| {
-            shared
-                .loaded
-                .track_on(descriptor.device.get(), descriptor.slot)
-        });
-        if let Some(items) = menu::build(kind, &message.args, medium, &tags, playing) {
+        if let Some(items) = menu::build(kind, &message.args, medium, &tags) {
             let count = u32::try_from(items.len()).unwrap_or(u32::MAX);
             let raw = descriptor.map_or(0, Descriptor::to_raw);
             self.remember(raw, count, items);
@@ -742,9 +735,10 @@ impl Session {
     /// documented safe on a Nexus 2 and thousands demonstrably fail. A deck
     /// asks for six at a time anyway, so the cap only ever bites a client of
     /// our own.
-    fn render(&mut self, message: &Message, out: &mut Vec<u8>) {
+    fn render(&mut self, shared: &Shared, message: &Message, out: &mut Vec<u8>) {
         let transaction = message.transaction_id;
-        let descriptor = message.descriptor().map_or(0, Descriptor::to_raw);
+        let parsed = message.descriptor();
+        let descriptor = parsed.map_or(0, Descriptor::to_raw);
         let offset = usize::try_from(message.number(1).unwrap_or(0)).unwrap_or(usize::MAX);
         let limit = message
             .number(2)
@@ -767,11 +761,28 @@ impl Session {
             self.touch(key);
         }
 
+        // The two live marks, applied now rather than when the set was built:
+        // a deck loads and tags while still paging through a list it will not
+        // re-request (F27, F55).
+        let (tags, playing) = parsed.map_or_else(
+            || (Vec::new(), None),
+            |descriptor| {
+                let device = descriptor.device.get();
+                (
+                    shared.tags.get(device, descriptor.slot),
+                    shared.loaded.track_on(device, descriptor.slot),
+                )
+            },
+        );
+
         push(out, &Message::menu_header(transaction));
         for item in items.iter().skip(offset).take(limit) {
             // Items are built without a transaction id; stamp them with the
             // render's so the client can correlate the whole page.
-            push(out, &item.to_message(transaction));
+            push(
+                out,
+                &menu::mark(item, &tags, playing).to_message(transaction),
+            );
         }
         push(out, &Message::menu_footer(transaction));
     }

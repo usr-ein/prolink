@@ -560,6 +560,19 @@ async fn serve(
     println!("ctrl-c to stop");
 
     tokio::signal::ctrl_c().await?;
+
+    // Not a `drop`: a deck reading from us holds a mount, and the eject is what
+    // tells it to let go. Two to three seconds when something is actually
+    // reading and about half of one when nothing is, so say what is happening —
+    // and take a second ctrl-c as "I know, go now".
+    println!("ejecting our media so the players reading it can unmount cleanly...");
+    tokio::select! {
+        () = server.shutdown() => println!("media ejected; stopped"),
+        result = tokio::signal::ctrl_c() => {
+            result?;
+            eprintln!("stopping now; a player may be left holding a stale mount");
+        }
+    }
     Ok(())
 }
 

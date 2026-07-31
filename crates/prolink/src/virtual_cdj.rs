@@ -48,7 +48,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use prolink_proto::djl::{self, Body};
-use prolink_proto::status::{self, CdjStatus, MediaState};
+use prolink_proto::status::{self, CdjStatus};
 use prolink_proto::{
     BrowsableDeviceNumber, DISCOVERY_PORT, DeviceKind, DeviceName, DeviceNumber, STATUS_PORT, Slot,
 };
@@ -314,13 +314,10 @@ impl VirtualCdj {
     /// The status packet we are emitting, for byte-diffing against a real deck.
     pub fn status_packet(&self, peers: usize) -> CdjStatus {
         let occupied = self.media.occupied_slots();
-        let state = |slot: Slot| {
-            if occupied.contains(&slot) {
-                MediaState::LOADED
-            } else {
-                MediaState::EMPTY
-            }
-        };
+        // Asked of the source rather than derived from `occupied_slots`, so a
+        // medium on its way out can publish the unmounting states a consumer
+        // has to see before the slot goes empty.
+        let state = |slot: Slot| self.media.slot_state(slot);
         CdjStatus::builder()
             .device_number(self.number())
             .name(self.config.name)
@@ -615,13 +612,7 @@ fn status_packet(
     peers: usize,
 ) -> CdjStatus {
     let occupied = media.occupied_slots();
-    let state = |slot: Slot| {
-        if occupied.contains(&slot) {
-            MediaState::LOADED
-        } else {
-            MediaState::EMPTY
-        }
-    };
+    let state = |slot: Slot| media.slot_state(slot);
     let mut builder = CdjStatus::builder()
         .name(config.name)
         .slot_state(Slot::USB, state(Slot::USB))
@@ -829,6 +820,7 @@ impl Drop for PeerAddresses {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prolink_proto::status::MediaState;
 
     fn interface() -> crate::Interface {
         crate::Interface {
@@ -899,6 +891,43 @@ mod tests {
             "a slot we do not serve is empty"
         );
         assert!(packet.link_available());
+    }
+
+    #[test]
+    fn a_slot_being_ejected_publishes_the_state_a_consumer_acts_on() {
+        // `0x03` is what makes a deck send UMNT — it did so within 16 ms of it
+        // in both captured ejects, and did nothing on `0x02`. So a source that
+        // reports it must reach the wire unchanged rather than being flattened
+        // to "no media here".
+        #[derive(Debug)]
+        struct Ejecting;
+        impl MediaSource for Ejecting {
+            fn occupied_slots(&self) -> std::collections::BTreeSet<Slot> {
+                std::collections::BTreeSet::new()
+            }
+            fn describe(&self, _slot: Slot) -> Option<crate::MediaDescription> {
+                None
+            }
+            fn slot_state(&self, slot: Slot) -> MediaState {
+                if slot == Slot::USB {
+                    MediaState::UNMOUNTING_ALT
+                } else {
+                    MediaState::EMPTY
+                }
+            }
+        }
+
+        let number = AtomicU8::new(3);
+        let counter = AtomicU32::new(0);
+        let packet = status_packet(
+            &VirtualCdjConfig::default(),
+            &number,
+            &Ejecting,
+            &counter,
+            1,
+        );
+        assert_eq!(packet.usb_state(), MediaState::UNMOUNTING_ALT);
+        assert_eq!(packet.sd_state(), MediaState::EMPTY);
     }
 
     #[test]

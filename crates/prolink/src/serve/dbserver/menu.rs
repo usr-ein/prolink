@@ -121,39 +121,6 @@ pub(super) fn build(
     args: &Arguments,
     medium: Option<&Medium>,
     tags: &[u32],
-    playing: Option<u32>,
-) -> Option<Vec<MenuItem>> {
-    let mut items = build_unmarked(kind, args, medium, tags)?;
-    // The row the browsing deck has loaded. A deck does not compute key
-    // compatibility from its own copy of the track: it reads the key off
-    // whichever row carries this mark and lights every row harmonically
-    // compatible with it, so an unmarked listing lights nothing (F55).
-    if let Some(playing) = playing {
-        for item in &mut items {
-            if item.flags & MenuItem::TRACK_FLAGS != 0 && item.id == playing {
-                item.flags |= MenuItem::LOADED;
-            }
-        }
-    }
-    // Every track row the requesting deck has tagged is marked, whatever menu
-    // it appears in — a tagged track shows the marker in the artist list as
-    // well as in the tag list itself (F53).
-    if !tags.is_empty() {
-        for item in &mut items {
-            if item.flags & MenuItem::TRACK_FLAGS != 0 && tags.contains(&item.id) {
-                item.flags |= MenuItem::TAGGED;
-            }
-        }
-    }
-    Some(items)
-}
-
-/// [`build`] before the tag marker is applied.
-fn build_unmarked(
-    kind: MessageKind,
-    args: &Arguments,
-    medium: Option<&Medium>,
-    tags: &[u32],
 ) -> Option<Vec<MenuItem>> {
     // These two are answered identically whatever the medium, and `MENU_SORT`
     // is answered identically whatever argument 2 names.
@@ -197,6 +164,29 @@ fn build_unmarked(
         _ => return Drill::parse(kind).and_then(|drill| drilled(drill, args, library, sort)),
     };
     Some(items)
+}
+
+/// Mark one row on its way out: tagged, and the track the deck has loaded.
+///
+/// **At render time, not build time.** A result set is a snapshot of the
+/// library; these two bits are live state that changes while the deck is still
+/// paging through it. A deck loads a track *from* the list it is scrolling and
+/// then keeps scrolling without re-issuing the menu request (F27), so a mark
+/// applied when the set was built is a mark the deck never sees — which is
+/// exactly why the key-matching indicator stayed dark with the row otherwise
+/// byte-perfect (F55).
+pub(super) fn mark(item: &MenuItem, tags: &[u32], playing: Option<u32>) -> MenuItem {
+    let mut item = item.clone();
+    if item.flags & MenuItem::TRACK_FLAGS == 0 {
+        return item;
+    }
+    if playing == Some(item.id) {
+        item.flags |= MenuItem::LOADED;
+    }
+    if tags.contains(&item.id) {
+        item.flags |= MenuItem::TAGGED;
+    }
+    item
 }
 
 /// Whether `kind` is a menu request at all, used only to decide what an

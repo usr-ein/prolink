@@ -159,6 +159,39 @@ difference between plausible and indistinguishable (F23).
 *Observed but not imitated:* a real deck sends each status packet from a
 different, incrementing source port (6688, 6689, …).
 
+### 3.2b Ejecting is a sequence, and `0x03` is the signal *(confirmed)*
+
+The slot bytes take four values, not two:
+
+| Value | Meaning |
+|---|---|
+| `0x00` | a medium is present and mounted |
+| `0x02` | unmounting |
+| `0x03` | unmounting, second state |
+| `0x04` | the slot is empty |
+
+An eject walks all four, and the interesting part is what a **consumer** does
+about it. Two captures, one with a deck actively holding a mount and one
+without:
+
+```
+S15b, USB, deck B reading from deck A     S4b, USB, nobody mounted
+t=68.171  0x00 → 0x02                     t=50.055  0x00 → 0x02
+t=69.677  0x02 → 0x03                     t=51.569  0x02 → 0x03   (1.514 s later)
+t=69.693  deck B sends UMNT '/C/'         t=51.633  0x03 → 0x04   (64 ms later)
+t=69.877  0x03 → 0x04
+```
+
+Three things follow. The `0x02` dwell is **1.51 s in both**, so it is a fixed
+delay and not the cost of some piece of work. The `UMNT` follows `0x03` by 9 ms
+(SD) and 16 ms (USB) and never follows `0x02`, so **`0x03` is the state a
+consumer acts on** — a server that goes straight from `0x00` to `0x04` skips the
+only signal the deck responds to and leaves it holding a filehandle into a
+medium that is gone. And the whole thing costs under two seconds.
+
+This is what C9's "real players do call `UMNT`" is triggered *by*, and it is why
+stopping a server is a sequence rather than closing sockets: see §6.
+
 ### 3.3 Media query `0x05` / response `0x06` *(confirmed)*
 
 **The step no reference implementation performs, because none of them serve.** A
@@ -631,6 +664,12 @@ media query 0x05  ──►  portmap GETPORT ──►  MNT  ──►  12523  �
 An error and an empty folder are indistinguishable on a CDJ's screen, so the set
 of menu types you implement is a **user-visible surface**, not an internal
 detail (F40).
+
+**And one thing it must do to stop.** A consumer holds an NFS mount and does not
+poll us for signs of life, so sockets that simply close leave it retrying
+against nothing. Going away means ejecting first: `0x02`, then `0x03` — which is
+what draws its `UMNT` — then `0x04`, and only then closing dbserver, NFS and the
+announcement, in that order. The states and their timings are in §3.2b.
 
 ### 6.1 Two media at once *(confirmed)*
 
