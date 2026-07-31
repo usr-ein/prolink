@@ -38,6 +38,10 @@ pub enum Error {
     #[error(transparent)]
     Protocol(#[from] prolink_proto::Error),
 
+    /// A file on a rekordbox medium could not be read.
+    #[error(transparent)]
+    Medium(#[from] prolink_rekordbox::Error),
+
     /// Every device number a peer would browse is taken.
     ///
     /// Serving is impossible in this state. The right response is to degrade to
