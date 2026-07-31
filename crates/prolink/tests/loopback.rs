@@ -299,6 +299,64 @@ async fn a_dip_into_metadata_does_not_lose_the_list_being_scrolled() {
 }
 
 #[tokio::test]
+async fn a_list_being_scrolled_survives_a_minute_of_metadata_polling() {
+    // What hardware did: while a track played, the deck polled its metadata
+    // every couple of seconds, and every poll minted a fresh result set. The
+    // menu table evicted by *insertion* order, so after 32 polls it threw away
+    // the long-lived list the DJ was scrolling — the one set certainly still
+    // wanted. On the deck that looked like every menu going blank about a
+    // minute into any track, independently of which track, and staying blank
+    // until the DJ left LINK and came back (which opens a new connection and so
+    // a new table).
+    //
+    // One connection in that capture minted 44 sets against a bound of 32.
+    let (_server, port) = serve_usb().await;
+    let mut client = client(port).await;
+
+    let all = client
+        .tracks(Slot::USB, SortOrder::DEFAULT)
+        .await
+        .expect("the track list");
+    let ids: Vec<u32> = all.iter().take(40).map(|item| item.id).collect();
+    assert!(ids.len() >= 40, "need enough tracks to overflow the table");
+
+    // Well past MAX_PENDING_MENUS, interleaved with paging the list the way a
+    // deck interleaves them.
+    for (polls, id) in ids.iter().enumerate() {
+        let _ = client
+            .metadata(Slot::USB, *id)
+            .await
+            .expect("a metadata dip");
+        if polls % 4 == 0 {
+            let again = client
+                .tracks(Slot::USB, SortOrder::DEFAULT)
+                .await
+                .expect("the list must still be there");
+            assert_eq!(
+                again.len(),
+                all.len(),
+                "the list vanished after {polls} metadata polls",
+            );
+        }
+    }
+
+    let after = client
+        .tracks(Slot::USB, SortOrder::DEFAULT)
+        .await
+        .expect("the list must still be there");
+    assert_eq!(
+        after.len(),
+        all.len(),
+        "the list did not survive the polling"
+    );
+    assert_eq!(
+        after.first().map(|item| item.id),
+        all.first().map(|item| item.id),
+        "and it is the same list, not another menu served in its place",
+    );
+}
+
+#[tokio::test]
 async fn two_media_are_told_apart_by_the_descriptor_alone() {
     // A player browsing two media on one peer opens a *single* connection and
     // distinguishes them purely by the slot byte in each request (F37).

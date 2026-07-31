@@ -557,25 +557,57 @@ impl Session {
         Flow::Continue
     }
 
-    /// Remember a result set, evicting the oldest once the table is full.
+    /// Remember a result set, evicting the **least recently used** once the
+    /// table is full.
+    ///
+    /// Least recently *used*, not least recently inserted, and the difference
+    /// is the whole point. A deck polls a loaded track's metadata every couple
+    /// of seconds while it plays, and every poll mints a fresh set. Evicting by
+    /// insertion order therefore throws away the long-lived list the DJ is
+    /// scrolling — the one set that is certainly still wanted — after a fixed
+    /// number of polls, which on hardware showed up as every menu going blank
+    /// about a minute into any track, and staying blank until the DJ left LINK
+    /// and came back. Measured on that capture: one connection minted 44 sets
+    /// against a bound of 32.
+    ///
+    /// Touching on render (see [`Self::render`]) makes the set being paged the
+    /// *newest* rather than the oldest, so the eviction candidates are the
+    /// transient metadata menus, which is what a bound is for.
     fn remember(&mut self, descriptor: u32, count: u32, items: Vec<MenuItem>) {
         let key = (descriptor, count);
         let items = Arc::new(items);
         self.last = Arc::clone(&items);
         self.recent.insert(descriptor, Arc::clone(&items));
-        if self.menus.insert(key, items).is_none() {
-            self.order.push_back(key);
+        self.menus.insert(key, items);
+        self.touch(key);
+        self.evict();
+    }
+
+    /// Move a key to the back of the eviction order.
+    fn touch(&mut self, key: (u32, u32)) {
+        if let Some(position) = self.order.iter().position(|existing| *existing == key) {
+            self.order.remove(position);
         }
+        self.order.push_back(key);
+    }
+
+    /// Drop the least recently used sets until the table is inside its bound.
+    fn evict(&mut self) {
         while self.order.len() > MAX_PENDING_MENUS {
             if let Some(oldest) = self.order.pop_front() {
                 self.menus.remove(&oldest);
+                // `recent` maps a descriptor to its newest set. Only drop the
+                // entry if it is the set being evicted; a later set for the
+                // same descriptor must survive.
+                if self
+                    .recent
+                    .get(&oldest.0)
+                    .is_some_and(|items| u32::try_from(items.len()).unwrap_or(u32::MAX) == oldest.1)
+                    && !self.order.iter().any(|key| key.0 == oldest.0)
+                {
+                    self.recent.remove(&oldest.0);
+                }
             }
-        }
-        while self.recent.len() > MAX_PENDING_MENUS {
-            let Some(&first) = self.recent.keys().next() else {
-                break;
-            };
-            self.recent.remove(&first);
         }
     }
 
@@ -603,12 +635,19 @@ impl Session {
         let limit = usize::try_from(limit).unwrap_or(0);
         let total = message.number(4).unwrap_or(0);
 
+        let key = (descriptor, total);
         let items = self
             .menus
-            .get(&(descriptor, total))
+            .get(&key)
             .or_else(|| self.recent.get(&descriptor))
             .unwrap_or(&self.last)
             .clone();
+        // Paging a set is using it, so it must not become the eviction
+        // candidate. Without this, the list a DJ scrolls for a minute is
+        // exactly the set the bound throws away.
+        if self.menus.contains_key(&key) {
+            self.touch(key);
+        }
 
         push(out, &Message::menu_header(transaction));
         for item in items.iter().skip(offset).take(limit) {

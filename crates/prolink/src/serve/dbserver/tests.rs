@@ -1931,3 +1931,99 @@ fn genres_by_artist_count(library: &Library) -> (u32, u32) {
         .map_or(0, |(id, _)| *id);
     (crowded, lonely)
 }
+
+/// The failure hardware found: a list being paged is evicted by newer menus.
+mod eviction {
+    use super::*;
+
+    fn rows(count: usize, tag: u32) -> Vec<MenuItem> {
+        (0..count)
+            .map(|index| {
+                MenuItem::track(
+                    tag + u32::try_from(index).unwrap_or(0),
+                    "title",
+                    "",
+                    ItemType::TRACK_TITLE,
+                    0,
+                )
+            })
+            .collect()
+    }
+
+    /// Page a set the way a deck does: `RENDER_MENU` naming its descriptor and
+    /// the count it was answered with, never re-issuing the menu request.
+    fn page(session: &mut Session, descriptor: u32, total: u32) -> Vec<MenuItem> {
+        let mut out = Vec::new();
+        let parsed = Descriptor::parse(descriptor).expect("a descriptor");
+        let request = Message::render_of(1, parsed, 0, 6, total);
+        session.render(&request, &mut out);
+        let mut offset = 0;
+        let mut items = Vec::new();
+        while offset < out.len() {
+            let Ok((message, used)) = Message::decode(&out[offset..]) else {
+                break;
+            };
+            offset += used;
+            if message.kind == MessageKind::MENU_ITEM
+                && let Some(item) = MenuItem::from_message(&message)
+            {
+                items.push(item);
+            }
+        }
+        items
+    }
+
+    #[test]
+    fn a_list_being_paged_is_not_evicted_by_newer_menus() {
+        // A deck polls a loaded track's metadata every couple of seconds and
+        // every poll mints a fresh set. Evicting by insertion order threw away
+        // the long-lived list the DJ was scrolling, which on hardware looked
+        // like every menu going blank about a minute into any track and staying
+        // blank until the DJ left LINK. One connection in that capture minted
+        // 44 sets against a bound of 32.
+        let mut session = Session::default();
+        let list = 0x0101_0301;
+        let metadata = 0x0102_0301;
+
+        session.remember(list, 500, rows(500, 1_000_000));
+
+        let polls = u32::try_from(MAX_PENDING_MENUS)
+            .unwrap_or(u32::MAX)
+            .saturating_mul(2);
+        for poll in 0..polls {
+            // Each poll is a distinct key, as a real one is: the count is the
+            // same thirteen but the descriptor's menu target differs, and a DJ
+            // scrolling albums mints one key per album size besides.
+            session.remember(metadata + poll, 13, rows(13, poll));
+            let paged = page(&mut session, list, 500);
+            assert_eq!(
+                paged.len(),
+                6,
+                "the list vanished after {poll} metadata polls",
+            );
+            assert_eq!(
+                paged.first().map(|item| item.id),
+                Some(1_000_000),
+                "a different menu was served in its place after {poll} polls",
+            );
+        }
+    }
+
+    #[test]
+    fn the_table_still_has_a_bound() {
+        // The fix must not turn the bound off: a connection that never forgets
+        // grows for as long as a DJ browses.
+        let mut session = Session::default();
+        let sets = u32::try_from(MAX_PENDING_MENUS)
+            .unwrap_or(u32::MAX)
+            .saturating_mul(3);
+        for index in 0..sets {
+            session.remember(index, 4, rows(4, index));
+        }
+        assert!(
+            session.menus.len() <= MAX_PENDING_MENUS,
+            "held {} sets against a bound of {MAX_PENDING_MENUS}",
+            session.menus.len(),
+        );
+    }
+}

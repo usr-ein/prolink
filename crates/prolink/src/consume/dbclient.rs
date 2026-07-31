@@ -692,6 +692,19 @@ impl DbClient {
     /// argument 2 its UTF-16 size including the NUL; reading argument 2 as the
     /// term is why search once matched nothing (F44). [`Message::search`]
     /// builds it, so the order cannot be got wrong here.
+    ///
+    /// # The term goes out upper-cased
+    ///
+    /// **A real player's search is case-sensitive against an upper-cased
+    /// index** — *a new observation, not yet in the research record.* Every one
+    /// of the eleven `MENU_SEARCH` requests in `S20-browse-ground-truth` carries
+    /// its term in capitals (`H`, `HE`, `HEL`, `HELO`, then `B`, `BI`, `BIT`),
+    /// because the deck's on-screen keyboard has no lower case to send. A
+    /// player therefore never has to fold case, and evidently does not: sending
+    /// `bit` to a real CDJ matches nothing at all, where `BIT` matches.
+    ///
+    /// So this upper-cases on the way out, which is what the hardware we are
+    /// imitating does. Our own server folds both sides and would accept either.
     pub async fn search(
         &mut self,
         slot: Slot,
@@ -699,7 +712,12 @@ impl DbClient {
         sort: SortOrder,
     ) -> Result<Vec<MenuItem>> {
         let descriptor = self.main(slot);
-        let request = Message::search(self.next_transaction(), descriptor, sort, term);
+        let request = Message::search(
+            self.next_transaction(),
+            descriptor,
+            sort,
+            &term.to_uppercase(),
+        );
         self.paged(request, descriptor).await
     }
 

@@ -221,10 +221,35 @@ fn cues(medium: Option<&Medium>, track_id: u32) -> Vec<Cue> {
         return Vec::new();
     };
     let parsed = medium.analysis(track_id);
-    let Some(dat) = parsed.dat.as_ref() else {
-        return Vec::new();
-    };
-    dat.cue_lists()
+    let from_dat: Vec<Cue> = parsed
+        .dat
+        .as_ref()
+        .into_iter()
+        .flat_map(prolink_rekordbox::AnlzFile::cue_lists)
+        .flat_map(|list| list.cues.iter())
+        .map(|cue| Cue {
+            order: u16::from(cue.cue_type.0).saturating_mul(0x100),
+            hot_cue: u16::try_from(cue.hot_cue).unwrap_or(u16::MAX),
+            time_ms: cue.time,
+            loop_time_ms: cue.loop_time,
+        })
+        .collect();
+    if !from_dat.is_empty() {
+        return from_dat;
+    }
+
+    // **Fall back to the `.EXT`'s extended lists.** The `.DAT`'s `PCOB` is the
+    // only place the reference implementation looked, and on hardware that
+    // produced a `0x4702` reply carrying two *empty* blobs where a real deck
+    // sends two full ones — caught by diffing our replies against a deck's for
+    // the same requests. A track whose cues rekordbox wrote only as nxs2
+    // `PCO2` entries has nothing in `PCOB` at all, and an empty reply is not an
+    // error, so nothing else would ever have reported it.
+    parsed
+        .ext
+        .as_ref()
+        .into_iter()
+        .flat_map(prolink_rekordbox::AnlzFile::extended_cue_lists)
         .flat_map(|list| list.cues.iter())
         .map(|cue| Cue {
             order: u16::from(cue.cue_type.0).saturating_mul(0x100),
