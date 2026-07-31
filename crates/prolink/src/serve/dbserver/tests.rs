@@ -24,7 +24,7 @@
 use std::time::Duration;
 
 use prolink_proto::dbserver::{
-    Arguments, Descriptor, Drill, FILTER_ALL, ItemType, METADATA_ITEMS, MenuTarget,
+    Arguments, Descriptor, Drill, FILTER_ALL, ItemType, METADATA_ITEMS, MediaInfo, MenuTarget,
     ROOT_CATEGORIES, SORT_MENU, SortOrder, TRACK_INFO_ITEMS, TrackType, drill_kind, menu_label,
 };
 use prolink_rekordbox::Library;
@@ -535,19 +535,19 @@ fn every_request_a_real_deck_sends_draws_a_reply_and_never_an_error() {
 }
 
 #[test]
-fn the_four_undecoded_request_types_are_acknowledged_rather_than_refused() {
-    // `0x3001`, `0x3401`, `0x3903` and `0x3b03` appear around a loaded track
-    // and nobody has decoded any of them. A real deck answers three with a
-    // `SUCCESS` carrying a count we cannot explain; we answer zero, which is
-    // the same shape and is not a refusal.
+fn the_undecoded_request_types_are_acknowledged_rather_than_refused() {
+    // `0x3001`, `0x3401` and `0x3b03` appear around a loaded track and nobody
+    // has decoded any of them. A real deck answers them with a `SUCCESS`
+    // carrying a count we cannot explain; we answer zero, which is the same
+    // shape and is not a refusal.
+    //
+    // **`0x3903` used to be in this list and is not undecoded any more.** It is
+    // "describe this medium", and answering it as an unknown request cost a
+    // real deck its whole browse session — see
+    // `a_medium_description_is_not_an_acknowledgement` below.
     let shared = shared([usb()]);
     let mut session = Session::default();
-    for name in [
-        "unknown_3001",
-        "unknown_3401",
-        "unknown_3903",
-        "unknown_3b03",
-    ] {
+    for name in ["unknown_3001", "unknown_3401", "unknown_3b03"] {
         let text = CAPTURED_REQUESTS
             .iter()
             .find(|(fixture, _)| *fixture == name)
@@ -563,6 +563,35 @@ fn the_four_undecoded_request_types_are_acknowledged_rather_than_refused() {
             "{name} echoes its own type"
         );
     }
+}
+
+#[test]
+fn a_medium_description_is_not_an_acknowledgement() {
+    // `0x3903` is answered by a real deck with `0x4902` carrying a 148-byte
+    // body describing the medium — the same volume name, creation date, counts
+    // and sizes the UDP media query returns, little-endian. Answering it with a
+    // bare `SUCCESS`, as an unknown request, is what left a deck with blank
+    // menus, the track title replaced by the medium's own name and no scrolling
+    // waveform, until the DJ left LINK and came back.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let text = CAPTURED_REQUESTS
+        .iter()
+        .find(|(fixture, _)| *fixture == "unknown_3903")
+        .map(|(_, text)| *text)
+        .expect("a captured fixture");
+
+    let replies = ask(&mut session, &shared, &decode(text));
+    assert_eq!(replies.len(), 1);
+    assert_eq!(replies[0].kind, MessageKind::MEDIA_INFO);
+    assert_eq!(
+        replies[0].number(0),
+        Some(u32::from(MessageKind::GET_MEDIA_INFO.0))
+    );
+
+    let body = replies[0].blob(3).expect("the body");
+    let info = MediaInfo::parse(body).expect("it parses");
+    assert_eq!(info.track_count, 651, "the true count, as everywhere else");
 }
 
 #[test]

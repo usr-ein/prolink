@@ -38,7 +38,9 @@ use prolink::serve::dbserver::{DbServer, DbServerConfig};
 use prolink::serve::nfs::{NfsConfig as ServerNfsConfig, NfsServer};
 use prolink::serve::{Medium, ServedSlot, Vfs};
 use prolink::{BrowsableDeviceNumber, Slot};
-use prolink_proto::dbserver::{Drill, ItemType, MessageKind, SortOrder};
+use prolink_proto::dbserver::{
+    Drill, ItemType, MediaInfo, MenuTarget, MessageKind, SortOrder, TrackType,
+};
 use prolink_rekordbox::Library;
 
 const LOOPBACK: Ipv4Addr = Ipv4Addr::LOCALHOST;
@@ -353,6 +355,40 @@ async fn a_list_being_scrolled_survives_a_minute_of_metadata_polling() {
         after.first().map(|item| item.id),
         all.first().map(|item| item.id),
         "and it is the same list, not another menu served in its place",
+    );
+}
+
+#[tokio::test]
+async fn a_deck_asking_to_describe_the_medium_gets_a_description() {
+    // `0x3903` is not an unknown request and must not be answered as one. A
+    // deck sends it during a load and expects `0x4902` with a 148-byte body;
+    // a bare SUCCESS costs it the whole browse session — menus blank, the track
+    // title falls back to the medium's own name, the scrolling waveform stops —
+    // until the DJ leaves LINK and comes back. Observed on hardware.
+    let (_server, port) = serve_usb().await;
+    let mut client = client(port).await;
+
+    let descriptor = client.descriptor(Slot::USB, MenuTarget::BINARY, TrackType::REKORDBOX);
+    let request = prolink_proto::dbserver::Message::new(
+        0x0380_0001,
+        MessageKind::GET_MEDIA_INFO,
+        [prolink_proto::dbserver::Field::U32(descriptor.to_raw())],
+    );
+    let reply = client.request(request).await.expect("a reply");
+
+    assert_eq!(
+        reply.kind,
+        MessageKind::MEDIA_INFO,
+        "a bare SUCCESS here is what broke a real deck",
+    );
+    let body = reply.blob(3).expect("the 148-byte body");
+    assert_eq!(body.len(), MediaInfo::LEN);
+
+    let info = MediaInfo::parse(body).expect("it parses");
+    assert_eq!(info.volume_name, "TEST STICK");
+    assert_eq!(
+        info.track_count, 651,
+        "the true count, the same one the UDP media query is answered with",
     );
 }
 

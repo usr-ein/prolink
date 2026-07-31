@@ -29,6 +29,12 @@ pub struct MediaDescription {
     /// **Legitimately empty**: an unlabelled stick reports no name while
     /// carrying a full library, so emptiness here is not emptiness of the slot.
     pub volume_name: String,
+    /// The medium's creation date, as `YYYY-MM-DD`.
+    ///
+    /// Carried by both replies that describe a medium — the UDP `0x06` and the
+    /// dbserver `0x4902` — so they are filled from one place and cannot
+    /// disagree. Empty when unknown, which no deck has been observed to mind.
+    pub created: String,
     /// How many tracks the medium holds. Must be the true count.
     pub track_count: u32,
     /// How many playlists the medium holds. Must be the true count.

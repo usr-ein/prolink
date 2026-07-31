@@ -109,6 +109,7 @@ pub struct Medium {
     library: Library,
     root: Option<PathBuf>,
     volume_name: String,
+    created: String,
     settings: Vec<u8>,
     /// track id → its analysis. A load asks for four tags across two files
     /// within milliseconds, and asks again when the DJ reloads the same track.
@@ -149,6 +150,7 @@ impl Medium {
             library,
             root: Some(volume.to_path_buf()),
             volume_name,
+            created: String::new(),
             settings,
             analysis: Mutex::new(BTreeMap::new()),
         })
@@ -162,6 +164,7 @@ impl Medium {
             library,
             root: None,
             volume_name: volume_name.to_owned(),
+            created: String::new(),
             settings: Vec::new(),
             analysis: Mutex::new(BTreeMap::new()),
         }
@@ -199,6 +202,7 @@ impl Medium {
     pub fn description(&self) -> MediaDescription {
         MediaDescription {
             volume_name: self.volume_name.clone(),
+            created: self.created.clone(),
             track_count: u32::try_from(self.library.tracks.len()).unwrap_or(u32::MAX),
             playlist_count: u32::try_from(
                 self.library

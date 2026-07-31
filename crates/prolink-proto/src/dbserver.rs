@@ -712,6 +712,19 @@ impl MessageKind {
     /// it never issues a single READ — a load that resolves the path perfectly
     /// and then does nothing.
     pub const GET_VBR_INDEX: Self = Self(0x2504);
+    /// "Describe the medium in this slot."
+    ///
+    /// Sent during a load, on the binary descriptor. **Answered with
+    /// [`Self::MEDIA_INFO`] carrying a 148-byte body, not with a bare
+    /// `SUCCESS`** — *a new observation, not in the research record, which
+    /// lists `0x3903` among the undecoded types seen around a loaded track.*
+    ///
+    /// Answering it as an unknown request costs the whole browse session: a
+    /// deck that gets `SUCCESS` here loses its menus, drops the track title
+    /// back to the medium's own name, and stops drawing the scrolling
+    /// waveform, until the DJ leaves LINK and comes back. See
+    /// [`MediaInfo`] for the body and for how it was decoded.
+    pub const GET_MEDIA_INFO: Self = Self(0x3903);
     /// The detailed waveform.
     pub const GET_WAVEFORM_DETAIL: Self = Self(0x2904);
     /// Extended cue points, CDJ-2000NXS2 and later.
@@ -756,6 +769,8 @@ impl MessageKind {
     pub const WAVEFORM_PREVIEW: Self = Self(0x4402);
     /// The MP3 variable-bitrate seek index.
     pub const VBR_INDEX: Self = Self(0x4502);
+    /// The answer to [`Self::GET_MEDIA_INFO`]: a medium's description.
+    pub const MEDIA_INFO: Self = Self(0x4902);
     /// The beat grid.
     pub const BEAT_GRID: Self = Self(0x4602);
     /// Memory points and hot cues.
@@ -804,6 +819,8 @@ impl MessageKind {
             Self::GET_GENERIC_METADATA => "get_generic_metadata",
             Self::GET_BEAT_GRID => "get_beat_grid",
             Self::GET_VBR_INDEX => "get_vbr_index",
+            Self::GET_MEDIA_INFO => "get_media_info",
+            Self::MEDIA_INFO => "media_info",
             Self::GET_WAVEFORM_DETAIL => "get_waveform_detail",
             Self::GET_CUE_POINTS_EXT => "get_cue_points_ext",
             Self::GET_ANALYSIS_TAG => "get_analysis_tag",
@@ -2641,10 +2658,40 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_message_type_decodes_instead_of_failing() {
+    fn a_media_info_body_matches_the_one_a_real_deck_sent() {
+        // The whole reply, captured from a CDJ-2000NXS answering `0x3903`.
         let raw = hex(BINARY_REPLY);
         let (message, _) = Message::decode(&raw).unwrap();
-        assert_eq!(message.kind, MessageKind(0x4902));
+        assert_eq!(message.kind, MessageKind::MEDIA_INFO);
+        let body = message.blob(3).expect("the 148-byte body");
+
+        let parsed = MediaInfo::parse(body).expect("it parses");
+        assert_eq!(
+            parsed.volume_name, "SAM2",
+            "UTF-16 *little*-endian, unlike every other string here"
+        );
+        assert_eq!(parsed.created, "2025-06-24");
+        // The two counts are what tie this body to the UDP media response for
+        // the same medium, which reports exactly these.
+        assert_eq!(parsed.track_count, 692);
+        assert_eq!(parsed.playlist_count, 35);
+        assert_eq!(parsed.total_bytes, 0x28ca_8000);
+
+        // And ours is byte-identical to the deck's, unknown words included.
+        assert_eq!(parsed.encode(), body, "we must send what a deck sends");
+    }
+
+    #[test]
+    fn an_unknown_message_type_decodes_instead_of_failing() {
+        // A blob argument that is *present*, and a message whose type this
+        // crate does not model surviving a round trip intact. `0x4902` used to
+        // be the unnamed one here; it is `media_info` now, so the type byte is
+        // moved to one nothing names.
+        let mut raw = hex(BINARY_REPLY);
+        raw[11] = 0x7f;
+        raw[12] = 0x7f;
+        let (message, _) = Message::decode(&raw).unwrap();
+        assert_eq!(message.kind, MessageKind(0x7f7f));
         assert_eq!(message.kind.name(), None);
         assert_eq!(message.blob(3).map(<[u8]>::len), Some(148));
         assert_eq!(message.encode(), raw, "and survives a round trip");
@@ -3210,4 +3257,146 @@ mod tests {
     fn the_preamble_is_a_uint32_field_holding_one() {
         assert_eq!(PREAMBLE, [0x11, 0x00, 0x00, 0x00, 0x01]);
     }
+}
+
+/// The body of a [`MessageKind::MEDIA_INFO`] reply: a medium's description.
+///
+/// # What this is, and how we know
+///
+/// `0x3903` appears in the research record only as one of four undecoded
+/// message types "seen around a loaded track". It is not undecoded any more.
+/// A real deck answers it with `0x4902` carrying 148 bytes, and those bytes are
+/// the *same description the UDP media query returns* — the volume name, the
+/// creation date, the track and playlist counts and the medium's size — laid
+/// out differently and in the opposite byte order:
+///
+/// ```text
+/// 0x00  volume name    64 bytes, UTF-16 little-endian    "SAM2"
+/// 0x40  created        24 bytes, UTF-16 little-endian    "2025-06-24"
+/// 0x58  unknown         8 bytes, UTF-16 little-endian    "1000"
+/// 0x60  zeros          24 bytes
+/// 0x78  u32 LE         track count                       692
+/// 0x7c  u32 LE         unknown, 0x01010000 observed
+/// 0x80  u32 LE         playlist count                    35
+/// 0x84  u32 LE         unknown, 7 observed
+/// 0x88  u32 LE         total bytes
+/// 0x8c  u32 LE         unknown, 5 observed
+/// 0x90  u32 LE         free bytes
+/// ```
+///
+/// The two counts and the two sizes are what tie it to the UDP reply: the
+/// sample carries 692 tracks and 35 playlists, which is exactly what that
+/// medium's `0x06` response reports, and the same total-bytes word appears in
+/// both — big-endian there, little-endian here. **Note the endianness**: every
+/// other string in this protocol is UTF-16 *big*-endian, and this one is not.
+///
+/// The four unknown words are reproduced as observed. Substituting a plausible
+/// zero is what this codebase does not do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MediaInfo {
+    /// The volume label, as the DJ formatted it.
+    pub volume_name: String,
+    /// The medium's creation date, e.g. `2025-06-24`.
+    pub created: String,
+    /// How many tracks it holds. The true count, as everywhere else (F24).
+    pub track_count: u32,
+    /// How many playlists it holds.
+    pub playlist_count: u32,
+    /// Capacity in bytes.
+    pub total_bytes: u32,
+    /// Free space in bytes.
+    pub free_bytes: u32,
+}
+
+impl MediaInfo {
+    /// Bytes the body occupies.
+    pub const LEN: usize = 148;
+
+    const OFF_VOLUME: usize = 0x00;
+    const LEN_VOLUME: usize = 0x40;
+    const OFF_CREATED: usize = 0x40;
+    const LEN_CREATED: usize = 0x18;
+    const OFF_UNKNOWN_TEXT: usize = 0x58;
+    const OFF_TRACKS: usize = 0x78;
+    const OFF_PLAYLISTS: usize = 0x80;
+    const OFF_TOTAL: usize = 0x88;
+    const OFF_FREE: usize = 0x90;
+
+    /// Encode the body a real deck sends.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut body = vec![0u8; Self::LEN];
+        put_utf16le(
+            &mut body,
+            Self::OFF_VOLUME,
+            Self::LEN_VOLUME,
+            &self.volume_name,
+        );
+        put_utf16le(
+            &mut body,
+            Self::OFF_CREATED,
+            Self::LEN_CREATED,
+            &self.created,
+        );
+        // Reproduced from the one capture; meaning unknown.
+        put_utf16le(&mut body, Self::OFF_UNKNOWN_TEXT, 8, "1000");
+        put_u32le(&mut body, Self::OFF_TRACKS, self.track_count);
+        put_u32le(&mut body, Self::OFF_TRACKS + 4, 0x0101_0000);
+        put_u32le(&mut body, Self::OFF_PLAYLISTS, self.playlist_count);
+        put_u32le(&mut body, Self::OFF_PLAYLISTS + 4, 7);
+        put_u32le(&mut body, Self::OFF_TOTAL, self.total_bytes);
+        put_u32le(&mut body, Self::OFF_TOTAL + 4, 5);
+        put_u32le(&mut body, Self::OFF_FREE, self.free_bytes);
+        body
+    }
+
+    /// Read a body a peer sent, or `None` if it is the wrong length.
+    pub fn parse(body: &[u8]) -> Option<Self> {
+        if body.len() < Self::LEN {
+            return None;
+        }
+        Some(Self {
+            volume_name: utf16le(body, Self::OFF_VOLUME, Self::LEN_VOLUME),
+            created: utf16le(body, Self::OFF_CREATED, Self::LEN_CREATED),
+            track_count: u32le(body, Self::OFF_TRACKS),
+            playlist_count: u32le(body, Self::OFF_PLAYLISTS),
+            total_bytes: u32le(body, Self::OFF_TOTAL),
+            free_bytes: u32le(body, Self::OFF_FREE),
+        })
+    }
+}
+
+/// UTF-16 **little**-endian, which this one body uses and nothing else here
+/// does.
+fn put_utf16le(out: &mut [u8], offset: usize, width: usize, text: &str) {
+    let Some(field) = out.get_mut(offset..offset.saturating_add(width)) else {
+        return;
+    };
+    for (pair, unit) in field.chunks_exact_mut(2).zip(text.encode_utf16()) {
+        pair.copy_from_slice(&unit.to_le_bytes());
+    }
+}
+
+fn put_u32le(out: &mut [u8], offset: usize, value: u32) {
+    if let Some(field) = out.get_mut(offset..offset.saturating_add(4)) {
+        field.copy_from_slice(&value.to_le_bytes());
+    }
+}
+
+fn utf16le(body: &[u8], offset: usize, width: usize) -> String {
+    let Some(field) = body.get(offset..offset.saturating_add(width)) else {
+        return String::new();
+    };
+    let units: Vec<u16> = field
+        .chunks_exact(2)
+        .filter_map(|pair| <[u8; 2]>::try_from(pair).ok())
+        .map(u16::from_le_bytes)
+        .take_while(|&unit| unit != 0)
+        .collect();
+    String::from_utf16_lossy(&units)
+}
+
+fn u32le(body: &[u8], offset: usize) -> u32 {
+    body.get(offset..offset.saturating_add(4))
+        .and_then(|field| <[u8; 4]>::try_from(field).ok())
+        .map_or(0, u32::from_le_bytes)
 }

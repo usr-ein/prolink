@@ -70,6 +70,8 @@ and a deck with nothing there retries `GETPORT` once a second for ever rather
 than falling back to the well-known ports. On Linux you can instead set
 `net.ipv4.ip_unprivileged_port_start=111`; macOS has no equivalent. If the port
 cannot be taken, `serve` says so rather than starting something unreachable.
+[`docs/TESTING.md`](docs/TESTING.md) has an `install.sh` and a scoped sudoers
+rule so it stops asking for a password.
 
 A second USB stick presented with `--sd` appears to a CDJ as an SD card, which is
 exactly what it expects to see. Both media are served over one dbserver

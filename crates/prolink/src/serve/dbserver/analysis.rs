@@ -34,7 +34,7 @@
 use std::time::Duration;
 
 use prolink_proto::analysis::{self, Cue, PrefixWord};
-use prolink_proto::dbserver::{Arguments, Field, Message, MessageKind};
+use prolink_proto::dbserver::{Arguments, Field, MediaInfo, Message, MessageKind};
 use prolink_rekordbox::FourCc;
 
 use crate::serve::Medium;
@@ -66,6 +66,9 @@ pub(super) fn reply(
     }
     if kind == MessageKind::GET_CUE_POINTS {
         return Some(cue_points(transaction, medium, track_id));
+    }
+    if kind == MessageKind::GET_MEDIA_INFO {
+        return Some(media_info(transaction, medium));
     }
 
     let (response, payload, trailing) = match kind {
@@ -128,11 +131,48 @@ pub(super) fn reply(
     Message::binary_reply(transaction, response, kind, payload, trailing)
 }
 
-/// Whether `kind` is one of the six requests [`reply`] answers.
+/// Describe the medium, in answer to `0x3903`.
+///
+/// **Answering this as an unknown request costs the whole browse session.**
+/// A deck asks it during a load and expects `0x4902` with a 148-byte body; give
+/// it a bare `SUCCESS` and it loses its menus, drops the track title back to the
+/// medium's own name — `USB@PLAYER4` on the screen — and stops drawing the
+/// scrolling waveform, until the DJ leaves LINK and comes back. Observed on
+/// hardware; see [`MediaInfo`] for how the body was decoded.
+///
+/// The counts are the true ones, as everywhere (F24). The creation date and the
+/// two sizes are the values our UDP media response also sends, so a deck that
+/// asks both ways is told the same thing twice; they are the medium's, not
+/// ours, and we do not yet read them off the volume.
+fn media_info(transaction: u32, medium: Option<&Medium>) -> Message {
+    let description = medium.map(Medium::description).unwrap_or_default();
+    let body = MediaInfo {
+        volume_name: description.volume_name,
+        created: description.created,
+        track_count: description.track_count,
+        playlist_count: description.playlist_count,
+        total_bytes: description.total_bytes.unwrap_or(0),
+        free_bytes: description.free_bytes.unwrap_or(0),
+    }
+    .encode();
+    Message::new(
+        transaction,
+        MessageKind::MEDIA_INFO,
+        [
+            Field::U32(MessageKind::GET_MEDIA_INFO.0.into()),
+            Field::U32(0),
+            Field::U32(u32::try_from(body.len()).unwrap_or(0)),
+            Field::Blob(body),
+        ],
+    )
+}
+
+/// Whether `kind` is one of the requests [`reply`] answers.
 pub(super) fn is_binary_request(kind: MessageKind) -> bool {
     matches!(
         kind,
         MessageKind::GET_ARTWORK
+            | MessageKind::GET_MEDIA_INFO
             | MessageKind::GET_CUE_POINTS
             | MessageKind::GET_VBR_INDEX
             | MessageKind::GET_BEAT_GRID
