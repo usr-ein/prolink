@@ -72,8 +72,27 @@ log is what every fix in this repository was made from — three separate bugs
 were found by diffing our replies against a real deck's for the same requests,
 and none of them produced an error message anywhere.
 
-**Capture on the machine running `prolink`, not on a bridge interface.** A
-bridge floods broadcast but forwards learned unicast directly between members,
-so the capture looks healthy while missing exactly the traffic of interest — two
-findings in the research record were contaminated that way. Verify a tap with
-unicast, not broadcast.
+### Capturing deck-to-deck
+
+**Tap a bridge *member*, never the bridge itself.** A BSD bridge floods
+broadcast to every member and to the host, but forwards learned unicast
+**directly from one member port to the other**. A tap on `bridge1` therefore
+sees the host's own traffic and the broadcast — UDP 50000 keep-alives and UDP
+50001 beats — and none of the unicast that carries everything worth having:
+status on 50002, dbserver on 1051, NFS on 2049.
+
+The resulting capture looks healthy and is worthless. This has now cost four
+sessions, two of them after this file already warned about it.
+
+```sh
+sudo tools/capture-deck-to-deck.sh ~/prolink-key
+```
+
+taps every member of the bridge to its own file and, on Ctrl-C, prints how much
+dbserver, status and NFS traffic each one caught. A frame between the decks
+crosses both members, so one file is normally enough; both are taken because
+which direction lands on which member is a property of the bridge and not worth
+betting a session on.
+
+**Verify with unicast, never with broadcast.** Seeing keep-alives proves only
+that the cable is live. The check that matters is `tcp port 1051`.
