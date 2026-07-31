@@ -59,6 +59,7 @@ pub mod device;
 pub mod discovery;
 pub mod interface;
 pub mod media;
+pub mod serve;
 pub mod virtual_cdj;
 
 mod error;

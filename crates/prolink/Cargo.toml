@@ -17,6 +17,7 @@ prolink-proto.workspace = true
 prolink-rekordbox.workspace = true
 
 network-interface.workspace = true
+sha2.workspace = true
 socket2 = "0.6"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "time", "sync", "macros", "io-util", "fs"] }
