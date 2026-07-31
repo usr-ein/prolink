@@ -272,6 +272,10 @@ struct Census {
     shortened: u64,
     largest_shortened: usize,
     short_mid_file: u64,
+    /// Lookups skipped because this filesystem would not accept the name the
+    /// reconstruction needed. Zero on a case-insensitive one; a handful on
+    /// Linux, where two spellings are two files rather than one.
+    unbuildable: u64,
     resumed_after_short: u64,
     errors_differed: BTreeMap<(u32, u32), u64>,
     names: BTreeSet<String>,
@@ -558,6 +562,13 @@ fn merge(nodes: &mut BTreeMap<String, Option<u64>>, path: String, size: Option<u
     }
 }
 
+thread_local! {
+    /// Names the reconstruction could not put on this filesystem. See
+    /// [`build_tree`].
+    static MISSING: std::cell::RefCell<std::collections::BTreeSet<String>> =
+        std::cell::RefCell::new(std::collections::BTreeSet::new());
+}
+
 /// Write the reconstructed tree out as sparse files and mount it.
 ///
 /// Sparse because a session may reference 75 MB of audio and the sweep cares
@@ -579,6 +590,22 @@ fn build_tree(session: &Session, root: &Path) -> Vfs {
                     let _ = file.set_len(*size);
                 }
             }
+        }
+        // What the filesystem would not give us. Two paths differing only in
+        // case are one file on macOS and two on Linux, and a name the
+        // reconstruction could not create is a limitation of this fixture
+        // rather than a disagreement with the captured server — asserting on
+        // it would report a bug that is not there, which is what it did the
+        // first time this ran on a case-sensitive filesystem.
+        if !on_disk.exists() {
+            MISSING.with(|missing| {
+                missing.borrow_mut().insert(
+                    on_disk
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                );
+            });
         }
     }
     let mut vfs = Vfs::new();
@@ -709,21 +736,26 @@ async fn replay(
     }
 }
 
-fn describe(replayed: &Replayed) -> String {
-    // The name a LOOKUP asked for, where there is one. Without it a failure
-    // says only that some lookup disagreed, which is not enough to tell a
-    // fixture problem from a server one — and the difference showed up the
-    // first time this ran on a case-sensitive filesystem.
-    // Through `Call::parse`, as everything else here does: the RPC header is
-    // not a fixed width and guessing one gets no name at all.
-    let named = Call::parse(&replayed.datagram)
+/// The name a `LOOKUP` asked for, if this call was one.
+///
+/// Through `Call::parse`, as everything else here does: the RPC header is not
+/// a fixed width and guessing one gets no name at all.
+fn looked_up(replayed: &Replayed) -> Option<String> {
+    Call::parse(&replayed.datagram)
         .ok()
         .and_then(|call| nfs2::Request::parse(nfs2::Proc(call.procedure), call.arguments).ok())
         .and_then(|request| match request {
             nfs2::Request::Lookup { name, .. } => Some(name.to_string()),
             _ => None,
-        });
-    match named {
+        })
+}
+
+fn describe(replayed: &Replayed) -> String {
+    // The name a LOOKUP asked for, where there is one. Without it a failure
+    // says only that some lookup disagreed, which is not enough to tell a
+    // fixture problem from a server one — and that difference showed up the
+    // first time this ran on a case-sensitive filesystem.
+    match looked_up(replayed) {
         Some(name) => format!(
             "{} {name:?}",
             procedure_name(replayed.program, replayed.procedure)
@@ -811,6 +843,15 @@ fn check_nfs(replayed: &Replayed, results: &[u8], census: &mut Census) {
         return;
     };
     if !agrees(answer.status(), theirs, census) {
+        return;
+    }
+    // A name this filesystem would not accept is the fixture's problem, not
+    // the server's.
+    if answer.status() == Status::NOENT
+        && let Some(name) = looked_up(replayed)
+        && MISSING.with(|missing| missing.borrow().contains(&name))
+    {
+        census.unbuildable += 1;
         return;
     }
     assert_eq!(
