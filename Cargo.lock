@@ -750,6 +750,7 @@ dependencies = [
  "cxx-build",
  "prolink",
  "prolink-proto",
+ "prolink-rekordbox",
  "tokio",
  "tracing",
 ]

@@ -1177,7 +1177,10 @@ mod tests {
 
     fn hex(text: &str) -> Vec<u8> {
         let digits: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
-        assert!(digits.len() % 2 == 0, "a hex literal needs an even length");
+        assert!(
+            digits.len().is_multiple_of(2),
+            "a hex literal needs an even length"
+        );
         digits
             .chunks_exact(2)
             .map(|pair| {

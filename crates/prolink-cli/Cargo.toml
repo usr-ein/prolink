@@ -7,7 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 readme = "README.md"
 repository.workspace = true
-documentation.workspace = true
+# The binary carries no rustdoc (see `doc = false` below), so this points at
+# the prose that does document it rather than at an empty docs.rs page.
+documentation = "https://github.com/usr-ein/prolink#using-it"
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true

@@ -170,10 +170,10 @@ impl Reassembler {
             return;
         };
         let flow = Flow::of(packet);
-        if let Some(ports) = &self.ports {
-            if !ports.iter().any(|&port| flow.involves(port)) {
-                return;
-            }
+        if let Some(ports) = &self.ports
+            && !ports.iter().any(|&port| flow.involves(port))
+        {
+            return;
         }
         if !syn && packet.payload.is_empty() {
             // A bare acknowledgement, FIN or RST carries no bytes and tells us

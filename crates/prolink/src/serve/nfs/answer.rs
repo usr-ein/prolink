@@ -683,7 +683,10 @@ mod tests {
     /// wrapped for reading.
     fn hex(text: &str) -> Vec<u8> {
         let digits: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
-        assert!(digits.len() % 2 == 0, "an even number of hex digits");
+        assert!(
+            digits.len().is_multiple_of(2),
+            "an even number of hex digits"
+        );
         digits
             .chunks_exact(2)
             .map(|pair| {

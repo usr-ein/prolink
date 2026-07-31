@@ -57,7 +57,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           # Keep in step with `rust-version` in the workspace manifest.
-          toolchain: "1.85"
+          toolchain: "1.88"
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-features
 

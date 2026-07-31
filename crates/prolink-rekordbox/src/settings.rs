@@ -253,6 +253,7 @@ impl SettingsFile {
 /// `None` when `rekordcrate` refuses the file, which it does more readily than
 /// this module — it asserts on several fields whose meaning is unknown.
 #[cfg(feature = "settings-detail")]
+#[cfg_attr(docsrs, doc(cfg(feature = "settings-detail")))]
 pub fn detail(data: &[u8]) -> Option<rekordcrate::setting::Setting> {
     use binrw_014::BinRead as _;
 

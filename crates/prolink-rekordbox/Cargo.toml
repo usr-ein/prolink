@@ -7,10 +7,17 @@ rust-version.workspace = true
 license.workspace = true
 readme = "README.md"
 repository.workspace = true
-documentation.workspace = true
+documentation = "https://docs.rs/prolink-rekordbox"
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+
+# `settings-detail` is off by default, so docs.rs would otherwise not show the
+# named settings types at all. Build the docs with it on, and mark the items it
+# gates so the page says which feature they need.
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []

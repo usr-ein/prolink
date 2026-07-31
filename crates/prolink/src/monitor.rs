@@ -568,10 +568,8 @@ impl PlayerTable {
         entry.status = Some((status, now));
 
         let mut events = Vec::new();
-        if changed {
-            if let Some(state) = self.state(device, now) {
-                events.push(MonitorEvent::Status(Box::new(state)));
-            }
+        if changed && let Some(state) = self.state(device, now) {
+            events.push(MonitorEvent::Status(Box::new(state)));
         }
         if let Some(event) = self.settle_master(device, status.is_tempo_master, status.yielding_to)
         {

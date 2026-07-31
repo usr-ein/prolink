@@ -1359,7 +1359,7 @@ mod tests {
                     };
                     let seen = datagrams.fetch_add(1, Ordering::SeqCst) + 1;
                     if behaviour.deaf
-                        || (behaviour.drop_every > 0 && seen % behaviour.drop_every == 0)
+                        || (behaviour.drop_every > 0 && seen.is_multiple_of(behaviour.drop_every))
                     {
                         continue;
                     }

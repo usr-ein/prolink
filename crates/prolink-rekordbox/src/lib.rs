@@ -56,6 +56,11 @@
         clippy::as_conversions
     )
 )]
+// docs.rs builds with `--cfg docsrs` (see `package.metadata.docs.rs`) so that
+// the items behind `settings-detail` are documented with the feature they need
+// shown beside them. `doc_cfg` is nightly-only, which is why it is gated: an
+// ordinary `cargo doc` never sees this.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod anlz;
 pub mod library;

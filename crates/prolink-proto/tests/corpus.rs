@@ -187,13 +187,13 @@ fn discovery_problems(raw: &[u8], source: Option<Ipv4Addr>) -> Vec<String> {
             raw.len()
         ));
     }
-    if let Some(expected) = kind.wire_length() {
-        if usize::from(expected) != raw.len() {
-            problems.push(format!(
-                "{kind:?}: {} bytes on the wire, wire_length says {expected:#04x}",
-                raw.len()
-            ));
-        }
+    if let Some(expected) = kind.wire_length()
+        && usize::from(expected) != raw.len()
+    {
+        problems.push(format!(
+            "{kind:?}: {} bytes on the wire, wire_length says {expected:#04x}",
+            raw.len()
+        ));
     }
     if packet.subtype != 0x00 {
         problems.push(format!("{kind:?}: subtype {:#04x}", packet.subtype));
@@ -210,10 +210,10 @@ fn discovery_problems(raw: &[u8], source: Option<Ipv4Addr>) -> Vec<String> {
             packet.trailing.len()
         ));
     }
-    if let (Some(claimed), Some(actual)) = (packet.body.ip(), source) {
-        if claimed != actual {
-            problems.push(format!("{kind:?}: body says {claimed}, sent from {actual}"));
-        }
+    if let (Some(claimed), Some(actual)) = (packet.body.ip(), source)
+        && claimed != actual
+    {
+        problems.push(format!("{kind:?}: body says {claimed}, sent from {actual}"));
     }
     problems
 }
@@ -268,13 +268,13 @@ fn status_problems(raw: &[u8], source: Option<Ipv4Addr>) -> Vec<String> {
         status::Packet::MediaQuery(query) => {
             // The requester names itself by address as well as by number, and
             // the two must be the address the datagram came from.
-            if let Some(actual) = source {
-                if query.requester_ip != actual {
-                    problems.push(format!(
-                        "media_query: names {} but was sent from {actual}",
-                        query.requester_ip
-                    ));
-                }
+            if let Some(actual) = source
+                && query.requester_ip != actual
+            {
+                problems.push(format!(
+                    "media_query: names {} but was sent from {actual}",
+                    query.requester_ip
+                ));
             }
             if Some(query.requester.get()) != raw.get(0x21).copied() {
                 problems.push("media_query: requester disagrees with byte 0x21".to_owned());
@@ -544,7 +544,7 @@ fn pad_problems(arguments: &[u8], encoded: &[u8], found: &mut RpcCall) {
 fn utf16le_problems(label: &str, name: &rpc::xdr::Utf16LeString) -> Vec<String> {
     let mut problems = Vec::new();
     let bytes = name.as_bytes();
-    if bytes.len() % 2 != 0 {
+    if !bytes.len().is_multiple_of(2) {
         problems.push(format!(
             "{label}: {} bytes of UTF-16, which is an odd number",
             bytes.len()

@@ -55,6 +55,7 @@
 
 mod browse;
 mod convert;
+mod pdb;
 mod serve;
 mod session;
 
@@ -439,6 +440,132 @@ pub mod ffi {
         consumers: Vec<ServeConsumer>,
     }
 
+    /// One track, as `export.pdb` stores it.
+    ///
+    /// The names are resolved as well as their row ids given: a host that only
+    /// wants to show a track never has to join anything, and one building a
+    /// browse tree still can.
+    #[derive(Debug, Clone)]
+    struct PdbTrack {
+        /// The row id, which is what every other request names a track by.
+        id: u32,
+        /// The track's title.
+        title: String,
+        /// Its artist, resolved from the artist table.
+        artist: String,
+        /// Its album.
+        album: String,
+        /// Its genre.
+        genre: String,
+        /// Its musical key, as the medium spells it.
+        key: String,
+        /// Its record label.
+        label: String,
+        /// Its colour tag.
+        color: String,
+        /// The DJ comment.
+        comment: String,
+        /// The path on the medium, with a leading slash, exactly as the
+        /// database stores it — which is what a fetch takes verbatim.
+        file_path: String,
+        /// The `.DAT` beside it, holding the beat grid and waveforms.
+        analyze_path: String,
+        /// The artwork file on the medium, if it has one.
+        artwork_path: String,
+        /// When it was added, as `2025-06-24`.
+        date_added: String,
+        /// Its release year, or zero.
+        year: u32,
+        /// How long it runs.
+        duration_seconds: u32,
+        /// In kbps.
+        bitrate: u32,
+        /// Hundredths of a BPM, so 145.00 is 14500.
+        tempo_centibpm: u32,
+        /// Its star rating.
+        rating: u32,
+        /// The artwork to fetch, or zero.
+        artwork_id: u32,
+        /// In Hz.
+        sample_rate: u32,
+        /// In bytes.
+        file_size: u32,
+        /// Its number within its album.
+        track_number: u32,
+        /// Its disc, for a multi-disc album.
+        disc_number: u32,
+        /// How many times a deck has played it.
+        play_count: u32,
+        /// The container byte, which is what a deck uses to decide how to
+        /// decode the file.
+        file_type: u32,
+        /// The artist's row id, for a browse tree.
+        artist_id: u32,
+        /// The album's row id.
+        album_id: u32,
+        /// The genre's row id.
+        genre_id: u32,
+        /// The key's row id. Per-medium, not a canonical index.
+        key_id: u32,
+        /// The label's row id.
+        label_id: u32,
+        /// The colour's palette index.
+        color_id: u32,
+    }
+
+    /// A playlist, or a folder of them.
+    #[derive(Debug, Clone)]
+    struct PdbPlaylist {
+        /// Its row id.
+        id: u32,
+        /// The folder it sits in, or zero at the top level.
+        parent_id: u32,
+        /// Where it sorts among its siblings.
+        sort_order: u32,
+        /// Its name.
+        name: String,
+        /// Whether it holds other playlists rather than tracks.
+        is_folder: bool,
+        /// Empty for a folder, and in the DJ's own order for a playlist.
+        track_ids: Vec<u32>,
+    }
+
+    /// A row of one of the lookup tables, for building a browse tree.
+    #[derive(Debug, Clone)]
+    struct PdbNamed {
+        /// The row id a track refers to.
+        id: u32,
+        /// What to show for it.
+        name: String,
+    }
+
+    /// Everything read out of one `export.pdb`.
+    #[derive(Debug, Clone)]
+    struct PdbContents {
+        /// Whether it parsed. On false the rest is empty and `error` says why.
+        ok: bool,
+        /// Why it did not parse. Empty when `ok`.
+        error: String,
+        /// Every track on the medium.
+        tracks: Vec<PdbTrack>,
+        /// Every playlist and folder.
+        playlists: Vec<PdbPlaylist>,
+        /// The artist table.
+        artists: Vec<PdbNamed>,
+        /// The album table.
+        albums: Vec<PdbNamed>,
+        /// The genre table.
+        genres: Vec<PdbNamed>,
+        /// The key table. Its ids are per-medium.
+        keys: Vec<PdbNamed>,
+        /// The record-label table.
+        labels: Vec<PdbNamed>,
+        /// The colour palette.
+        colors: Vec<PdbNamed>,
+        /// The artwork table: id to file path.
+        artwork: Vec<PdbNamed>,
+    }
+
     /// One thing that happened.
     ///
     /// Flat rather than a variant per kind, because C++ has no cheap sum type
@@ -489,6 +616,13 @@ pub mod ffi {
 
         /// A config that chooses an interface and announces.
         fn default_config() -> Config;
+
+        /// Read a rekordbox `export.pdb` off disk.
+        ///
+        /// Never throws: a database that does not parse comes back with `ok`
+        /// false and `error` set, because a host that has just pulled several
+        /// megabytes over NFS wants to show the user why rather than unwind.
+        fn read_pdb(path: &str) -> PdbContents;
 
         /// Start a session. Throws on failure, with the reason.
         fn open(config: &Config) -> Result<Box<Session>>;
@@ -646,8 +780,9 @@ pub mod ffi {
 }
 
 pub use ffi::{
-    Config, Device, DeviceKind, Event, EventKind, MediaInfo, Metadata, NetworkInterface, PlayState,
-    Player, Row, ServeConfig, ServeStatus, Slot,
+    Config, Device, DeviceKind, Event, EventKind, MediaInfo, Metadata, NetworkInterface,
+    PdbContents, PdbNamed, PdbPlaylist, PdbTrack, PlayState, Player, Row, ServeConfig,
+    ServeConsumer, ServeStatus, ServedSlot, Slot,
 };
 pub use serve::{Server, serve};
 
@@ -693,4 +828,5 @@ pub fn empty_player_for_test() -> Player {
 pub fn row_for_test(item: &prolink_proto::dbserver::MenuItem) -> Row {
     convert::row(item)
 }
+pub use pdb::read_pdb;
 pub use session::{default_config, interfaces, open};

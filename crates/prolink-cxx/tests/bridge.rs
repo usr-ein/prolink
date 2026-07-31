@@ -216,3 +216,65 @@ fn a_player_with_no_status_reports_absent_rather_than_zero() {
     assert_eq!(player.beat_in_bar, 0);
     assert_eq!(player.track_id, 0);
 }
+
+#[test]
+fn a_real_export_pdb_reads_through_the_bridge() {
+    // The 651-track export the library is pinned against elsewhere. This is
+    // the shape a host actually consumes, so it is worth checking that the
+    // reshaping keeps the joins and the ids.
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/export.pdb");
+    if !std::path::Path::new(path).exists() {
+        return;
+    }
+    let contents = prolink_cxx::read_pdb(path);
+    assert!(contents.ok, "should parse: {}", contents.error);
+    assert!(contents.error.is_empty());
+    assert_eq!(contents.tracks.len(), 651);
+    assert!(!contents.playlists.is_empty());
+    assert!(!contents.artists.is_empty());
+
+    // Names resolved *and* ids given, which is the point of the shape.
+    let track = contents
+        .tracks
+        .iter()
+        .find(|track| track.title == "Anti Gravity Racing")
+        .expect("the track every other test uses");
+    assert_eq!(track.id, 472);
+    assert_eq!(track.artist, "Dax J");
+    assert_eq!(track.key, "9A");
+    assert_eq!(track.tempo_centibpm, 14500, "145.00 BPM in hundredths");
+    assert!(track.artist_id > 0, "the row id is there for a browse tree");
+    assert!(
+        track.file_path.starts_with('/'),
+        "a fetch takes this verbatim, leading slash and all: {}",
+        track.file_path
+    );
+    assert!(
+        track.analyze_path.ends_with(".DAT"),
+        "{}",
+        track.analyze_path
+    );
+
+    // A playlist keeps the DJ's order rather than being sorted.
+    assert!(
+        contents
+            .playlists
+            .iter()
+            .any(|playlist| !playlist.is_folder && !playlist.track_ids.is_empty()),
+        "at least one playlist should have tracks in it"
+    );
+}
+
+#[test]
+fn a_database_that_does_not_parse_is_a_value_and_not_an_exception() {
+    // A host has usually just pulled several megabytes over NFS to get here,
+    // and what it wants is to tell the user why that was wasted.
+    let contents = prolink_cxx::read_pdb("/definitely/not/a/database.pdb");
+    assert!(!contents.ok);
+    assert!(
+        contents.error.contains("/definitely/not/a/database.pdb"),
+        "the message should name the file: {}",
+        contents.error
+    );
+    assert!(contents.tracks.is_empty());
+}

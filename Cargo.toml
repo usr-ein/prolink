@@ -13,7 +13,9 @@ rust-version = "1.88"
 license = "GPL-3.0-only"
 repository = "https://github.com/usr-ein/prolink"
 homepage = "https://github.com/usr-ein/prolink"
-documentation = "https://docs.rs/prolink"
+# `documentation` is deliberately not inherited: it differs per crate, and one
+# workspace-wide value would point every crate's crates.io page at the same
+# docs.rs URL. Each manifest names its own.
 keywords = ["dj", "pioneer", "cdj", "rekordbox", "prolink"]
 categories = ["network-programming", "multimedia::audio", "parser-implementations"]
 
@@ -39,6 +41,10 @@ unicode-normalization = "0.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+# docs.rs passes `--cfg docsrs` so feature-gated items can be labelled with the
+# feature that gates them. Declared here or the compiler reports it as an
+# unknown cfg, which CI turns into a failure.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docsrs)'] }
 missing_docs = "warn"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"

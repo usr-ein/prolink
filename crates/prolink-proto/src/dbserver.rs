@@ -1529,13 +1529,13 @@ impl<'a> Reader<'a> {
     fn magic(&mut self) -> Result<()> {
         let mut wanted = Vec::with_capacity(5);
         Field::U32(MAGIC).write(&mut wanted);
-        if let Some(&first) = self.data.first() {
-            if first != FieldTag::U32.0 {
-                return Err(Error::BadMagic {
-                    expected: wanted.as_slice().into(),
-                    got: self.data.get(..1).unwrap_or_default().into(),
-                });
-            }
+        if let Some(&first) = self.data.first()
+            && first != FieldTag::U32.0
+        {
+            return Err(Error::BadMagic {
+                expected: wanted.as_slice().into(),
+                got: self.data.get(..1).unwrap_or_default().into(),
+            });
         }
         let got = self.take(wanted.len())?;
         if got == wanted.as_slice() {
@@ -1600,15 +1600,13 @@ impl<'a> Reader<'a> {
     fn field(&mut self, arg_tag: ArgTag, index: usize) -> Result<Field> {
         let at = self.pos;
         let tag = FieldTag(self.u8()?);
-        if let Some(expected) = arg_tag.field_tag() {
-            if expected != tag {
-                return Err(Error::malformed(
-                    at,
-                    format!(
-                        "argument {index} is tagged {tag:?} but the header calls it {arg_tag:?}"
-                    ),
-                ));
-            }
+        if let Some(expected) = arg_tag.field_tag()
+            && expected != tag
+        {
+            return Err(Error::malformed(
+                at,
+                format!("argument {index} is tagged {tag:?} but the header calls it {arg_tag:?}"),
+            ));
         }
         match tag {
             FieldTag::U8 => Ok(Field::U8(self.u8()?)),

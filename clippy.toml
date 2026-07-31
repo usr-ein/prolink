@@ -1,6 +1,7 @@
-# The oldest toolchain this workspace supports; keeps clippy from suggesting
-# APIs that are newer than `rust-version` in Cargo.toml.
-msrv = "1.85"
+# `msrv` is deliberately not set here: clippy reads `rust-version` from
+# Cargo.toml, and a second copy of the number is one that goes stale. It did —
+# this file said 1.85 after the manifest moved to 1.88, and clippy warned that
+# the two disagreed on every crate.
 
 # A wire codec has a lot of legitimate literals (offsets, magic numbers, packet
 # lengths). Every one of them is either a named constant or carries a comment

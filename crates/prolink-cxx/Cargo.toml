@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-documentation.workspace = true
+documentation = "https://docs.rs/prolink-cxx"
+homepage.workspace = true
 readme = "README.md"
 keywords = ["pioneer", "dj", "cxx", "cdj"]
 categories = ["api-bindings", "multimedia::audio"]
@@ -17,14 +18,15 @@ categories = ["api-bindings", "multimedia::audio"]
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-prolink = { path = "../prolink" }
-prolink-proto = { path = "../prolink-proto" }
+# Through the workspace, which carries a version beside the path: a path
+# without one cannot be packaged, since crates.io has no `../prolink` to
+# resolve against.
+prolink.workspace = true
+prolink-proto.workspace = true
+prolink-rekordbox.workspace = true
 cxx = "1"
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
 tracing = { workspace = true }
-
-[dev-dependencies]
-prolink-proto = { path = "../prolink-proto" }
 
 [build-dependencies]
 cxx-build = "1"
