@@ -776,6 +776,19 @@ impl MessageKind {
     /// two decks tagging from the same medium keep separate lists, which is
     /// what the TAG LIST button means on each of them.
     pub const TAG_LIST_ADD: Self = Self(0x3002);
+    /// "REMOVE ALL TRACKS": empty the tag list. Only the descriptor.
+    ///
+    /// Isolated by the item counts either side of it, which is the only thing
+    /// that separates it from [`Self::UNKNOWN_3402`] — both carry a bare
+    /// descriptor and both draw `SUCCESS[type, 0]`. With three tracks tagged,
+    /// `MENU_TAG_LIST` answered `3` before this request and `0` immediately
+    /// after, while `0x3402` left the count at `3` (F54).
+    pub const TAG_LIST_CLEAR: Self = Self(0x3202);
+    /// Undocumented, a bare descriptor, sent while the TAG LIST menu is open.
+    ///
+    /// **Not** the clear, though it looks exactly like it: the tag list still
+    /// held three tracks across it (F54). Acknowledged and otherwise ignored.
+    pub const UNKNOWN_3402: Self = Self(0x3402);
     /// Undocumented. Sent mid-load, between `GET_TRACK_INFO` and the analysis
     /// fetches; four arguments, `[descriptor, n, 0, 0]`. A real deck answers
     /// with a bare `SUCCESS` echoing the type, and so must we.
@@ -849,6 +862,8 @@ impl MessageKind {
             Self::MENU_FILENAME => "menu_filename",
             Self::MENU_KEY => "menu_key",
             Self::MENU_TAG_LIST => "menu_tag_list",
+            Self::TAG_LIST_ADD => "tag_list_add",
+            Self::TAG_LIST_CLEAR => "tag_list_clear",
             Self::MENU_PLAYLIST => "menu_playlist",
             Self::MENU_SEARCH => "menu_search",
             Self::MENU_SORT => "menu_sort",

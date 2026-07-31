@@ -2304,3 +2304,125 @@ fn untagging_removes_a_track() {
     );
     assert_eq!(listed[0].number(1), Some(0));
 }
+
+#[test]
+fn remove_all_tracks_empties_the_tag_list() {
+    // `0x3202` is REMOVE ALL TRACKS. Its twin `0x3402` carries the same bare
+    // descriptor and draws the same acknowledgement, and the only thing that
+    // separates them is what the tag list held either side: with three tracks
+    // tagged, the menu answered 3 across `0x3402` and 0 immediately after
+    // `0x3202` (F54).
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    for track in [1u32, 2, 3] {
+        ask(
+            &mut session,
+            &shared,
+            &tagged_request(MessageKind::TAG_LIST_ADD, track, &[track, 1]),
+        );
+    }
+    let before = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 20, &[0]),
+    );
+    assert_eq!(before[0].number(1), Some(3));
+
+    // The twin must leave it alone.
+    let idle = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::UNKNOWN_3402, 21, &[]),
+    );
+    assert_eq!(idle[0].kind, MessageKind::SUCCESS);
+    let across = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 22, &[0]),
+    );
+    assert_eq!(across[0].number(1), Some(3), "0x3402 is not the clear");
+
+    let cleared = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::TAG_LIST_CLEAR, 23, &[]),
+    );
+    assert_eq!(cleared[0].kind, MessageKind::SUCCESS);
+    assert_eq!(cleared[0].number(1), Some(0), "the reply carries zero");
+    let after = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 24, &[0]),
+    );
+    assert_eq!(after[0].number(1), Some(0), "REMOVE ALL TRACKS emptied it");
+}
+
+#[test]
+fn clearing_one_decks_tag_list_leaves_the_other_alone() {
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let other = Descriptor::new(
+        BrowsableDeviceNumber::new(3).expect("device 3 is browsable"),
+        Slot::USB,
+        MenuTarget::MAIN,
+        TrackType::REKORDBOX,
+    );
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::TAG_LIST_ADD, 1, &[1, 1]),
+    );
+    ask(
+        &mut session,
+        &shared,
+        &Message::new(
+            2,
+            MessageKind::TAG_LIST_ADD,
+            Arguments::new(vec![
+                Field::U32(other.to_raw()),
+                Field::U32(2),
+                Field::U32(1),
+            ])
+            .expect("three arguments"),
+        ),
+    );
+    ask(
+        &mut session,
+        &shared,
+        &Message::new(
+            3,
+            MessageKind::TAG_LIST_CLEAR,
+            Arguments::new(vec![Field::U32(other.to_raw())]).expect("one argument"),
+        ),
+    );
+    let ours = ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 4, &[0]),
+    );
+    assert_eq!(ours[0].number(1), Some(1), "device 1 keeps its tag");
+}
+
+#[test]
+fn the_tag_list_honours_the_sort_the_deck_asks_for() {
+    // A deck browsing with KEY selected asks for the tag list with sort 0x0c.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    for track in [3u32, 1, 2] {
+        ask(
+            &mut session,
+            &shared,
+            &tagged_request(MessageKind::TAG_LIST_ADD, track, &[track, 1]),
+        );
+    }
+    ask(
+        &mut session,
+        &shared,
+        &tagged_request(MessageKind::MENU_TAG_LIST, 30, &[SortOrder::TITLE.0]),
+    );
+    let sorted = render_all(&mut session, 3);
+    let titles: Vec<&str> = sorted.iter().map(|item| item.label1.as_str()).collect();
+    let mut expected = titles.clone();
+    expected.sort_by_key(|title| title.to_lowercase());
+    assert_eq!(titles, expected, "a sort other than DEFAULT is applied");
+}

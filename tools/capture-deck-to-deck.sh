@@ -55,7 +55,11 @@ for member in $members; do
     printf 'tapping %-5s -> %s\n' "$member" "$out"
 done
 
+reported=0
 report() {
+    [ "$reported" = 1 ] && return
+    reported=1
+    any_dbserver=0
     for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
     wait "${pids[@]}" 2>/dev/null || true
     printf '\n'
@@ -67,10 +71,10 @@ report() {
         printf '%-40s dbserver %-6s status %-6s nfs %s\n' "$(basename "$out")" "$db" "$st" "$nfs"
         if [ "$db" -gt 0 ]; then
             printf '   ^ TCP 1051 present — this one is good.\n'
+            any_dbserver=1
         fi
     done
-    if ! tcpdump -r "${files[0]}" -nn 'tcp port 1051' 2>/dev/null | head -1 | grep -q . \
-       && ! tcpdump -r "${files[-1]}" -nn 'tcp port 1051' 2>/dev/null | head -1 | grep -q .; then
+    if [ "$any_dbserver" = 0 ]; then
         printf '\nNO dbserver traffic on either tap. Do not trust this capture.\n' >&2
     fi
 }

@@ -200,6 +200,13 @@ impl TagLists {
         }
     }
 
+    /// Empty one deck's tag list on one medium.
+    fn clear(&self, device: u8, slot: Slot) {
+        if let Ok(mut lists) = self.by_device.lock() {
+            lists.remove(&(device, slot));
+        }
+    }
+
     /// One deck's tagged track ids on one medium.
     fn get(&self, device: u8, slot: Slot) -> Vec<u32> {
         self.by_device
@@ -588,6 +595,15 @@ impl Session {
             // Tagging is the one request that changes server state. The reply
             // is a bare acknowledgement carrying zero, exactly as a real deck
             // answers it (F53).
+            // "REMOVE ALL TRACKS". Its twin `0x3402` looks identical on the
+            // wire and must *not* clear anything (F54).
+            MessageKind::TAG_LIST_CLEAR => {
+                if let Some(descriptor) = descriptor {
+                    shared.tags.clear(descriptor.device.get(), descriptor.slot);
+                }
+                push(out, &Message::success(transaction, kind, 0));
+                return Flow::Continue;
+            }
             MessageKind::TAG_LIST_ADD => {
                 if let (Some(descriptor), Some(track)) = (descriptor, message.number(1)) {
                     // Argument 2 is `1` in every observed request. Anything

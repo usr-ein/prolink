@@ -54,12 +54,32 @@ time. Three things rule that out:
 Bit 8 is named but never written. It marks the row the browsing deck has
 loaded, and we do not know what that is; writing it would mark the wrong row.
 
+## REMOVE ALL TRACKS is `0x3202`, and its twin is not
+
+A later deck-to-deck capture settled the clear. Two request kinds appear once
+each, both carrying nothing but a descriptor, both drawing `SUCCESS[type, 0]` —
+identical on the wire. What separates them is the item count either side:
+
+```
+0x3002 x3          tag three tracks
+0x100f -> 3
+0x3402 -> SUCCESS   ... 0x100f still -> 3, so this is not the clear
+0x3202 -> SUCCESS   ... 0x100f -> 0
+```
+
+So `0x3202` is REMOVE ALL TRACKS and `0x3402` is something else sent while the
+menu is open. Guessing from shape alone would have been a coin toss, and
+getting it backwards would have made the tag list clear itself at random.
+
+The same capture showed `MENU_TAG_LIST` carrying a **sort** in argument 1 —
+`0x0c` from a deck browsing with KEY selected — so the list is now sorted like
+any other, with `DEFAULT` keeping tag order.
+
 ## What is deliberately not implemented
 
 **Creating a playlist from the tag list.** The user's instruction was to ignore
 it, and ignoring it needs no code: an unrecognised request falls through to
-`SUCCESS[type, 0]`, which is never a refusal (F25). Clearing the list and
-sorting it are likewise unimplemented — no capture shows either request.
+`SUCCESS[type, 0]`, which is never a refusal (F25).
 
 **Untagging** is a reading rather than an observation. Argument 2 is `1` in all
 nine captured requests, so `0` is taken to mean "remove" on the strength of what

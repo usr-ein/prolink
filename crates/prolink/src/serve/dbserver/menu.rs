@@ -172,12 +172,10 @@ fn build_unmarked(
         MessageKind::MENU_BITRATE => named(library, Filter::Bitrate),
         MENU_DATE_ADDED => named(library, Filter::DateAdded),
         MessageKind::MENU_HISTORY => history(library),
-        // In tag order, not sorted: the list is what the DJ built, and a real
-        // deck's reply is close to alphabetical only because tracks were
-        // tagged that way. Its exact collation is unresolved — it orders
-        // "antidepressant o44" before "Anti Gravity Racing", which no
-        // space-respecting comparison does (F53).
-        MessageKind::MENU_TAG_LIST => tag_list(library, tags),
+        // Argument 1 is a sort here as it is on a plain track list — a deck
+        // browsing with KEY selected asks for the tag list with `0x0c` (F54).
+        // DEFAULT keeps tag order, which is what the DJ built.
+        MessageKind::MENU_TAG_LIST => tag_list(library, tags, sort),
         MessageKind::MENU_PLAYLIST => playlist(library, args, sort),
         MessageKind::MENU_SEARCH => search(library, args.text(3).unwrap_or_default()),
         MessageKind::GET_METADATA | MessageKind::GET_GENERIC_METADATA => {
@@ -573,17 +571,28 @@ fn history_tracks(library: &Library, playlist_id: u32, sort: SortOrder) -> Vec<M
     track_items(tracks, sort, Position::InList)
 }
 
-/// The tracks one deck has tagged, in the order it tagged them.
+/// The tracks one deck has tagged.
+///
+/// `DEFAULT` keeps the order the DJ tagged in, the way a history list keeps
+/// play order; any other sort is applied as it would be to a track list. A
+/// real deck's reply looks alphabetical only because the tracks were tagged
+/// that way, and its exact collation is unresolved — it orders "antidepressant
+/// o44" before "Anti Gravity Racing", which no space-respecting comparison
+/// does (F53).
 ///
 /// An id that names nothing is dropped rather than served as a blank row: the
 /// medium can be swapped under a tag list this server is still holding, and a
 /// row the deck cannot load is worse than a shorter list.
-fn tag_list(library: &Library, tags: &[u32]) -> Vec<MenuItem> {
+fn tag_list(library: &Library, tags: &[u32], sort: SortOrder) -> Vec<MenuItem> {
     let tracks: Vec<&Track> = tags
         .iter()
         .filter_map(|id| library.tracks.get(id))
         .collect();
-    track_items(tracks, SortOrder::DEFAULT, Position::InList)
+    let tracks = match sort {
+        SortOrder::DEFAULT => tracks,
+        _ => sorted(tracks, sort),
+    };
+    track_items(tracks, sort, Position::InList)
 }
 
 // -- playlists ------------------------------------------------------------
