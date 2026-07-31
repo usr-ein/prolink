@@ -50,7 +50,7 @@
     clippy::cast_possible_truncation
 )]
 
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
@@ -274,9 +274,9 @@ struct Census {
     largest_shortened: usize,
     short_mid_file: u64,
     /// Lookups skipped because this filesystem cannot reproduce the deck's
-    /// FAT32 tree for that name. Zero on a case-insensitive filesystem; a
-    /// handful on Linux, where two spellings are two directories.
-    unrepresentable: u64,
+    /// FAT32 tree. Zero on a case-insensitive filesystem; a handful on Linux,
+    /// where two spellings of one directory become two entries.
+    unreproducible: u64,
     resumed_after_short: u64,
     errors_differed: BTreeMap<(u32, u32), u64>,
     names: BTreeSet<String>,
@@ -564,10 +564,9 @@ fn merge(nodes: &mut BTreeMap<String, Option<u64>>, path: String, size: Option<u
 }
 
 thread_local! {
-    /// Names the reconstruction cannot represent faithfully on this
-    /// filesystem. See [`build_tree`].
-    static UNREPRESENTABLE: RefCell<BTreeSet<String>> =
-        const { RefCell::new(BTreeSet::new()) };
+    /// Whether this session's tree could be reproduced on this filesystem at
+    /// all. See [`build_tree`].
+    static UNREPRODUCIBLE: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Write the reconstructed tree out as sparse files and mount it.
@@ -597,39 +596,34 @@ fn build_tree(session: &Session, root: &Path) -> Vfs {
     // A medium is FAT32: case-insensitive and case-preserving, so a deck
     // holding two spellings of one directory is holding one directory. macOS
     // reproduces that and Linux does not — there the two spellings become two
-    // directories, the handle a capture recorded maps to one of them, and a
-    // child that lives in the other is answered NOENT.
+    // entries, and one may be a file where the other is a directory, so a
+    // handle a capture recorded maps to a parent with no such child.
     //
-    // That is this fixture failing to reproduce a FAT32 tree, not the server
-    // disagreeing with the captured one, and the VFS's own case folding is
-    // covered by `serve::vfs` on both platforms. So the names under a
-    // fold-collision are recorded and a NOENT for one of them is counted
-    // rather than asserted on.
+    // The collision is usually on an *ancestor* rather than on the name being
+    // looked up, which is why checking the leaf alone was not enough. When any
+    // component of this session's tree collides under folding, the tree cannot
+    // be reproduced faithfully here at all, and a NOENT is counted rather than
+    // asserted on for the rest of the session.
+    //
+    // This is the fixture failing to reproduce FAT32, not the server
+    // disagreeing with the captured one: the VFS's own case folding is covered
+    // by `serve::vfs` and passes on both platforms.
     let mut by_fold: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for path in session.nodes.keys() {
-        let Some(name) = path.rsplit('/').next() else {
-            continue;
-        };
-        by_fold
-            .entry(name.to_lowercase())
-            .or_default()
-            .insert(name.to_owned());
+        for component in path.split('/').filter(|part| !part.is_empty()) {
+            by_fold
+                .entry(component.to_lowercase())
+                .or_default()
+                .insert(component.to_owned());
+        }
     }
-    UNREPRESENTABLE.with(|names| {
-        let mut names = names.borrow_mut();
-        for (_, spellings) in by_fold.iter().filter(|(_, set)| set.len() > 1) {
-            names.extend(spellings.iter().cloned());
-        }
-        // And anything the filesystem simply refused.
-        for path in session.nodes.keys() {
-            let on_disk = root.join(path.trim_start_matches('/'));
-            if !on_disk.exists()
-                && let Some(name) = path.rsplit('/').next()
-            {
-                names.insert(name.to_owned());
-            }
-        }
-    });
+    let collides = by_fold.values().any(|spellings| spellings.len() > 1);
+    let refused = session
+        .nodes
+        .keys()
+        .any(|path| !root.join(path.trim_start_matches('/')).exists());
+    UNREPRODUCIBLE.with(|flag| flag.set(collides || refused));
+
     let mut vfs = Vfs::new();
     for prefix in ["B", "C"] {
         let subtree = root.join(prefix);
@@ -867,13 +861,13 @@ fn check_nfs(replayed: &Replayed, results: &[u8], census: &mut Census) {
     if !agrees(answer.status(), theirs, census) {
         return;
     }
-    // A name this filesystem cannot represent as the deck's FAT32 did is the
+    // A tree this filesystem cannot reproduce as the deck's FAT32 did is the
     // fixture's problem, not the server's.
     if answer.status() == Status::NOENT
-        && let Some(name) = looked_up(replayed)
-        && UNREPRESENTABLE.with(|names| names.borrow().contains(&name))
+        && looked_up(replayed).is_some()
+        && UNREPRODUCIBLE.with(Cell::get)
     {
-        census.unrepresentable += 1;
+        census.unreproducible += 1;
         return;
     }
     assert_eq!(
