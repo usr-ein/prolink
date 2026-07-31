@@ -162,7 +162,7 @@ fewer.
 
 ## Tests
 
-190 tests in the crate, of which ~120 are this layer. The `captured` module in
+197 tests in the crate, of which 116 are this layer. The `captured` module in
 `rpc.rs` is the fixture floor: 22 whole datagrams off real hardware, decoded end
 to end and re-encoded, covering portmap `NULL`/`GETPORT`/`DUMP`, `MNT` of `/C/`,
 `/B/` and `/C/EXPORT`, `UMNT`, both flavours of `EXPORT` reply, `LOOKUP`
@@ -173,6 +173,24 @@ Pioneer bytes.
 No test invents bytes and calls them captured. Each hex literal is traceable to
 a frame in the evidence file; the two I mis-transcribed were caught by the
 tests, and I re-extracted both from the pcap myself.
+
+`Fattr::directory` and `Fattr::regular_file` are asserted to reproduce a
+captured CDJ `fattr` **field for field**, which is what turned the constants
+table above from a plausible reading into a checked one.
+
+The `loopback` module runs every procedure through all four halves in order —
+client builds a call, server parses it, server builds a reply, client parses
+that — because a codec can be self-consistent in each direction separately and
+still have the two disagree. An argument encoder that writes a field the
+argument parser does not read is invisible to any test that round-trips only
+one of them. It also covers the refusals (`PROC_UNAVAIL` and friends,
+`MSG_DENIED`), which the corpus contains not one of.
+
+The `fuzz` module is the safety net for a network input path: ~150,000
+malformed datagrams — every truncation and every single-byte mutation of seven
+valid ones, plus seeded noise and hostile length prefixes written at every
+offset — pushed through every parser, asserting only that they return. Seeded,
+so a failure reproduces; no `rand` dependency, and none wanted.
 
 ## Not settled
 
