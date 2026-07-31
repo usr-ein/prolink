@@ -7,7 +7,9 @@
 //! the order. This module is steps 4 through 7: the read-only tree, the ONC RPC
 //! servers over it, and the dbserver that makes it browsable.
 
+pub mod dbserver;
 pub mod medium;
+pub mod nfs;
 pub mod vfs;
 
 pub use medium::{Analysis, Medium, ServedSlot};

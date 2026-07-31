@@ -55,6 +55,7 @@
     )
 )]
 
+pub mod consume;
 pub mod device;
 pub mod discovery;
 pub mod interface;
