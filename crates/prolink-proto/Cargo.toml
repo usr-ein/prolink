@@ -1,0 +1,20 @@
+[package]
+name = "prolink-proto"
+description = "Wire codecs for the Pioneer Pro DJ Link protocol: discovery, status, dbserver and ONC RPC/NFSv2"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+binrw.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

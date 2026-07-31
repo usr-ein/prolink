@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# Local capture corpora. Tests find them through PROLINK_CAPTURES; the
+# committed fixtures in testdata/ are what runs without one.
+/captures
+*.pcap
+*.pcapng

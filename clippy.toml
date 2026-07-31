@@ -1,0 +1,17 @@
+# The oldest toolchain this workspace supports; keeps clippy from suggesting
+# APIs that are newer than `rust-version` in Cargo.toml.
+msrv = "1.85"
+
+# A wire codec has a lot of legitimate literals (offsets, magic numbers, packet
+# lengths). Every one of them is either a named constant or carries a comment
+# citing the finding it comes from, so the generic "unreadable literal" nagging
+# is turned down and the review burden lives in the doc comments instead.
+literal-representation-threshold = 16384
+
+# Menu items carry twelve arguments because the protocol says twelve. Builders
+# take them as a struct; the few places that cannot are documented.
+too-many-arguments-threshold = 8
+
+# Protocol tables are long by nature.
+enum-variant-name-threshold = 4
+type-complexity-threshold = 500

@@ -1,0 +1,31 @@
+[package]
+name = "prolink-cli"
+description = "Command line tools for the Pioneer Pro DJ Link protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "prolink"
+path = "src/main.rs"
+
+[dependencies]
+prolink.workspace = true
+prolink-capture.workspace = true
+prolink-proto.workspace = true
+prolink-rekordbox.workspace = true
+
+clap.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

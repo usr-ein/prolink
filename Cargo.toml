@@ -1,0 +1,86 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-only"
+repository = "https://github.com/usr-ein/prolink"
+homepage = "https://github.com/usr-ein/prolink"
+documentation = "https://docs.rs/prolink"
+keywords = ["dj", "pioneer", "cdj", "rekordbox", "prolink"]
+categories = ["network-programming", "multimedia::audio", "parser-implementations"]
+
+[workspace.dependencies]
+prolink = { version = "0.1.0", path = "crates/prolink" }
+prolink-capture = { version = "0.1.0", path = "crates/prolink-capture" }
+prolink-proto = { version = "0.1.0", path = "crates/prolink-proto" }
+prolink-rekordbox = { version = "0.1.0", path = "crates/prolink-rekordbox" }
+
+binrw = "0.15"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+etherparse = "0.19"
+if-addrs = "0.14"
+pcap-file = "2"
+rekordcrate = { version = "0.3", default-features = false }
+thiserror = "2"
+tokio = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+unicode-normalization = "0.1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+unused_import_braces = "warn"
+single_use_lifetimes = "warn"
+trivial_numeric_casts = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+future_incompatible = { level = "warn", priority = -1 }
+nonstandard_style = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+
+# Parse, don't validate: these turn "I checked earlier" into a compile error.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+indexing_slicing = "warn"
+integer_division = "warn"
+as_conversions = "warn"
+todo = "warn"
+unimplemented = "warn"
+missing_assert_message = "warn"
+mem_forget = "warn"
+
+# Deliberate exemptions, each for a reason that applies to this codebase.
+#
+# `module_name_repetitions` fights the naming a protocol library wants:
+# `djl::PacketKind` and `dbserver::MessageKind` are both correct.
+module_name_repetitions = "allow"
+# Prose in doc comments quotes wire field names that are not Rust items.
+doc_markdown = "allow"
+# Almost everything here is a pure accessor over parsed bytes.
+must_use_candidate = "allow"
+# The error type is documented once, on the module; repeating it on 200
+# functions adds noise rather than information.
+missing_errors_doc = "allow"
+# Nothing outside a test is allowed to panic (see `panic` above), so this
+# section would document a case that cannot arise.
+missing_panics_doc = "allow"
+# Offsets, lengths and counts are genuinely similar names in a wire codec.
+similar_names = "allow"
+# Dependency trees are not ours to deduplicate.
+multiple_crate_versions = "allow"
+
+[profile.release]
+lto = "thin"

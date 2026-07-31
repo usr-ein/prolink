@@ -1,0 +1,30 @@
+[package]
+name = "prolink-rekordbox"
+description = "Readers for the rekordbox device export: export.pdb, ANLZ analysis files and device settings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+# Turn the 32 opaque bytes of `PIONEER/MYSETTING.DAT` into named options
+# (jog ring brightness, auto cue level, ...). Off by default: `rekordcrate`
+# pins `binrw` 0.14 where the rest of this workspace is on 0.15, and nothing in
+# the Pro DJ Link protocol needs the settings interpreted -- a player asks for
+# the bytes and formats them itself. See `work_log/009`.
+settings-detail = ["dep:rekordcrate"]
+
+[dependencies]
+binrw.workspace = true
+rekordcrate = { workspace = true, optional = true }
+thiserror.workspace = true
+
+[lints]
+workspace = true
