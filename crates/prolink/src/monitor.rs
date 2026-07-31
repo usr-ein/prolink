@@ -61,8 +61,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use prolink_proto::beat::{self, Beat, BeatInBar};
-use prolink_proto::status::{self, CdjStatus};
+use prolink_proto::beat::{self, Beat, BeatInBar, Pitch};
+use prolink_proto::status::{self, CdjStatus, StatusFlags};
 use prolink_proto::{BEAT_PORT, DeviceName, DeviceNumber, STATUS_PORT, Slot};
 use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
@@ -276,18 +276,46 @@ pub struct PlayerStatus {
     pub track: Option<LoadedTrack>,
     /// The track's own tempo in hundredths of a BPM, before the pitch fader.
     ///
-    /// The *effective* tempo is not derived from this: the status packet's own
-    /// pitch field is not decoded by [`prolink_proto::status`], so
-    /// [`PlayerState::effective_bpm`] takes the tempo from the beat packet,
-    /// which carries both halves in one place.
+    /// `None` when the deck has no track, rather than the `0xffff` the wire
+    /// carries there — which reads as 655.35 BPM (F49).
     pub bpm_centi: Option<u16>,
+    /// The pitch fader as a multiplier, from `0x8c`.
+    ///
+    /// While [`Self::is_synced`] this is not the DJ's fader position: the deck
+    /// slews it to hold its effective tempo equal to the master's.
+    pub pitch: Option<Pitch>,
     /// Whether this player holds tempo master, from byte `0x9e`.
     ///
     /// **The only place mastership is published.** Byte `0x9e` and flag bit 5
-    /// of byte `0x89` agreed in 35 015 of the 35 016 status packets in this
+    /// of byte `0x89` agreed in 46 011 of the 46 012 status packets in this
     /// corpus; the byte is used because it distinguishes a master on a
     /// rekordbox track (`1`) from one with no usable tempo (`2`).
     pub is_tempo_master: bool,
+    /// Whether SYNC is lit on this deck, from flag bit 4 of byte `0x89`.
+    pub is_synced: bool,
+    /// Whether the deck is producing sound, from flag bit 6 of byte `0x89`.
+    ///
+    /// Not a restatement of [`Self::play_state`]: 289 of the 8 859 captured
+    /// packets with play state `Playing` have this bit clear (F50).
+    pub is_playing: bool,
+    /// The device this master is handing mastership to, mid-handoff.
+    ///
+    /// `None` except for the one or two packets between a
+    /// [`prolink_proto::beat::MasterResponse`] and the old master dropping its
+    /// claim — the window in which **both** decks report `is_tempo_master`.
+    pub yielding_to: Option<DeviceNumber>,
+}
+
+impl PlayerStatus {
+    /// The tempo actually playing: the track's tempo with the fader applied.
+    ///
+    /// `None` when either half is missing. Unlike
+    /// [`BeatObservation::effective_bpm`] this is available while the deck is
+    /// paused, because status packets keep flowing when beats do not.
+    pub fn effective_bpm(&self) -> Option<f64> {
+        let bpm = f64::from(self.bpm_centi?) / 100.0;
+        Some(bpm * self.pitch?.multiplier())
+    }
 }
 
 /// A beat packet and how long ago it landed.
@@ -404,6 +432,17 @@ impl PlayerState {
         self.status.map(|observed| observed.status.is_tempo_master)
     }
 
+    /// Whether SYNC is lit on this deck. `None` without status.
+    pub fn is_synced(&self) -> Option<bool> {
+        self.status.map(|observed| observed.status.is_synced)
+    }
+
+    /// The device this one is handing mastership to, if a handoff is in
+    /// progress. Almost always `None`; see [`PlayerStatus::yielding_to`].
+    pub fn yielding_to(&self) -> Option<DeviceNumber> {
+        self.status.and_then(|observed| observed.status.yielding_to)
+    }
+
     /// What the deck says it is doing. `None` without status.
     pub fn play_state(&self) -> Option<PlayState> {
         self.status.map(|observed| observed.status.play_state)
@@ -513,11 +552,16 @@ impl PlayerTable {
         let Some(device) = packet.sender() else {
             return Vec::new();
         };
+        let flags = packet.flags();
         let status = PlayerStatus {
             play_state: PlayState(packet.play_state().unwrap_or(0)),
             track: loaded_track(packet),
             bpm_centi: packet.bpm_centi(),
+            pitch: packet.pitch(),
             is_tempo_master: packet.is_tempo_master().unwrap_or(false),
+            is_synced: flags.is_some_and(StatusFlags::is_synced),
+            is_playing: flags.is_some_and(StatusFlags::is_playing),
+            yielding_to: packet.yielding_to(),
         };
         let entry = self.entry(device, packet.name());
         let changed = entry.status.map(|(previous, _)| previous) != Some(status);
@@ -529,7 +573,8 @@ impl PlayerTable {
                 events.push(MonitorEvent::Status(Box::new(state)));
             }
         }
-        if let Some(event) = self.settle_master(device, status.is_tempo_master) {
+        if let Some(event) = self.settle_master(device, status.is_tempo_master, status.yielding_to)
+        {
             events.push(event);
         }
         events
@@ -541,12 +586,30 @@ impl PlayerTable {
     /// longer gives it up. Only the claim is authoritative — there is no packet
     /// that says "nobody is master" — so losing it is inferred from the
     /// previous holder's own status and from nothing else.
-    fn settle_master(&mut self, device: DeviceNumber, claims: bool) -> Option<MonitorEvent> {
+    ///
+    /// The exception is a handoff. For the one or two packets between agreeing
+    /// to hand over and dropping its claim, the outgoing master reports itself
+    /// master *and* names its successor in byte `0x9f`, so both decks claim it
+    /// at once. Taking that byte as the answer makes the transition atomic:
+    /// without it, whether a listener sees a spurious "nobody is master" in
+    /// between depends on which of two packets 14 ms apart it happens to
+    /// process first.
+    fn settle_master(
+        &mut self,
+        device: DeviceNumber,
+        claims: bool,
+        yielding_to: Option<DeviceNumber>,
+    ) -> Option<MonitorEvent> {
         let was = self.master;
-        if claims {
-            self.master = Some(device);
-        } else if was == Some(device) {
-            self.master = None;
+        match yielding_to {
+            // Only to a device that has actually been heard from, so a stray
+            // byte cannot invent a master that is not on the network.
+            Some(successor) if self.players.contains_key(&successor) => {
+                self.master = Some(successor);
+            }
+            _ if claims => self.master = Some(device),
+            _ if was == Some(device) => self.master = None,
+            _ => {}
         }
         (self.master != was).then_some(MonitorEvent::TempoMaster(self.master))
     }
@@ -1131,6 +1194,67 @@ mod tests {
         assert!(events.contains(&MonitorEvent::TempoMaster(None)));
         assert!(table.snapshot(start).is_empty());
         assert_eq!(table.master, None);
+    }
+
+    /// The outgoing master mid-handoff: still claiming, but naming its
+    /// successor at `0x9f`.
+    fn yielding_status(number: u8, to: u8) -> CdjStatus {
+        let mut raw = status_from(number, PlayState::PLAYING.0, true, 182).into_bytes();
+        raw[0x9f] = to;
+        CdjStatus::parse(&raw).expect("a status packet")
+    }
+
+    #[test]
+    fn a_master_handoff_moves_mastership_exactly_once() {
+        // Both decks report themselves master for the packet or two between the
+        // outgoing master agreeing to hand over and dropping its claim. Byte
+        // 0x9f is what breaks the tie, and it has to break it the same way
+        // whichever order those packets are processed in — on the wire they are
+        // 14 ms apart (F52).
+        for reversed in [false, true] {
+            let mut table = PlayerTable::default();
+            let now = Instant::now();
+            table.observe_status(&status_from(2, PlayState::PLAYING.0, true, 182), now);
+            table.observe_status(&status_from(1, PlayState::PLAYING.0, false, 7), now);
+            assert_eq!(table.master, Some(device(2)), "device 2 starts as master");
+
+            let claiming = status_from(1, PlayState::PLAYING.0, true, 7);
+            let dropped = status_from(2, PlayState::PLAYING.0, false, 182);
+            let mut events = table.observe_status(&yielding_status(2, 1), now);
+            let rest = if reversed {
+                [dropped, claiming]
+            } else {
+                [claiming, dropped]
+            };
+            for packet in &rest {
+                events.extend(table.observe_status(packet, now));
+            }
+
+            let handovers: Vec<_> = events
+                .iter()
+                .filter_map(|event| match event {
+                    MonitorEvent::TempoMaster(master) => Some(*master),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                handovers,
+                vec![Some(device(1))],
+                "mastership moved straight from 2 to 1 (reversed: {reversed})"
+            );
+            assert_eq!(table.master, Some(device(1)));
+        }
+    }
+
+    #[test]
+    fn a_deck_yielding_to_a_device_that_is_not_here_is_ignored() {
+        // The successor has to be a device we have heard from, so a stray byte
+        // cannot invent a master that is not on the network.
+        let mut table = PlayerTable::default();
+        let now = Instant::now();
+        table.observe_status(&status_from(2, PlayState::PLAYING.0, true, 182), now);
+        table.observe_status(&yielding_status(2, 4), now);
+        assert_eq!(table.master, Some(device(2)));
     }
 
     #[test]

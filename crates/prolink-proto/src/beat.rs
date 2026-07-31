@@ -67,13 +67,20 @@
 //! two-byte scratch flags, and all 1110 captured packets re-encode byte for
 //! byte from the decoded fields.
 //!
+//! [`MasterRequest`] and [`MasterResponse`] are the tempo-master handoff, and
+//! are modelled the same way for the same reason: 40 and 44 bytes of which only
+//! the subtype is unaccounted for. Both are **unicast**, so they reach a
+//! capture only through a mirror port or a hub — which is why they appear in
+//! one session of this corpus and not in the thirty-two before it (F48).
+//!
 //! [`ChannelsOnAir`] and [`FaderStart`] are decoded from the pre-hardware
 //! literature and **have never been observed**: no mixer took part in any
-//! capture in this project's corpus, where all 1110 datagrams addressed to
-//! 50001 are beat packets. They are decode-only for that reason. The sync and
-//! master-handoff kinds (`0x2a`, `0x26`, `0x27`) and the CDJ-3000's absolute
-//! position packet (`0x0b`) are named in [`BeatKind`] so a log can say what it
-//! saw, and are otherwise left alone.
+//! capture in this project's corpus, where every datagram addressed to 50001 is
+//! either a beat packet or a master handoff. They are decode-only for that
+//! reason. The sync-control kind (`0x2a`) and the CDJ-3000's absolute position
+//! packet (`0x0b`) are named in [`BeatKind`] so a log can say what it saw, and
+//! are otherwise left alone — `0x2a` has never been seen here because SYNC is
+//! toggled on a deck's own front panel rather than over the network.
 
 use std::fmt;
 use std::time::Duration;
@@ -108,11 +115,11 @@ impl BeatKind {
     /// "Turn sync on", "turn sync off" or "become tempo master", unicast at a
     /// target's 50001. Named, not modelled.
     pub const SYNC_CONTROL: Self = Self(0x2a);
-    /// A challenger asking the current master to hand over. Named, not
-    /// modelled.
+    /// A challenger asking the current master to hand over. See
+    /// [`MasterRequest`].
     pub const MASTER_REQUEST: Self = Self(0x26);
-    /// The outgoing master's answer to a [`Self::MASTER_REQUEST`]. Named, not
-    /// modelled.
+    /// The outgoing master's answer to a [`Self::MASTER_REQUEST`]. See
+    /// [`MasterResponse`].
     pub const MASTER_RESPONSE: Self = Self(0x27);
 
     /// A name for logs, or `None` for a kind we have no name for.
@@ -148,6 +155,10 @@ pub enum Packet {
     ChannelsOnAir(ChannelsOnAir),
     /// A mixer's fader-start command.
     FaderStart(FaderStart),
+    /// A player asking the current tempo master to hand over.
+    MasterRequest(MasterRequest),
+    /// The outgoing master agreeing to hand over.
+    MasterResponse(MasterResponse),
     /// A well-formed datagram of a kind this crate does not model.
     Other {
         /// The kind byte at `0x0a`.
@@ -164,6 +175,8 @@ impl Packet {
             Self::Beat(_) => BeatKind::BEAT,
             Self::ChannelsOnAir(_) => BeatKind::CHANNELS_ON_AIR,
             Self::FaderStart(_) => BeatKind::FADER_START,
+            Self::MasterRequest(_) => BeatKind::MASTER_REQUEST,
+            Self::MasterResponse(_) => BeatKind::MASTER_RESPONSE,
             Self::Other { kind, .. } => *kind,
         }
     }
@@ -202,6 +215,12 @@ pub fn decode(data: &[u8]) -> Result<Packet> {
         }
         BeatKind::FADER_START => {
             FaderStart::parse(data).map_or_else(|_| other(), Packet::FaderStart)
+        }
+        BeatKind::MASTER_REQUEST => {
+            MasterRequest::parse(data).map_or_else(|_| other(), Packet::MasterRequest)
+        }
+        BeatKind::MASTER_RESPONSE => {
+            MasterResponse::parse(data).map_or_else(|_| other(), Packet::MasterResponse)
         }
         _ => other(),
     })
@@ -717,6 +736,146 @@ impl fmt::Debug for FaderStart {
     }
 }
 
+// -- master handoff (0x26, 0x27) ------------------------------------------
+
+/// A player asking the current tempo master to hand mastership over.
+///
+/// Sent when a DJ presses MASTER on a deck that is not already master. It is
+/// **unicast at the current master**, not broadcast, so a capture taken on a
+/// switch that is not mirroring will not contain it (F48).
+///
+/// Observed five times, in `captures/S28-master-beat-sync-taglist`, always
+/// answered within 5 ms by a [`MasterResponse`] from the deck that held master,
+/// after which the requester's status byte `0x9e` goes to `1` within ~70 ms.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct MasterRequest {
+    /// `0x0b`–`0x1e`, the requesting device's name.
+    pub name: DeviceName,
+    /// Byte `0x21`, repeated as the body word at `0x24`. The device that wants
+    /// to become master.
+    pub device: DeviceNumber,
+}
+
+impl MasterRequest {
+    /// Bytes on the wire. Fixed: `0x0004` of body in all five captured packets.
+    pub const LEN: usize = 0x28;
+
+    /// The device number again, as a big-endian word. It matched byte `0x21` in
+    /// all five captured packets, so it is written rather than carried as a
+    /// field that could disagree with the one at `0x21` — the same redundancy
+    /// [`Beat::OFF_DEVICE_2`] has.
+    const OFF_DEVICE_2: usize = 0x24;
+
+    /// Parse a master request, or fail if it is not one.
+    pub fn parse(data: &[u8]) -> Result<Self> {
+        check_header(data, BeatKind::MASTER_REQUEST.0, Self::LEN)?;
+        let device = DeviceNumber::new(byte_at(data, OFF_SENDER).unwrap_or(0))
+            .ok_or_else(|| Error::malformed(OFF_SENDER, "master request from device 0"))?;
+        Ok(Self {
+            name: name_at(data),
+            device,
+        })
+    }
+
+    /// Encode this request as the 40 bytes a deck puts on the wire.
+    pub fn encode(&self) -> [u8; Self::LEN] {
+        let mut raw = [0u8; Self::LEN];
+        write_shared_header(
+            &mut raw,
+            BeatKind::MASTER_REQUEST.0,
+            self.name,
+            self.device.get(),
+        );
+        if let Some(field) = raw.get_mut(Self::OFF_DEVICE_2..Self::OFF_DEVICE_2 + 4) {
+            field.copy_from_slice(&u32::from(self.device.get()).to_be_bytes());
+        }
+        raw
+    }
+}
+
+impl fmt::Debug for MasterRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MasterRequest")
+            .field("device", &self.device)
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
+/// The outgoing master's answer to a [`MasterRequest`].
+///
+/// Unicast back at the requester. The master keeps publishing `0x9e = 1` in its
+/// status for one or two more packets while byte `0x9f` names the device it is
+/// yielding to, then drops both — so mastership is briefly claimed by *both*
+/// decks, and a follower that treats master as exclusive will see it flicker.
+/// [`crate::status::CdjStatus::yielding_to`] is what disambiguates.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct MasterResponse {
+    /// `0x0b`–`0x1e`, the answering device's name.
+    pub name: DeviceName,
+    /// Byte `0x21`, repeated as the body word at `0x24`. The device that *held*
+    /// master and is giving it up — not the one that asked.
+    pub device: DeviceNumber,
+    /// The second body word at `0x28`: `1` in all five captured packets, each
+    /// time followed by the handoff actually happening.
+    ///
+    /// Modelled as a boolean on the reading that `0` refuses, which is what a
+    /// one-word acknowledgement in this position conventionally means. **A
+    /// refusal has never been observed**, so encoding one is untested against
+    /// hardware; nothing in this library sends it.
+    pub granted: bool,
+}
+
+impl MasterResponse {
+    /// Bytes on the wire. Fixed: `0x0008` of body in all five captured packets.
+    pub const LEN: usize = 0x2c;
+
+    /// The answering device's number again, as a big-endian word. See
+    /// [`MasterRequest::OFF_DEVICE_2`].
+    const OFF_DEVICE_2: usize = 0x24;
+    const OFF_GRANTED: usize = 0x28;
+
+    /// Parse a master response, or fail if it is not one.
+    pub fn parse(data: &[u8]) -> Result<Self> {
+        check_header(data, BeatKind::MASTER_RESPONSE.0, Self::LEN)?;
+        let device = DeviceNumber::new(byte_at(data, OFF_SENDER).unwrap_or(0))
+            .ok_or_else(|| Error::malformed(OFF_SENDER, "master response from device 0"))?;
+        Ok(Self {
+            name: name_at(data),
+            device,
+            granted: be_u32_at(data, Self::OFF_GRANTED).unwrap_or(0) != 0,
+        })
+    }
+
+    /// Encode this response as the 44 bytes a deck puts on the wire.
+    pub fn encode(&self) -> [u8; Self::LEN] {
+        let mut raw = [0u8; Self::LEN];
+        write_shared_header(
+            &mut raw,
+            BeatKind::MASTER_RESPONSE.0,
+            self.name,
+            self.device.get(),
+        );
+        if let Some(field) = raw.get_mut(Self::OFF_DEVICE_2..Self::OFF_DEVICE_2 + 4) {
+            field.copy_from_slice(&u32::from(self.device.get()).to_be_bytes());
+        }
+        if let Some(field) = raw.get_mut(Self::OFF_GRANTED..Self::OFF_GRANTED + 4) {
+            field.copy_from_slice(&u32::from(self.granted).to_be_bytes());
+        }
+        raw
+    }
+}
+
+impl fmt::Debug for MasterResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MasterResponse")
+            .field("device", &self.device)
+            .field("granted", &self.granted)
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
 /// The name field, `0x0b`–`0x1e`. Empty on a datagram too short to hold it,
 /// which the constructors have already ruled out.
 fn name_at(raw: &[u8]) -> DeviceName {
@@ -1044,6 +1203,82 @@ mod tests {
         assert_eq!(format!("{:?}", BeatKind(0x77)), "BeatKind(0x77)");
     }
 
+    // -- master handoff ---------------------------------------------------
+
+    /// Device 1 asking device 2 for master, 740.338 s into
+    /// `captures/S28-master-beat-sync-taglist`.
+    const REAL_MASTER_REQUEST: [u8; MasterRequest::LEN] = [
+        0x51, 0x73, 0x70, 0x74, 0x31, 0x57, 0x6d, 0x4a, 0x4f, 0x4c, 0x26, 0x43, 0x44, 0x4a, 0x2d,
+        0x32, 0x30, 0x30, 0x30, 0x6e, 0x65, 0x78, 0x75, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x00, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01,
+    ];
+
+    /// Device 2 agreeing, 5 ms later in the same capture.
+    const REAL_MASTER_RESPONSE: [u8; MasterResponse::LEN] = [
+        0x51, 0x73, 0x70, 0x74, 0x31, 0x57, 0x6d, 0x4a, 0x4f, 0x4c, 0x27, 0x43, 0x44, 0x4a, 0x2d,
+        0x32, 0x30, 0x30, 0x30, 0x6e, 0x65, 0x78, 0x75, 0x73, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x00, 0x02, 0x00, 0x08, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
+    ];
+
+    #[test]
+    fn a_master_request_names_the_deck_that_wants_it() {
+        let Packet::MasterRequest(request) = decode(&REAL_MASTER_REQUEST).expect("a datagram")
+        else {
+            panic!("not decoded as a master request");
+        };
+        assert_eq!(request.device.get(), 1);
+        assert_eq!(request.name.to_string(), "CDJ-2000nexus");
+        assert_eq!(request.encode(), REAL_MASTER_REQUEST);
+    }
+
+    #[test]
+    fn a_master_response_names_the_deck_giving_it_up_not_the_one_asking() {
+        let Packet::MasterResponse(response) = decode(&REAL_MASTER_RESPONSE).expect("a datagram")
+        else {
+            panic!("not decoded as a master response");
+        };
+        // Device 1 asked; device 2 answers, and it is 2 that appears in both
+        // the header and the first body word.
+        assert_eq!(response.device.get(), 2);
+        assert!(response.granted);
+        assert_eq!(response.encode(), REAL_MASTER_RESPONSE);
+    }
+
+    #[test]
+    fn the_body_length_field_matches_the_two_handoff_layouts() {
+        // 0x0004 for the request's one word, 0x0008 for the response's two.
+        // Derived from the buffer size rather than written by hand, so a wrong
+        // LEN would show up here rather than as a deck ignoring the packet.
+        let request = MasterRequest {
+            name: DeviceName::new("CDJ-2000nexus"),
+            device: DeviceNumber::new(1).expect("1 is a device number"),
+        };
+        assert_eq!(be_u16_at(&request.encode(), OFF_BODY_LEN), Some(0x0004));
+        assert_eq!(byte_at(&request.encode(), OFF_SUBTYPE), Some(0x00));
+
+        let response = MasterResponse {
+            name: DeviceName::new("CDJ-2000nexus"),
+            device: DeviceNumber::new(2).expect("2 is a device number"),
+            granted: true,
+        };
+        assert_eq!(be_u16_at(&response.encode(), OFF_BODY_LEN), Some(0x0008));
+        assert_eq!(byte_at(&response.encode(), OFF_CONST_ONE), Some(0x01));
+    }
+
+    #[test]
+    fn a_handoff_packet_from_device_zero_is_refused() {
+        let mut raw = REAL_MASTER_REQUEST;
+        raw[OFF_SENDER] = 0;
+        // Refused as a request, but still surfaced rather than dropped: a
+        // listener that gave up on the first surprise would stop following the
+        // decks it does understand.
+        assert!(MasterRequest::parse(&raw).is_err());
+        assert!(matches!(
+            decode(&raw).expect("still a datagram"),
+            Packet::Other { kind, .. } if kind == BeatKind::MASTER_REQUEST
+        ));
+    }
+
     // -- the capture corpus -----------------------------------------------
 
     /// Every beat packet in the corpus, or an empty vector on a machine with no
@@ -1080,37 +1315,46 @@ mod tests {
             datagrams.len()
         );
         let mut beats = 0usize;
+        let mut handoff = 0usize;
         for raw in &datagrams {
             // The corpus holds more than beats: alternating tempo master
             // between two decks puts the handoff request and its response on
             // this port too, and they are neither 96 bytes nor subtype 0x00.
-            let beat = match decode(raw).expect("a Pro DJ Link datagram") {
-                Packet::Beat(beat) => beat,
-                Packet::Other { kind, .. }
-                    if kind == BeatKind::MASTER_REQUEST || kind == BeatKind::MASTER_RESPONSE =>
-                {
-                    continue;
+            let encoded = match decode(raw).expect("a Pro DJ Link datagram") {
+                Packet::Beat(beat) => {
+                    assert_eq!(raw.len(), Beat::LEN, "beat packets are a fixed 96 bytes");
+                    beats += 1;
+                    beat.encode().to_vec()
+                }
+                Packet::MasterRequest(request) => {
+                    handoff += 1;
+                    request.encode().to_vec()
+                }
+                Packet::MasterResponse(response) => {
+                    handoff += 1;
+                    response.encode().to_vec()
                 }
                 other => panic!("unexpected 50001 datagram: {:?}", other.kind()),
             };
-            assert_eq!(raw.len(), Beat::LEN, "beat packets are a fixed 96 bytes");
             assert_eq!(
-                beat.encode().as_slice(),
+                encoded.as_slice(),
                 raw.as_slice(),
-                "re-encoding {beat:?} changed bytes"
+                "re-encoding a {:?} changed bytes",
+                decode(raw).map(|packet| packet.kind())
             );
-            beats += 1;
         }
-        // Not every datagram: the master handoff shares this port, and skipping
-        // those above is why the two counts differ. Both are asserted so a
-        // change in either shows up.
-        let handoff = datagrams.len() - beats;
+        // Both counts are asserted so a change in either shows up: a decoder
+        // that stopped recognising the handoff would otherwise just move those
+        // packets into the other bucket.
         assert!(beats >= 4400, "only {beats} beat packets re-encoded");
         assert!(
-            handoff <= datagrams.len() / 100,
-            "{handoff} of {} datagrams on 50001 are not beats, which is more than the \
-             master handoff can account for",
-            datagrams.len()
+            handoff >= 10,
+            "the corpus holds five master handoffs — ten datagrams; found {handoff}"
+        );
+        assert_eq!(
+            beats + handoff,
+            datagrams.len(),
+            "every datagram on 50001 is either a beat or a master handoff"
         );
     }
 

@@ -53,6 +53,7 @@ use std::fmt;
 use std::net::Ipv4Addr;
 use std::time::Duration;
 
+use crate::beat::Pitch;
 use crate::device::{DeviceName, DeviceNumber};
 use crate::status_templates as templates;
 use crate::{Error, MAGIC, Result, Slot};
@@ -357,6 +358,88 @@ macro_rules! header_accessors {
 /// A player's periodic status packet.
 ///
 /// Owns its datagram. Constructing one proves the buffer carries the magic, the
+/// What byte `0x92` holds when the player has no track and so no tempo.
+///
+/// Read as a number it is 655.35 BPM, which is why it is a named sentinel here
+/// and an [`Option`] in the accessor rather than something every caller has to
+/// remember (F49).
+const NO_TEMPO: u16 = 0xffff;
+
+/// What byte `0x9f` holds when no master handoff is in progress.
+const NO_YIELD: u8 = 0xff;
+
+/// Byte `0x89`: what the player is doing, as four bits.
+///
+/// A newtype over the raw byte rather than a `bitflags` set, because three of
+/// the eight bits have never been seen to move and inventing names for them
+/// would be a guess presented as knowledge. Across 46,012 captured status
+/// packets exactly eight values appear — `0x84`, `0x94`, `0xa4`, `0xb4`,
+/// `0xc4`, `0xd4`, `0xe4`, `0xf4` — so bits `0x80` and `0x04` are always set,
+/// bits `0x08`, `0x02` and `0x01` never are, and only the three bits named
+/// below vary (F50).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StatusFlags(pub u8);
+
+impl StatusFlags {
+    /// Bit `0x40`. The deck is producing sound.
+    ///
+    /// Not the same thing as [`CdjStatus::play_state`] being `3`: 289 of the
+    /// 8,859 captured packets with play state `3` have this bit clear, so the
+    /// two are separate observations and this is the one about audio.
+    pub const PLAYING: u8 = 0x40;
+    /// Bit `0x20`. This deck is tempo master. See
+    /// [`CdjStatus::is_tempo_master`], which is the authoritative field.
+    pub const TEMPO_MASTER: u8 = 0x20;
+    /// Bit `0x10`. SYNC is lit on this deck.
+    ///
+    /// Established by the pitch slewing to match the master's effective tempo
+    /// in the same packet the bit first appears (F51).
+    pub const SYNC: u8 = 0x10;
+    /// Bit `0x08`. The mixer says this channel is audible.
+    ///
+    /// **Never observed**: no DJM took part in any capture here, and a CDJ only
+    /// believes it is on air because a mixer told it so. Named from the
+    /// literature so a log can print it.
+    pub const ON_AIR: u8 = 0x08;
+
+    /// The deck is producing sound.
+    pub fn is_playing(self) -> bool {
+        self.0 & Self::PLAYING != 0
+    }
+
+    /// The deck claims tempo master.
+    pub fn is_tempo_master(self) -> bool {
+        self.0 & Self::TEMPO_MASTER != 0
+    }
+
+    /// SYNC is lit.
+    pub fn is_synced(self) -> bool {
+        self.0 & Self::SYNC != 0
+    }
+
+    /// A mixer has told the deck its channel is audible.
+    pub fn is_on_air(self) -> bool {
+        self.0 & Self::ON_AIR != 0
+    }
+}
+
+impl fmt::Debug for StatusFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut set = f.debug_set();
+        for (bit, name) in [
+            (Self::PLAYING, "playing"),
+            (Self::TEMPO_MASTER, "master"),
+            (Self::SYNC, "sync"),
+            (Self::ON_AIR, "on_air"),
+        ] {
+            if self.0 & bit != 0 {
+                set.entry(&name);
+            }
+        }
+        set.finish()
+    }
+}
+
 /// `0x0a` kind byte and at least [`CdjStatus::MIN_LEN`] bytes, which is what
 /// makes the accessors below that offset total.
 ///
@@ -387,8 +470,11 @@ impl CdjStatus {
     const OFF_LINK_AVAILABLE: usize = 0x75;
     const OFF_PLAY_STATE: usize = 0x7b;
     const OFF_FIRMWARE: usize = 0x7c;
+    const OFF_FLAGS: usize = 0x89;
+    const OFF_PITCH: usize = 0x8c;
     const OFF_BPM: usize = 0x92;
     const OFF_MASTER_MEANINGFUL: usize = 0x9e;
+    const OFF_YIELDING_TO: usize = 0x9f;
     const OFF_PACKET_COUNTER: usize = 0xc8;
 
     /// Parse a status packet, or fail if it is not one.
@@ -467,19 +553,75 @@ impl CdjStatus {
         )
     }
 
+    /// Byte `0x89`: playing, master, sync and on-air, as one field.
+    ///
+    /// `None` on a packet too short to carry it.
+    pub fn flags(&self) -> Option<StatusFlags> {
+        byte_at(&self.raw, Self::OFF_FLAGS).map(StatusFlags)
+    }
+
+    /// `0x8c`–`0x8f`, the pitch fader as a multiplier.
+    ///
+    /// The tempo the deck is actually producing is this times [`Self::bpm`],
+    /// which is what [`Self::effective_bpm`] returns. While a follower is
+    /// synced this field is not the DJ's fader position at all — the deck slews
+    /// it continuously to hold its effective tempo equal to the master's.
+    pub fn pitch(&self) -> Option<Pitch> {
+        be_u32_at(&self.raw, Self::OFF_PITCH).map(Pitch)
+    }
+
     /// Tempo in centi-BPM, before the pitch fader is applied.
+    ///
+    /// `None` both on a packet too short to carry it and on the `0xffff`
+    /// sentinel a deck sends when it has no track and therefore no tempo —
+    /// 31,424 of the 46,012 status packets in this corpus. Reading that
+    /// sentinel as a number gives 655.35 BPM (F49).
     pub fn bpm_centi(&self) -> Option<u16> {
-        be_u16_at(&self.raw, Self::OFF_BPM)
+        be_u16_at(&self.raw, Self::OFF_BPM).filter(|&raw| raw != NO_TEMPO)
+    }
+
+    /// The track's own tempo, before the pitch fader.
+    pub fn bpm(&self) -> Option<f64> {
+        self.bpm_centi().map(|centi| f64::from(centi) / 100.0)
+    }
+
+    /// The tempo actually playing: the track's tempo with the fader applied.
+    ///
+    /// `None` when either half is missing, rather than a tempo derived from a
+    /// default that would look like a measurement.
+    pub fn effective_bpm(&self) -> Option<f64> {
+        Some(self.bpm()? * self.pitch()?.multiplier())
     }
 
     /// Whether this player currently holds tempo master.
     ///
-    /// Byte `0x9e` is `1` on a rekordbox track and `2` on a track with no usable
-    /// tempo; anything non-zero is the master. This is the only place mastership
-    /// is published, so a device that never announces can never know who the
-    /// master is.
+    /// Byte `0x9e` is `1` for a master with a usable beat grid and `2` for one
+    /// without — the `2` form appears 309 times in this corpus and only while
+    /// playing unanalysed files (`captures/S11-format-matrix`). Anything
+    /// non-zero is the master. This is the only place mastership is published,
+    /// so a device that never announces can never know who the master is.
+    ///
+    /// It agrees with [`StatusFlags::is_tempo_master`] in 46,011 of the 46,012
+    /// captured packets; the one disagreement is a single frame inside a
+    /// handoff. Prefer this byte, which is what the other decks act on.
     pub fn is_tempo_master(&self) -> Option<bool> {
         byte_at(&self.raw, Self::OFF_MASTER_MEANINGFUL).map(|byte| byte != 0)
+    }
+
+    /// The device this master is handing mastership to, if it is mid-handoff.
+    ///
+    /// Byte `0x9f`, which is `0xff` — no handoff — in 46,003 of the 46,012
+    /// captured packets. In the other nine it names the device that sent the
+    /// [`crate::beat::MasterRequest`], and it is set for the one or two packets
+    /// during which **both** decks report themselves master. A follower that
+    /// takes `is_tempo_master` at face value without consulting this will see
+    /// mastership flicker between two devices.
+    pub fn yielding_to(&self) -> Option<DeviceNumber> {
+        let target = byte_at(&self.raw, Self::OFF_YIELDING_TO)?;
+        if target == NO_YIELD {
+            return None;
+        }
+        DeviceNumber::new(target)
     }
 
     /// The sender's monotonic packet counter.

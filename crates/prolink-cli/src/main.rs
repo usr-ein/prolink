@@ -903,8 +903,8 @@ async fn watch_status(
 fn render_players(monitor: &Monitor) -> Vec<String> {
     let known = monitor.watches_status();
     let mut lines = vec![format!(
-        "{:>3}  {:<20}  {:>7}  {:<6}  {:>5}  {:<6}  {:<10}  {}",
-        "NUM", "NAME", "TEMPO", "BAR", "PHASE", "MASTER", "STATE", "LOADED"
+        "{:>3}  {:<20}  {:>7}  {:<6}  {:>5}  {:<4}  {:<8}  {:<10}  {}",
+        "NUM", "NAME", "TEMPO", "BAR", "PHASE", "SYNC", "MASTER", "STATE", "LOADED"
     )];
     let players = monitor.players();
     if players.is_empty() {
@@ -915,7 +915,7 @@ fn render_players(monitor: &Monitor) -> Vec<String> {
     }
     for player in players {
         lines.push(format!(
-            "{:>3}  {:<20}  {:>7}  {:<6}  {:>5}  {:<6}  {:<10}  {}",
+            "{:>3}  {:<20}  {:>7}  {:<6}  {:>5}  {:<4}  {:<8}  {:<10}  {}",
             // `.get()`, because `DeviceNumber`'s `Display` writes through to
             // the inner number and so ignores the field width.
             player.device.get(),
@@ -923,6 +923,7 @@ fn render_players(monitor: &Monitor) -> Vec<String> {
             tempo_cell(&player),
             bar_cell(&player),
             phase_cell(&player),
+            sync_cell(&player, known),
             master_cell(&player, known),
             state_cell(&player, known),
             loaded_cell(&player, known),
@@ -963,15 +964,33 @@ fn phase_cell(player: &PlayerState) -> String {
         .map_or_else(|| String::from("--"), |phase| format!("{phase:.2}"))
 }
 
-fn master_cell(player: &PlayerState, known: bool) -> &'static str {
+fn master_cell(player: &PlayerState, known: bool) -> String {
     if !known {
         // Not "no": a listener that has not announced cannot tell "not master"
         // from "cannot know", and must not report the first when it means the
         // second.
+        return String::from("?");
+    }
+    // A handoff in progress is shown as the arrow rather than as plain
+    // "master", because for those one or two packets the *other* deck is
+    // reporting itself master too and a bare label would look like a fault.
+    if let Some(successor) = player.yielding_to() {
+        return format!("→{successor}");
+    }
+    String::from(match player.is_tempo_master() {
+        Some(true) => "master",
+        Some(false) => "-",
+        None => "?",
+    })
+}
+
+/// Whether SYNC is lit. Published only in status packets, like master.
+fn sync_cell(player: &PlayerState, known: bool) -> &'static str {
+    if !known {
         return "?";
     }
-    match player.is_tempo_master() {
-        Some(true) => "master",
+    match player.is_synced() {
+        Some(true) => "sync",
         Some(false) => "-",
         None => "?",
     }

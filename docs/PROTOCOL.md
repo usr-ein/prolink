@@ -182,6 +182,53 @@ One query per slot, issued when a deck first browses it, not repeated (F37).
 Answer with the true counts: a deck told there are no tracks has no reason to
 offer the medium.
 
+### 3.3b Sync and tempo master *(confirmed)*
+
+Four fields of the status packet, plus two packets on 50001, describe the whole
+of beat sync. Established from `S28-master-beat-sync-taglist`, the one session
+in this corpus where the two decks were bridged so their **unicast** traffic was
+captured (F48) — without that tap the handoff is invisible.
+
+| Offset | Field |
+|---|---|
+| `0x89` | flags: `0x40` playing, `0x20` master, `0x10` sync, `0x08` on-air |
+| `0x8c` | pitch, as a multiplier — same fixed point as the beat packet |
+| `0x92` | track tempo ×100, or `0xffff` for "no track" (F49) |
+| `0x9e` | `1` master, `2` master without a usable beat grid, `0` not master |
+| `0x9f` | device being handed master, or `0xff` |
+
+Only three bits of `0x89` ever move: across 46,012 captured status packets
+exactly eight values appear, so `0x80` and `0x04` are always set and `0x08`,
+`0x02`, `0x01` never are (F50). On-air is never set because no DJM took part in
+any capture — a CDJ believes it is on air only because a mixer said so.
+
+**A synced follower does not hold its own tempo.** When `0x10` lights, the deck
+slews `0x8c` continuously so that `bpm × pitch` equals the master's `bpm ×
+pitch` — measured to the last digit while the master's fader swept from 0% to
+−4.7%: master `145.00 × 0.95300 = 138.19`, follower `143.00 × 0.96633 = 138.19`
+(F51). So `0x8c` is the DJ's fader position only while sync is off.
+
+The handoff, when a DJ presses MASTER on the other deck:
+
+```
+50001  0x26  40B unicast → master     body: requesting device number
+50001  0x27  44B unicast → requester  body: answering device number, then 1
+50002        old master:  0x9e=1, 0x9f=<successor>     ← both claim master
+50002        new master:  0x9e=1, 0x9f=0xff
+50002        old master:  0x9e=0, 0x9f=0xff
+```
+
+Those three status packets spanned 81 ms in the observed handoffs, and the two
+that matter are 14 ms apart. **For that window two devices report themselves
+master**, so a listener that treats `0x9e` as exclusive sees mastership flicker
+— and whether it sees a spurious "nobody is master" depends on which packet it
+processes first. Byte `0x9f` is what disambiguates (F52).
+
+The five handoffs in the corpus were all granted; a refusal has never been
+observed, so the second body word of `0x27` is `1` in every example. `0x2a`
+(sync control) has never been seen at all: SYNC is toggled on a deck's own
+front panel, not over the network.
+
 ### 3.4 Device settings `0x35` / `0x36` *(confirmed)*
 
 "LOAD SETTINGS from that device's medium" — and **it is not a file read** (F38).
