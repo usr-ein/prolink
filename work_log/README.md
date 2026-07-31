@@ -34,7 +34,12 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap`, `status` | done | ten commands, covering every capability on the acceptance list |
 | 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | done | plus `CONVENTIONS.md`, CI and a dependency licence gate |
 | 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | done | 596 tests, clippy silent, rustdoc clean, pushed to `origin/main` |
-| 25 | Hardware testing round 1-3: what three captures ruled out, and what the fourth must contain | open | [025](025-the-one-minute-failure.md) |
+| 25 | The one-minute failure: `0x3001` must draw **no reply** | done | [025](025-the-one-minute-failure.md); found in deck-to-deck captures S25/S27 |
+| 26 | Sort by DJ PLAY COUNT ("PLAYSTATE") — the deck rejects our SORT item before asking | todo | S27 has the deck-to-deck traffic |
+| 27 | The key-matching indicator beside a playing track | todo | S27 |
+| 28 | Beat sync and tempo sharing: UDP 50001 `0x26` master request / `0x27` handoff response | todo | S28; both kinds are named but decode to `Other` |
+| 29 | Tag list: tagging, the TAG LIST menu, sorting it, making a playlist from it, clearing it | todo | S28; `0x3002` appears 34 times and is answered |
+| 30 | How AUTO device numbering resolves when two decks boot simultaneously, both on AUTO | todo | S26, from a cold boot of both |
 | 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
 
 ## Acceptance: what the CLI must be able to do

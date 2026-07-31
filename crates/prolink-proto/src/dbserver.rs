@@ -725,6 +725,23 @@ impl MessageKind {
     /// waveform, until the DJ leaves LINK and comes back. See
     /// [`MediaInfo`] for the body and for how it was decoded.
     pub const GET_MEDIA_INFO: Self = Self(0x3903);
+    /// Sent about a minute after a load, and **answered with nothing at all**.
+    ///
+    /// *A new observation, not in the research record, which lists `0x3001`
+    /// among the undecoded types seen around a loaded track.* Across three
+    /// deck-to-deck captures a real player sends this six times and the serving
+    /// deck replies to it **not once** — the same contract as
+    /// [`Self::MENU_CLOSE`].
+    ///
+    /// **Answering it costs the session.** A reply nobody asked for is read as
+    /// the answer to the *next* request, which is the `GET_METADATA` the deck
+    /// sends immediately afterwards; that comes back as "zero items" and every
+    /// reply from then on is one behind. On the deck: menus blank, the track
+    /// title falls back to the medium's own name, the waveform stops drawing —
+    /// about a minute into any track, because that is when this is sent. The
+    /// byte stream stays perfectly framed throughout, which is why nothing that
+    /// checks framing finds it.
+    pub const UNKNOWN_3001: Self = Self(0x3001);
     /// The detailed waveform.
     pub const GET_WAVEFORM_DETAIL: Self = Self(0x2904);
     /// Extended cue points, CDJ-2000NXS2 and later.
@@ -820,6 +837,7 @@ impl MessageKind {
             Self::GET_BEAT_GRID => "get_beat_grid",
             Self::GET_VBR_INDEX => "get_vbr_index",
             Self::GET_MEDIA_INFO => "get_media_info",
+            Self::UNKNOWN_3001 => "unknown_3001",
             Self::MEDIA_INFO => "media_info",
             Self::GET_WAVEFORM_DETAIL => "get_waveform_detail",
             Self::GET_CUE_POINTS_EXT => "get_cue_points_ext",

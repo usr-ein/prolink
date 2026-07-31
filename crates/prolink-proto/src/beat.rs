@@ -1081,12 +1081,17 @@ mod tests {
         );
         let mut beats = 0usize;
         for raw in &datagrams {
+            // The corpus holds more than beats: alternating tempo master
+            // between two decks puts the handoff request and its response on
+            // this port too, and they are neither 96 bytes nor subtype 0x00.
             let beat = match decode(raw).expect("a Pro DJ Link datagram") {
                 Packet::Beat(beat) => beat,
-                other => panic!(
-                    "every 50001 datagram in this corpus is a beat packet, got {:?}",
-                    other.kind()
-                ),
+                Packet::Other { kind, .. }
+                    if kind == BeatKind::MASTER_REQUEST || kind == BeatKind::MASTER_RESPONSE =>
+                {
+                    continue;
+                }
+                other => panic!("unexpected 50001 datagram: {:?}", other.kind()),
             };
             assert_eq!(raw.len(), Beat::LEN, "beat packets are a fixed 96 bytes");
             assert_eq!(
@@ -1096,7 +1101,17 @@ mod tests {
             );
             beats += 1;
         }
-        assert_eq!(beats, datagrams.len());
+        // Not every datagram: the master handoff shares this port, and skipping
+        // those above is why the two counts differ. Both are asserted so a
+        // change in either shows up.
+        let handoff = datagrams.len() - beats;
+        assert!(beats >= 4400, "only {beats} beat packets re-encoded");
+        assert!(
+            handoff <= datagrams.len() / 100,
+            "{handoff} of {} datagrams on 50001 are not beats, which is more than the \
+             master handoff can account for",
+            datagrams.len()
+        );
     }
 
     #[test]
@@ -1160,6 +1175,11 @@ mod tests {
             return;
         }
         for raw in &datagrams {
+            // Beat packets only: the master handoff shares this port and has
+            // its own shape.
+            if byte_at(raw, MAGIC.len()) != Some(BeatKind::BEAT.0) {
+                continue;
+            }
             assert_eq!(
                 byte_at(raw, OFF_SUBTYPE),
                 Some(0x00),

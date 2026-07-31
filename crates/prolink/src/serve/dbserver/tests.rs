@@ -519,8 +519,14 @@ fn every_request_a_real_deck_sends_draws_a_reply_and_never_an_error() {
             replies.iter().all(|reply| reply.kind != MessageKind::ERROR),
             "{name} drew a refusal: {replies:?}"
         );
-        if request.kind == MessageKind::MENU_CLOSE {
-            // No reply at all, and no state discarded (F16, F27).
+        if matches!(
+            request.kind,
+            MessageKind::MENU_CLOSE | MessageKind::UNKNOWN_3001
+        ) {
+            // The two requests a real server answers with nothing at all. For
+            // `MENU_CLOSE` no state may be discarded either (F16, F27); for
+            // `0x3001` a reply would be read as the answer to the next request
+            // and put every reply after it one behind.
             assert!(replies.is_empty(), "{name} should draw nothing");
         } else {
             assert!(!replies.is_empty(), "{name} drew nothing at all");
@@ -547,7 +553,7 @@ fn the_undecoded_request_types_are_acknowledged_rather_than_refused() {
     // `a_medium_description_is_not_an_acknowledgement` below.
     let shared = shared([usb()]);
     let mut session = Session::default();
-    for name in ["unknown_3001", "unknown_3401", "unknown_3b03"] {
+    for name in ["unknown_3401", "unknown_3b03"] {
         let text = CAPTURED_REQUESTS
             .iter()
             .find(|(fixture, _)| *fixture == name)
@@ -563,6 +569,31 @@ fn the_undecoded_request_types_are_acknowledged_rather_than_refused() {
             "{name} echoes its own type"
         );
     }
+}
+
+#[test]
+fn nothing_is_sent_back_for_0x3001() {
+    // A deck sends `0x3001` about a minute after a load, and across three
+    // deck-to-deck captures a real server answers it **not once** — six
+    // requests, zero replies. Answering it is what cost a real deck its browse
+    // session: the reply nobody asked for is read as the answer to the
+    // `GET_METADATA` that follows, so metadata comes back empty and every reply
+    // after that is one behind. Menus blank, the title falls back to the
+    // medium's name, the waveform stops. The stream stays perfectly framed the
+    // whole time, which is why no framing check finds it.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let text = CAPTURED_REQUESTS
+        .iter()
+        .find(|(fixture, _)| *fixture == "unknown_3001")
+        .map(|(_, text)| *text)
+        .expect("a captured fixture");
+
+    let replies = ask(&mut session, &shared, &decode(text));
+    assert!(
+        replies.is_empty(),
+        "answered with {replies:?}; a real server says nothing"
+    );
 }
 
 #[test]
