@@ -48,7 +48,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use prolink_proto::djl::{self, Body};
-use prolink_proto::status::{self, CdjStatus};
+use prolink_proto::status::{self, CdjStatus, MediaState};
 use prolink_proto::{
     BrowsableDeviceNumber, DISCOVERY_PORT, DeviceKind, DeviceName, DeviceNumber, STATUS_PORT, Slot,
 };
@@ -57,13 +57,21 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
-use crate::Result;
 use crate::discovery::Discovery;
-use crate::media::{MediaSource, NoMedia};
+use crate::media::{MediaDescription, MediaSource, NoMedia};
 use crate::socket::{self, MAX_DATAGRAM};
+use crate::{Error, Result};
 
 /// How long to watch the network before claiming a number.
 pub const PRESCAN: Duration = Duration::from_millis(2500);
+
+/// How often [`VirtualCdj::query_media`] looks for its answer.
+///
+/// A deck answers a media query in **0.7 to 1.2 ms** — three deck-to-deck
+/// exchanges across `S4b-media-insert`, `S15b-sd-and-usb` and
+/// `S16a-settings-over-link`, where this server takes 5 to 6 ms (S18). So the
+/// wait is dominated by whether the datagram arrives at all, not by the poll.
+const MEDIA_POLL: Duration = Duration::from_millis(10);
 
 /// The number an observer takes: outside the 1–6 player range, so it can never
 /// collide with hardware — and, being above 4, one a peer will never browse.
@@ -207,6 +215,134 @@ impl LoadedTracks {
     }
 }
 
+/// What a peer says is in one of its slots.
+///
+/// The two halves arrive by different routes and neither substitutes for the
+/// other. **Occupancy** is published in status packets and nowhere else (F20),
+/// so [`Self::state`] is current the moment a peer unicasts to us and needs
+/// nothing asked. **The name and the counts** only come from a media response,
+/// which has to be asked for — and a deck answers for an empty slot too, with
+/// everything zeroed (F51), so a description is not evidence of a medium. That
+/// is what [`Self::has_media`] is for.
+#[derive(Clone, Debug)]
+pub struct PeerSlot {
+    /// Whose slot it is.
+    pub device: DeviceNumber,
+    /// Which slot.
+    pub slot: Slot,
+    /// What the owner publishes at `0x6f`/`0x73`, including the states an
+    /// eject passes through.
+    pub state: MediaState,
+    /// The label and the counts, once a media query has been answered.
+    pub description: Option<MediaDescription>,
+}
+
+impl PeerSlot {
+    /// Whether a medium is present and mounted.
+    ///
+    /// From the status byte, not from the description: an unlabelled stick with
+    /// a full library reports no name, and an empty slot still gets a reply.
+    pub fn has_media(&self) -> bool {
+        self.state.has_media()
+    }
+
+    /// The volume label, or empty when unknown or unlabelled.
+    pub fn volume_name(&self) -> &str {
+        self.description
+            .as_ref()
+            .map_or("", |description| description.volume_name.as_str())
+    }
+
+    /// How many tracks the medium holds, once it has been described.
+    pub fn track_count(&self) -> Option<u32> {
+        Some(self.description.as_ref()?.track_count)
+    }
+
+    /// How many playlists the medium holds, once it has been described.
+    pub fn playlist_count(&self) -> Option<u32> {
+        Some(self.description.as_ref()?.playlist_count)
+    }
+}
+
+/// What our peers have in their slots, kept current by the status socket.
+///
+/// Filled from two kinds of datagram as they arrive: every peer status packet
+/// updates the slot states, and every media response fills in a description.
+/// Reading it never transmits — [`VirtualCdj::survey_media`] is what asks.
+#[derive(Debug, Default)]
+pub struct PeerMedia {
+    /// `(device, slot)` → what that peer says about it.
+    slots: Mutex<BTreeMap<(u8, Slot), PeerSlot>>,
+}
+
+impl PeerMedia {
+    /// Every slot we have heard anything about, by device and then slot.
+    pub fn all(&self) -> Vec<PeerSlot> {
+        self.with(|slots| slots.values().cloned().collect())
+    }
+
+    /// Every slot of one device.
+    pub fn of(&self, device: DeviceNumber) -> Vec<PeerSlot> {
+        self.with(|slots| {
+            slots
+                .values()
+                .filter(|entry| entry.device == device)
+                .cloned()
+                .collect()
+        })
+    }
+
+    /// One slot of one device.
+    pub fn get(&self, device: DeviceNumber, slot: Slot) -> Option<PeerSlot> {
+        self.with(|slots| slots.get(&(device.get(), slot)).cloned())
+    }
+
+    /// Only the slots that currently hold a medium.
+    pub fn occupied(&self) -> Vec<PeerSlot> {
+        self.with(|slots| {
+            slots
+                .values()
+                .filter(|entry| entry.has_media())
+                .cloned()
+                .collect()
+        })
+    }
+
+    /// Record what a status packet says about a slot.
+    fn note_state(&self, device: DeviceNumber, slot: Slot, state: MediaState) {
+        self.entry(device, slot, |entry| entry.state = state);
+    }
+
+    /// Record what a media response says about a slot.
+    fn note_description(&self, device: DeviceNumber, slot: Slot, description: &MediaDescription) {
+        self.entry(device, slot, |entry| {
+            entry.description = Some(description.clone());
+        });
+    }
+
+    fn entry(&self, device: DeviceNumber, slot: Slot, update: impl FnOnce(&mut PeerSlot)) {
+        let Ok(mut slots) = self.slots.lock() else {
+            return;
+        };
+        let entry = slots.entry((device.get(), slot)).or_insert(PeerSlot {
+            device,
+            slot,
+            // Until a status packet says otherwise. A slot we have only ever
+            // queried is not a slot we have been told holds anything.
+            state: MediaState::EMPTY,
+            description: None,
+        });
+        update(entry);
+    }
+
+    fn with<T>(&self, read: impl FnOnce(&BTreeMap<(u8, Slot), PeerSlot>) -> T) -> T {
+        match self.slots.lock() {
+            Ok(slots) => read(&slots),
+            Err(poisoned) => read(&poisoned.into_inner()),
+        }
+    }
+}
+
 /// A device on the network: keep-alives, and optionally status.
 #[derive(Debug)]
 pub struct VirtualCdj {
@@ -219,6 +355,14 @@ pub struct VirtualCdj {
     media: Arc<dyn MediaSource>,
     /// What our peers have loaded from us, kept current by the status socket.
     loaded: Arc<LoadedTracks>,
+    /// What our peers have in their own slots, kept current by the same socket.
+    peers: Arc<PeerMedia>,
+    /// UDP 50002, when we hold it. A media query has to leave from the port its
+    /// answer will come back to, and only one socket in a `SO_REUSEPORT` group
+    /// receives a given unicast datagram — so this is `None` when
+    /// [`VirtualCdjConfig::emit_status`] is off and something else, typically a
+    /// [`crate::Monitor`], has the port.
+    status_socket: Option<Arc<UdpSocket>>,
     status_counter: Arc<AtomicU32>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -261,6 +405,15 @@ impl VirtualCdj {
         };
         let _ = phase.send(Phase::Announcing);
 
+        // Bound here rather than inside the responder, because asking a peer
+        // what is in its slots uses the same socket as answering that question
+        // for ourselves, and the answer comes back to this port.
+        let status_socket = if config.emit_status {
+            Some(Arc::new(socket::bind(STATUS_PORT, Some(&interface))?))
+        } else {
+            None
+        };
+
         let mut cdj = Self {
             config,
             interface,
@@ -268,14 +421,16 @@ impl VirtualCdj {
             phase,
             media,
             loaded: Arc::new(LoadedTracks::default()),
+            peers: Arc::new(PeerMedia::default()),
+            status_socket,
             status_counter: Arc::new(AtomicU32::new(0)),
             tasks: Vec::new(),
         };
         cdj.tasks.push(cdj.spawn_keep_alive(discovery));
         cdj.tasks.push(cdj.spawn_defender(discovery));
-        if cdj.config.emit_status {
+        if let Some(socket) = cdj.status_socket.clone() {
             cdj.tasks.push(cdj.spawn_status(discovery)?);
-            cdj.tasks.push(cdj.spawn_query_responder()?);
+            cdj.tasks.push(cdj.spawn_query_responder(socket));
         }
         Ok(cdj)
     }
@@ -299,16 +454,117 @@ impl VirtualCdj {
         self.number().browsable()
     }
 
-    /// Watch the claim state machine.
     /// What our peers have loaded from us. Shared, and kept current for as
     /// long as this virtual CDJ runs.
     pub fn loaded(&self) -> Arc<LoadedTracks> {
         Arc::clone(&self.loaded)
     }
 
-    /// A receiver for our own beat phase.
+    /// What our peers have in their own slots.
+    ///
+    /// Reading this never transmits. The slot states are current from the
+    /// moment peers start unicasting status to us, which announcing is what
+    /// earns (F21); the names and counts appear once [`Self::survey_media`] or
+    /// [`Self::query_media`] has asked for them.
+    pub fn peer_media(&self) -> Arc<PeerMedia> {
+        Arc::clone(&self.peers)
+    }
+
+    /// Watch the claim state machine.
     pub fn phase(&self) -> watch::Receiver<Phase> {
         self.phase.subscribe()
+    }
+
+    /// Ask every online peer what is in both of its slots, and return the table.
+    ///
+    /// One `0x05` per peer per slot, then a single wait — rather than a wait per
+    /// slot — because the answers land in [`Self::peer_media`] as they arrive
+    /// and nothing here needs to match them up. A peer that does not answer in
+    /// time keeps whatever the table already knew, so a slow deck costs its own
+    /// row and not the survey.
+    ///
+    /// A deck answers for an empty slot too, with everything zeroed (F51), so
+    /// use [`PeerSlot::has_media`] — which reads the status byte — rather than
+    /// the presence of a description.
+    pub async fn survey_media(
+        &self,
+        discovery: &Discovery,
+        wait: Duration,
+    ) -> Result<Vec<PeerSlot>> {
+        let ours = self.number();
+        let mut asked = 0usize;
+        for device in discovery.online() {
+            if device.number == ours {
+                continue;
+            }
+            for slot in [Slot::USB, Slot::SD] {
+                self.send_media_query(device.ip, device.number, slot)
+                    .await?;
+                asked += 1;
+            }
+        }
+        debug!(queries = asked, "asked our peers what is in their slots");
+        if asked > 0 {
+            tokio::time::sleep(wait).await;
+        }
+        Ok(self.peers.all())
+    }
+
+    /// Ask one peer about one slot, and wait for that answer.
+    ///
+    /// For the whole network prefer [`Self::survey_media`], which asks
+    /// everything at once instead of paying the timeout per slot.
+    pub async fn query_media(
+        &self,
+        peer: Ipv4Addr,
+        target: DeviceNumber,
+        slot: Slot,
+        wait: Duration,
+    ) -> Result<MediaDescription> {
+        self.send_media_query(peer, target, slot).await?;
+
+        // Polled rather than notified: the answer arrives on another task, this
+        // is a once-per-slot question, and a poll loop needs no channel that
+        // could drop an answer while nobody is listening.
+        let deadline = tokio::time::Instant::now() + wait;
+        while tokio::time::Instant::now() < deadline {
+            if let Some(entry) = self.peers.get(target, slot)
+                && let Some(description) = entry.description
+            {
+                return Ok(description);
+            }
+            tokio::time::sleep(MEDIA_POLL).await;
+        }
+        Err(Error::Timeout {
+            what: "a media query",
+            after: wait,
+        })
+    }
+
+    /// Send one `0x05`, addressed the way a deck addresses it.
+    async fn send_media_query(
+        &self,
+        peer: Ipv4Addr,
+        target: DeviceNumber,
+        slot: Slot,
+    ) -> Result<()> {
+        let Some(socket) = self.status_socket.as_ref() else {
+            return Err(Error::NoStatusPort { port: STATUS_PORT });
+        };
+        // We name ourselves by number *and* by address, because the answer is
+        // sent to the address in the query rather than to the sender of it.
+        let query = status::MediaQuery {
+            requester: self.number(),
+            requester_ip: self.interface.ip,
+            target,
+            slot,
+        };
+        let to = SocketAddr::V4(SocketAddrV4::new(peer, STATUS_PORT));
+        socket
+            .send_to(&query.encode(self.config.name), to)
+            .await
+            .map_err(Error::io("asking a peer about a slot"))?;
+        Ok(())
     }
 
     /// The status packet we are emitting, for byte-diffing against a real deck.
@@ -418,14 +674,14 @@ impl VirtualCdj {
     /// accepted us — it is unicasting status to us and has completed a portmap
     /// and mount against our NFS server — still refuses to list us as a LINK
     /// source, because as far as it knows our slots hold nothing (F24).
-    fn spawn_query_responder(&self) -> Result<JoinHandle<()>> {
-        let socket = socket::bind(STATUS_PORT, Some(&self.interface))?;
+    fn spawn_query_responder(&self, socket: Arc<UdpSocket>) -> JoinHandle<()> {
         let name = self.config.name;
         let number = Arc::clone(&self.number);
         let media = Arc::clone(&self.media);
         let loaded = Arc::clone(&self.loaded);
+        let peers = Arc::clone(&self.peers);
 
-        Ok(tokio::spawn(async move {
+        tokio::spawn(async move {
             let mut buffer = vec![0u8; MAX_DATAGRAM];
             loop {
                 let (len, from) = match socket.recv_from(&mut buffer).await {
@@ -450,6 +706,14 @@ impl VirtualCdj {
                     // source player is *us* came off our medium.
                     Ok(status::Packet::CdjStatus(peer)) => {
                         observe_loaded(&loaded, ours, &peer);
+                        observe_peer_slots(&peers, &peer);
+                        None
+                    }
+                    // The answer to a question we asked. It is not addressed to
+                    // us by number — a deck sends it to whoever asked — so the
+                    // table is filled here and `survey_media` only has to wait.
+                    Ok(status::Packet::MediaResponse(response)) => {
+                        observe_peer_media(&peers, &response);
                         None
                     }
                     Ok(status::Packet::MediaQuery(query)) => {
@@ -478,7 +742,7 @@ impl VirtualCdj {
                     }
                 }
             }
-        }))
+        })
     }
 
     /// Defend our number, and watch for anyone defending it against us.
@@ -613,6 +877,47 @@ fn observe_loaded(loaded: &LoadedTracks, ours: DeviceNumber, peer: &CdjStatus) {
         return;
     }
     loaded.note(device.get(), peer.source_slot(), peer.track_id());
+}
+
+/// Record what a peer's status packet says about its own two slots.
+///
+/// Free of charge and unasked-for: occupancy is published here and nowhere else
+/// (F20), so every status packet that arrives is a fresh answer to "does that
+/// deck have media in it".
+fn observe_peer_slots(peers: &PeerMedia, peer: &CdjStatus) {
+    let Some(device) = peer.sender() else {
+        return;
+    };
+    for slot in [Slot::USB, Slot::SD] {
+        if let Some(state) = peer.slot_state(slot) {
+            peers.note_state(device, slot, state);
+        }
+    }
+}
+
+/// Record what a media response says about the slot it describes.
+fn observe_peer_media(peers: &PeerMedia, response: &status::MediaResponse) {
+    let Some(device) = response.device() else {
+        return;
+    };
+    let slot = response.slot();
+    let description = MediaDescription {
+        volume_name: response.volume_name(),
+        created: response.created(),
+        track_count: response.track_count(),
+        playlist_count: response.playlist_count(),
+        total_bytes: response.total_bytes(),
+        free_bytes: response.free_bytes(),
+    };
+    debug!(
+        %device,
+        %slot,
+        tracks = description.track_count,
+        playlists = description.playlist_count,
+        volume = description.volume_name,
+        "a peer described one of its slots",
+    );
+    peers.note_description(device, slot, &description);
 }
 
 fn status_packet(
@@ -948,8 +1253,8 @@ mod tests {
             fn occupied_slots(&self) -> std::collections::BTreeSet<Slot> {
                 [Slot::USB].into_iter().collect()
             }
-            fn describe(&self, slot: Slot) -> Option<crate::MediaDescription> {
-                (slot == Slot::USB).then(crate::MediaDescription::default)
+            fn describe(&self, slot: Slot) -> Option<MediaDescription> {
+                (slot == Slot::USB).then(MediaDescription::default)
             }
         }
 
@@ -977,7 +1282,7 @@ mod tests {
             fn occupied_slots(&self) -> std::collections::BTreeSet<Slot> {
                 std::collections::BTreeSet::new()
             }
-            fn describe(&self, _slot: Slot) -> Option<crate::MediaDescription> {
+            fn describe(&self, _slot: Slot) -> Option<MediaDescription> {
                 None
             }
             fn slot_state(&self, slot: Slot) -> MediaState {
@@ -1000,6 +1305,133 @@ mod tests {
         );
         assert_eq!(packet.usb_state(), MediaState::UNMOUNTING_ALT);
         assert_eq!(packet.sd_state(), MediaState::EMPTY);
+    }
+
+    /// A peer's status packet, with whatever it says about its slots.
+    fn peer_status(device: u8, usb: MediaState, sd: MediaState) -> CdjStatus {
+        let number = DeviceNumber::new(device).expect("a real device number");
+        CdjStatus::builder()
+            .device_number(number)
+            .name(DeviceName::default())
+            .slot_state(Slot::USB, usb)
+            .slot_state(Slot::SD, sd)
+            .build()
+    }
+
+    #[test]
+    fn a_peers_status_packet_says_which_of_its_slots_hold_media() {
+        // Occupancy is published here and nowhere else (F20), so this needs no
+        // query and is current as soon as a peer unicasts to us.
+        let peers = PeerMedia::default();
+        observe_peer_slots(
+            &peers,
+            &peer_status(2, MediaState::LOADED, MediaState::EMPTY),
+        );
+
+        let device = DeviceNumber::new(2).unwrap();
+        let usb = peers.get(device, Slot::USB).expect("the USB is known");
+        assert!(usb.has_media());
+        assert!(
+            !peers
+                .get(device, Slot::SD)
+                .expect("the SD is known too")
+                .has_media(),
+            "an empty slot is known to be empty, which is not the same as unknown"
+        );
+        assert_eq!(peers.occupied().len(), 1);
+        assert_eq!(
+            usb.track_count(),
+            None,
+            "nothing has described it yet, and occupancy does not imply a count"
+        );
+    }
+
+    #[test]
+    fn a_media_response_names_the_medium_and_counts_it() {
+        // Round-tripped through the wire form rather than constructed, so this
+        // exercises the same parse a real deck's answer goes through.
+        let peers = PeerMedia::default();
+        let device = DeviceNumber::new(2).unwrap();
+        let raw = status::MediaResponse::builder()
+            .device_number(device)
+            .slot(Slot::USB)
+            .name(DeviceName::default())
+            .volume_name("SAM2")
+            .counts(692, 35)
+            .build()
+            .into_bytes();
+        let response = status::MediaResponse::parse(&raw).expect("our own encoding parses");
+        observe_peer_media(&peers, &response);
+
+        let usb = peers.get(device, Slot::USB).expect("the USB is described");
+        assert_eq!(usb.volume_name(), "SAM2");
+        assert_eq!(usb.track_count(), Some(692));
+        assert_eq!(usb.playlist_count(), Some(35));
+        assert!(
+            !usb.has_media(),
+            "a description is not evidence of a medium: a deck answers for an empty slot too (F51)"
+        );
+    }
+
+    #[test]
+    fn the_two_halves_of_a_slot_arrive_separately_and_do_not_overwrite_each_other() {
+        let peers = PeerMedia::default();
+        let device = DeviceNumber::new(2).unwrap();
+        let raw = status::MediaResponse::builder()
+            .device_number(device)
+            .slot(Slot::USB)
+            .name(DeviceName::default())
+            .volume_name("SAM2")
+            .counts(692, 35)
+            .build()
+            .into_bytes();
+        observe_peer_media(
+            &peers,
+            &status::MediaResponse::parse(&raw).expect("it parses"),
+        );
+        observe_peer_slots(
+            &peers,
+            &peer_status(2, MediaState::LOADED, MediaState::EMPTY),
+        );
+
+        let usb = peers.get(device, Slot::USB).expect("both halves landed");
+        assert!(usb.has_media(), "the status packet supplied the occupancy");
+        assert_eq!(usb.track_count(), Some(692), "and the response the counts");
+
+        // And the other way round: a later status packet must not erase what a
+        // response taught us, or an eject would take the name with it.
+        observe_peer_slots(
+            &peers,
+            &peer_status(2, MediaState::UNMOUNTING, MediaState::EMPTY),
+        );
+        let usb = peers.get(device, Slot::USB).expect("still there");
+        assert_eq!(usb.state, MediaState::UNMOUNTING);
+        assert_eq!(usb.volume_name(), "SAM2");
+    }
+
+    #[test]
+    fn peers_are_listed_by_device_and_slot() {
+        let peers = PeerMedia::default();
+        observe_peer_slots(
+            &peers,
+            &peer_status(3, MediaState::LOADED, MediaState::LOADED),
+        );
+        observe_peer_slots(
+            &peers,
+            &peer_status(1, MediaState::LOADED, MediaState::EMPTY),
+        );
+
+        let listed: Vec<_> = peers
+            .all()
+            .into_iter()
+            .map(|entry| (entry.device.get(), entry.slot))
+            .collect();
+        assert_eq!(
+            listed,
+            vec![(1, Slot::SD), (1, Slot::USB), (3, Slot::SD), (3, Slot::USB)],
+            "device order first, so a listing reads like the rig looks"
+        );
+        assert_eq!(peers.of(DeviceNumber::new(3).unwrap()).len(), 2);
     }
 
     #[test]

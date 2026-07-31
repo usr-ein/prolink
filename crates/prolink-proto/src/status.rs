@@ -470,6 +470,7 @@ impl CdjStatus {
     const OFF_LINK_AVAILABLE: usize = 0x75;
     const OFF_PLAY_STATE: usize = 0x7b;
     const OFF_FIRMWARE: usize = 0x7c;
+    const OFF_BROWSE_LIST_SIZE: usize = 0x46;
     const OFF_FLAGS: usize = 0x89;
     const OFF_PITCH: usize = 0x8c;
     const OFF_BPM: usize = 0x92;
@@ -551,6 +552,23 @@ impl CdjStatus {
                 .map(char::from)
                 .collect(),
         )
+    }
+
+    /// `0x46`–`0x47`: how many rows are in the list this player is *showing*.
+    ///
+    /// The sending deck's own browse UI, not anything about its media. It is
+    /// the item count a dbserver menu reply gave that deck: across the corpus
+    /// every non-zero value here is a count that same deck had been told as a
+    /// client — 651 while it browsed a whole track list, 15 and then 13 while
+    /// it opened two albums, 1 for a one-item list (F57).
+    ///
+    /// `None` when the field is zero, which is what a player with nothing on
+    /// screen sends and what this library sends always: it serves media and
+    /// browses nothing, so it has no list to report. That asymmetry is the
+    /// largest single difference between our status packet and a real deck's,
+    /// and it is correct.
+    pub fn browse_list_size(&self) -> Option<u16> {
+        be_u16_at(&self.raw, Self::OFF_BROWSE_LIST_SIZE).filter(|size| *size != 0)
     }
 
     /// Byte `0x89`: playing, master, sync and on-air, as one field.
@@ -1274,6 +1292,49 @@ pub(crate) fn check_header(data: &[u8], kind: u8, min_len: usize) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_browse_list_size_is_a_menu_count_the_sender_was_told() {
+        // 0x46 is the sending deck's own browse UI: how many rows are on its
+        // screen. Every non-zero value in the corpus is an item count that
+        // deck had been given by a dbserver menu reply (F57).
+        //
+        // It is zero in two thirds of the corpus and zero in everything this
+        // library sends, because a server browses nothing.
+        let Some(corpus) = prolink_capture::Corpus::locate() else {
+            return;
+        };
+        let mut sizes = std::collections::BTreeSet::new();
+        let mut zero = 0usize;
+        for path in corpus.captures() {
+            let Ok(capture) = prolink_capture::Capture::open(&path) else {
+                continue;
+            };
+            for packet in capture.udp_to(crate::STATUS_PORT).flatten() {
+                let Ok(status) = CdjStatus::parse(&packet.payload) else {
+                    continue;
+                };
+                match status.browse_list_size() {
+                    Some(size) => {
+                        sizes.insert(size);
+                    }
+                    None => zero += 1,
+                }
+            }
+        }
+        if sizes.is_empty() && zero == 0 {
+            return;
+        }
+        assert!(zero > 1000, "the field is usually zero; {zero} were");
+        // The whole 651-track list, and the 40-track format stick, both of
+        // which are counts a deck was answered with in those sessions.
+        assert!(sizes.contains(&651), "651 is missing from {sizes:?}");
+        assert!(sizes.contains(&40), "40 is missing from {sizes:?}");
+        assert!(
+            sizes.iter().all(|size| *size <= 1000),
+            "a list size should be a plausible menu count: {sizes:?}"
+        );
+    }
     use super::*;
 
     fn device(number: u8) -> DeviceNumber {

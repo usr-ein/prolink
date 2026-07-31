@@ -192,6 +192,25 @@ medium that is gone. And the whole thing costs under two seconds.
 This is what C9's "real players do call `UMNT`" is triggered *by*, and it is why
 stopping a server is a sequence rather than closing sockets: see §6.
 
+### 3.2c `0x46`–`0x47` is the sender's browse list size *(confirmed)*
+
+The largest block of the status packet we send differently from a real deck,
+and the answer is that we are right to.
+
+Only one field in `0x40`–`0x60` ever moves: a 16-bit value at `0x46`. It is
+zero in 30,905 of 46,012 captured packets and, where it is not, it is **an item
+count that same deck had been given by a dbserver menu reply** — 651 while it
+browsed a whole track list, 40 on the format stick, 15 and then 13 as it opened
+two albums, 1 for a one-item list (F57). Seven of the eight values that can be
+checked against the same capture's dbserver traffic match exactly; the eighth
+is a count carried over from a medium browsed in a previous session.
+
+So it is the sending player's **own screen**, not a statement about its media.
+This library sends zero because it serves and browses nothing, which is what a
+player with nothing on screen sends.
+
+*Not* the key-matching indicator, which is what it was decoded looking for.
+
 ### 3.3 Media query `0x05` / response `0x06` *(confirmed)*
 
 **The step no reference implementation performs, because none of them serve.** A

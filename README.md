@@ -43,6 +43,23 @@ which a player unicasts to peers that have announced themselves — so those nee
 `--announce`, which takes a device number outside the 1–6 player range and
 cannot collide with hardware.
 
+### What media the players have
+
+```sh
+prolink media                               # every player's slots, named and counted
+```
+
+```text
+device 1 — CDJ-2000nexus at 169.254.103.172
+  USB  SAM2 — 692 tracks, 35 playlists — 14.9 GiB free of 29.8 GiB
+  SD   empty
+```
+
+This transmits, and for two reasons. Whether a slot holds anything is published
+only in status packets, which a player unicasts to peers that have announced
+themselves; the label and the counts are a separate question-and-answer on
+UDP 50002, and a deck replies to it in about a millisecond.
+
 ### Reading another player's media
 
 ```sh

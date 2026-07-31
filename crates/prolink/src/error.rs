@@ -89,6 +89,24 @@ pub enum Error {
         remedy: &'static str,
     },
 
+    /// Asking a peer about its slots needs UDP 50002, and this device does not
+    /// hold it.
+    ///
+    /// A media response is sent to the port it was asked from, and only one
+    /// socket in a `SO_REUSEPORT` group receives a given unicast datagram — so
+    /// a virtual CDJ started with `emit_status: false`, which is how a
+    /// [`crate::Monitor`] is given the port instead, cannot ask. Two things
+    /// wanting one port is a configuration mistake rather than a failure to
+    /// retry, which is why it is not a timeout.
+    #[error(
+        "this virtual CDJ does not hold UDP {port}, which a media query needs; it was started \
+         with status emission off"
+    )]
+    NoStatusPort {
+        /// The port a media query needs.
+        port: u16,
+    },
+
     /// A peer stopped answering.
     #[error("{what} timed out after {}ms", .after.as_millis())]
     Timeout {

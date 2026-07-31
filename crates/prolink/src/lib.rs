@@ -24,6 +24,16 @@
 //! status. That is required for anything a peer has to *offer* us — slot
 //! contents, tempo master, and being browsable at all.
 //!
+//! # What the other players have in their slots
+//!
+//! [`VirtualCdj::peer_media`] answers it, and it is filled from two sources
+//! because the protocol splits the answer in two. Whether a slot holds anything
+//! is published in status packets and nowhere else, so it costs nothing but
+//! having announced; the volume label and the track and playlist counts come
+//! only from a media query, which [`VirtualCdj::survey_media`] sends. A deck
+//! answers for an empty slot too, with everything zeroed, so occupancy is read
+//! from the status byte rather than inferred from the counts.
+//!
 //! # What a device must do to be browsable
 //!
 //! Learned by getting each one wrong in turn, and the order matters:
@@ -75,7 +85,7 @@ pub use media::{MediaDescription, MediaSource};
 pub use monitor::{Monitor, MonitorEvent, PlayerState};
 /// The beat-packet types that appear in [`monitor`]'s signatures.
 pub use prolink_proto::beat::{Beat, BeatInBar, Pitch};
-pub use virtual_cdj::{VirtualCdj, VirtualCdjConfig};
+pub use virtual_cdj::{PeerMedia, PeerSlot, VirtualCdj, VirtualCdjConfig};
 
 /// Re-exported so callers do not need a direct dependency on the codec crate
 /// for the handful of its types that appear in this one's signatures.

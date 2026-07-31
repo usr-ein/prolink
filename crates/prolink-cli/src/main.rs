@@ -26,7 +26,7 @@ use prolink::serve::{Medium, ProLinkServer, ServedSlot, ServerConfig};
 use prolink::virtual_cdj::{Numbering, VirtualCdjConfig};
 use prolink::{
     BeatInBar, BrowsableDeviceNumber, DeviceName, DeviceNumber, Discovery, Interface, Monitor,
-    PlayerState, Slot, VirtualCdj, discovery::SCAN_DURATION,
+    PeerSlot, PlayerState, Slot, VirtualCdj, discovery::SCAN_DURATION,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -111,6 +111,34 @@ enum Command {
         /// set to player 5 or 6.
         #[arg(long, default_value_t = 0x00, value_parser = maybe_hex)]
         generation: u8,
+    },
+
+    /// List what media the players have in their slots, and what is on it.
+    ///
+    /// **This transmits.** Slot occupancy is published only in status packets,
+    /// which a player unicasts to peers that have announced themselves, and the
+    /// volume name and the track and playlist counts have to be asked for with
+    /// a media query. So this announces as a virtual CDJ and then asks.
+    Media {
+        /// How long to wait for the answers, in seconds.
+        ///
+        /// A deck answers in about a millisecond, so this is a bound on a lost
+        /// datagram rather than on a slow player.
+        #[arg(long, default_value_t = 0.5)]
+        seconds: f32,
+
+        /// Claim a browsable number in 1–4 rather than announcing outside the
+        /// player range.
+        ///
+        /// **Untested either way.** Every captured media query came from a real
+        /// player number, so whether a deck answers one from device 7 is not
+        /// something the corpus settles. This is the fallback if it does not.
+        #[arg(long)]
+        claim: bool,
+
+        /// The number to try first when claiming.
+        #[arg(long, value_parser = browsable_number)]
+        number: Option<BrowsableDeviceNumber>,
     },
 
     /// Ask a player what ONC RPC services it runs. Passive.
@@ -300,6 +328,14 @@ async fn run(cli: Cli) -> Result<(), BoxedError> {
         } => {
             let interface = choose_interface(cli.interface.as_deref())?;
             announce(interface, claim, number, &name, generation).await
+        }
+        Command::Media {
+            seconds,
+            claim,
+            number,
+        } => {
+            let interface = choose_interface(cli.interface.as_deref())?;
+            list_media(interface, Duration::from_secs_f32(seconds), claim, number).await
         }
         Command::Rpcinfo { address } => {
             rpcinfo(
@@ -1026,6 +1062,123 @@ fn loaded_cell(player: &PlayerState, known: bool) -> String {
         None if known => String::from("nothing"),
         None => String::from("? (needs --announce)"),
     }
+}
+
+/// How long to let peers notice us before asking about their slots.
+///
+/// Occupancy comes from status packets, which a player only unicasts to peers
+/// that have announced themselves (F21). Announcing and asking in the same
+/// breath gets the counts but leaves every slot's state unknown, so this is the
+/// gap in between: two keep-alive periods, which is the interval a deck adds a
+/// peer on.
+const STATUS_SETTLE: Duration = Duration::from_secs(4);
+
+/// List what the players have in their slots.
+async fn list_media(
+    interface: Interface,
+    wait: Duration,
+    claim: bool,
+    preferred: Option<BrowsableDeviceNumber>,
+) -> Result<(), BoxedError> {
+    let numbering = if claim {
+        Numbering::Claim { preferred }
+    } else {
+        if preferred.is_some() {
+            eprintln!("note: --number only applies with --claim; announcing as an observer");
+        }
+        Numbering::default()
+    };
+
+    eprintln!("listening on {interface} (announcing, which transmits)");
+    let discovery = Discovery::start(interface).await?;
+    tokio::time::sleep(SCAN_DURATION).await;
+
+    // Status emission stays on, and that is the load-bearing part: it is what
+    // takes UDP 50002, which is the port a media response comes back to.
+    let config = VirtualCdjConfig {
+        numbering,
+        ..VirtualCdjConfig::default()
+    };
+    let cdj = VirtualCdj::observe(&discovery, config).await?;
+    eprintln!("asking as device {}", cdj.number());
+
+    // A moment for peers to notice us and start unicasting status, which is
+    // where occupancy comes from. Without it every slot reads unknown.
+    tokio::time::sleep(STATUS_SETTLE).await;
+    let slots = cdj.survey_media(&discovery, wait).await?;
+
+    let devices = discovery.online();
+    let mut listed = 0usize;
+    for device in &devices {
+        if device.number == cdj.number() {
+            continue;
+        }
+        let mine: Vec<_> = slots
+            .iter()
+            .filter(|entry| entry.device == device.number)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        listed += 1;
+        println!(
+            "device {} — {} at {}",
+            device.number, device.name, device.ip
+        );
+        for entry in mine {
+            print_slot(entry);
+        }
+    }
+
+    if listed == 0 {
+        println!("no player answered; none is online, or none would talk to us");
+    }
+    Ok(())
+}
+
+/// One line per slot: what is in it, and what is on that.
+fn print_slot(slot: &PeerSlot) {
+    let name = match slot.slot {
+        Slot::USB => "USB",
+        Slot::SD => "SD ",
+        other => {
+            let _ = other;
+            "?  "
+        }
+    };
+    if !slot.has_media() {
+        // The state, not just "empty": a slot mid-eject is neither.
+        println!("  {name}  {:?}", slot.state);
+        return;
+    }
+    let Some(description) = slot.description.as_ref() else {
+        println!("  {name}  loaded, but it did not describe itself");
+        return;
+    };
+    // An unlabelled stick reports no name while carrying a full library, so
+    // say so rather than printing nothing.
+    let volume = if description.volume_name.is_empty() {
+        "(unlabelled)"
+    } else {
+        &description.volume_name
+    };
+    print!(
+        "  {name}  {volume} — {} tracks, {} playlists",
+        description.track_count, description.playlist_count,
+    );
+    if let (Some(total), Some(free)) = (description.total_bytes, description.free_bytes) {
+        print!(" — {} free of {}", gibibytes(free), gibibytes(total));
+    }
+    if !description.created.is_empty() {
+        print!(" — created {}", description.created);
+    }
+    println!();
+}
+
+/// Bytes as a human-readable size. NFSv2 is 32-bit, and so is this field.
+fn gibibytes(bytes: u32) -> String {
+    let gib = f64::from(bytes) / 1024.0 / 1024.0 / 1024.0;
+    format!("{gib:.1} GiB")
 }
 
 async fn announce(
