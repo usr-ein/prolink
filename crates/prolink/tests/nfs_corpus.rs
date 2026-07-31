@@ -50,6 +50,7 @@
     clippy::cast_possible_truncation
 )]
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
@@ -565,8 +566,7 @@ fn merge(nodes: &mut BTreeMap<String, Option<u64>>, path: String, size: Option<u
 thread_local! {
     /// Names the reconstruction could not put on this filesystem. See
     /// [`build_tree`].
-    static MISSING: std::cell::RefCell<std::collections::BTreeSet<String>> =
-        std::cell::RefCell::new(std::collections::BTreeSet::new());
+    static MISSING: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
 }
 
 /// Write the reconstructed tree out as sparse files and mount it.
