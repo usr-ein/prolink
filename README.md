@@ -8,16 +8,22 @@ A Pioneer **Pro DJ Link** implementation in Rust, both directions:
    players browse and play a local rekordbox medium.
 
 It is written from captures of real hardware: two CDJ-2000NXS on firmware 1.44,
-33 pcapng sessions, and a working Python proof of concept and C++ port that
+37 pcapng sessions, and a working Python proof of concept and C++ port that
 preceded it. Where the published reverse-engineering literature disagrees with
 what the hardware does, the hardware wins and the doc comment says so.
 
-> **Status: complete but untested against hardware.** Both directions are
-> implemented and 596 tests pass, including a corpus replay of 33 captures of
-> real CDJ traffic with zero failures and an end-to-end test of this library's
-> servers against its own clients. Nothing here has yet met a real deck.
-> [`work_log/`](work_log/README.md) records what was built, in what order, and
-> what is still unproven.
+> **Status: working against real hardware.** Two CDJ-2000NXS browse this
+> server's media, load and play from it, search it, sort it, tag from it and
+> read its analysis, and 647 tests pass — including a corpus replay of 37
+> captures of real CDJ traffic and an end-to-end test of this library's servers
+> against its own clients. Several bugs that only hardware could find have been
+> fixed, each recorded in [`work_log/`](work_log/README.md) with the capture
+> that proved it.
+>
+> One known gap: the **key-matching indicator** does not light on a deck
+> browsing this server, and every field we send has been byte-compared against
+> a real CDJ serving the same medium without finding the difference. See
+> [`work_log/028`](work_log/028-the-key-matching-indicator.md).
 
 ## Using it
 
@@ -175,7 +181,7 @@ the wrong call:
 ## Testing
 
 ```sh
-cargo test --workspace                                   # 596 tests, no hardware needed
+cargo test --workspace                                   # 647 tests, no hardware needed
 PROLINK_CAPTURES=/path/to/captures cargo test --workspace # ...plus the corpus replay
 ```
 
