@@ -42,6 +42,8 @@ pub struct Session {
     events: Arc<Mutex<Events>>,
     /// Hands out transfer ids, from 1, so zero always means "not a transfer".
     next_transfer: AtomicU32,
+    /// The dbserver connections held open for browsing, one per player.
+    connections: crate::browse::Connections,
 }
 
 impl std::fmt::Debug for Session {
@@ -161,6 +163,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         cdj,
         events,
         next_transfer: AtomicU32::new(1),
+        connections: crate::browse::Connections::default(),
     }))
 }
 
@@ -255,8 +258,33 @@ impl Session {
         )
     }
 
+    /// The virtual CDJ, if this session announced.
+    pub(crate) fn cdj(&self) -> Option<&VirtualCdj> {
+        self.cdj.as_ref()
+    }
+
+    /// The number this session can browse with, if it holds a browsable one.
+    pub(crate) fn browsable_number(&self) -> Option<prolink::BrowsableDeviceNumber> {
+        crate::browse::browsable(self.device_number())
+    }
+
+    /// The runtime and the connection cache, borrowed together.
+    ///
+    /// One method because the borrow checker will not allow two `&mut self`
+    /// calls to be live at once, and every browse needs both.
+    pub(crate) fn runtime_and_connections(
+        &mut self,
+    ) -> (&Runtime, &mut crate::browse::Connections) {
+        (&self.runtime, &mut self.connections)
+    }
+
+    /// The connection cache, to look in without borrowing mutably.
+    pub(crate) fn connections_ref(&self) -> &crate::browse::Connections {
+        &self.connections
+    }
+
     /// The address of a device by number, if it is on the network.
-    fn address_of(&self, number: u8) -> Option<Ipv4Addr> {
+    pub(crate) fn address_of(&self, number: u8) -> Option<Ipv4Addr> {
         self.discovery
             .devices()
             .into_iter()
@@ -308,12 +336,29 @@ async fn fetch(
     Ok(())
 }
 
+impl Drop for Session {
+    fn drop(&mut self) {
+        // Closing politely rather than dropping the sockets: a deck holds
+        // dbserver state per connection, and a `DISCONNECT` is what tells it
+        // to let go.
+        let mut connections = std::mem::take(&mut self.connections);
+        connections.close_all(&self.runtime);
+    }
+}
+
 /// What a failed call tells C++.
 ///
 /// `cxx` turns this into an exception carrying [`Display`](std::fmt::Display),
 /// so the message is what a host shows the user.
 #[derive(Debug)]
 pub struct Error(String);
+
+impl Error {
+    /// One with the given message.
+    pub(crate) fn new(message: String) -> Self {
+        Self(message)
+    }
+}
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

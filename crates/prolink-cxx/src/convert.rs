@@ -5,7 +5,10 @@
 use prolink::monitor::PlayState as LibState;
 use prolink_proto::{DeviceKind as LibKind, Slot as LibSlot};
 
-use crate::ffi::{Device, DeviceKind, Event, EventKind, NetworkInterface, PlayState, Player, Slot};
+use crate::ffi::{
+    Device, DeviceKind, Event, EventKind, MediaInfo, Metadata, NetworkInterface, PlayState, Player,
+    Row, Slot,
+};
 
 /// An absent number, for a field C++ sees as a plain `double`.
 ///
@@ -150,5 +153,56 @@ pub(crate) fn event(from: &prolink::MonitorEvent) -> Event {
             0,
         ),
         prolink::MonitorEvent::Gone(device) => plain(EventKind::DeviceLost, device.get(), 0),
+    }
+}
+
+/// One browse row, as C++ sees it.
+pub(crate) fn row(from: &prolink_proto::dbserver::MenuItem) -> Row {
+    use prolink_proto::dbserver::MenuItem;
+    Row {
+        id: from.id,
+        label: from.label1.clone(),
+        detail: from.label2.clone(),
+        item_type: from.item_type.0,
+        artwork_id: from.artwork_id,
+        position: from.playlist_position,
+        // The two live marks a server puts on a track row (F53, F55).
+        is_loaded: from.flags & MenuItem::LOADED != 0,
+        is_tagged: from.flags & MenuItem::TAGGED != 0,
+    }
+}
+
+/// One track's metadata, as C++ sees it.
+pub(crate) fn metadata(from: &prolink::consume::TrackMetadata) -> Metadata {
+    Metadata {
+        id: from.id,
+        title: from.title.clone(),
+        artist: from.artist.clone(),
+        album: from.album.clone(),
+        genre: from.genre.clone(),
+        key: from.key.clone(),
+        label: from.label.clone(),
+        colour: from.colour.clone(),
+        comment: from.comment.clone(),
+        date_added: from.date_added.clone(),
+        duration_seconds: from.duration_seconds,
+        tempo_centibpm: from.tempo_centibpm,
+        rating: from.rating,
+        bitrate: from.bitrate,
+        artwork_id: from.artwork_id,
+    }
+}
+
+/// One of a player's slots, as C++ sees it.
+pub(crate) fn media_info(from: &prolink::PeerSlot) -> MediaInfo {
+    let described = from.description.as_ref();
+    MediaInfo {
+        device: from.device.get(),
+        slot: slot(from.slot),
+        has_media: from.state.has_media(),
+        volume_name: described.map(|d| d.volume_name.clone()).unwrap_or_default(),
+        created: described.map(|d| d.created.clone()).unwrap_or_default(),
+        track_count: described.map_or(0, |d| d.track_count),
+        playlist_count: described.map_or(0, |d| d.playlist_count),
     }
 }

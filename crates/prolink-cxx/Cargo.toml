@@ -23,6 +23,9 @@ cxx = "1"
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
 tracing = { workspace = true }
 
+[dev-dependencies]
+prolink-proto = { path = "../prolink-proto" }
+
 [build-dependencies]
 cxx-build = "1"
 

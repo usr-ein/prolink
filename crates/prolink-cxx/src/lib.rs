@@ -53,7 +53,9 @@
 //! }
 //! ```
 
+mod browse;
 mod convert;
+mod serve;
 mod session;
 
 pub use session::Session;
@@ -271,6 +273,128 @@ pub mod ffi {
         track_source_slot: Slot,
     }
 
+    /// A row in a browse menu: a track, an artist, an album, a category.
+    #[derive(Debug, Clone)]
+    struct Row {
+        /// What the row names — a track id in a track list, an artist id in an
+        /// artist list. What to pass back when the user opens it.
+        id: u32,
+        /// The first line: a title, a name, a category label.
+        label: String,
+        /// The second line, which the sort chooses: the artist under a title,
+        /// the tempo under a BPM sort. Empty when the sort is numeric.
+        detail: String,
+        /// The raw item type, so a host can tell a track row from a category
+        /// row without matching on the label.
+        item_type: u32,
+        /// The artwork to fetch for this row, or zero.
+        artwork_id: u32,
+        /// Its 1-based position inside a playlist, or its track number.
+        position: u32,
+        /// Whether this row is the track the browsing deck has loaded.
+        is_loaded: bool,
+        /// Whether this row is in the deck's tag list.
+        is_tagged: bool,
+    }
+
+    /// Everything a deck will tell us about one track.
+    #[derive(Debug, Clone)]
+    struct Metadata {
+        /// The track's row id.
+        id: u32,
+        /// Its title.
+        title: String,
+        /// Its artist.
+        artist: String,
+        /// Its album.
+        album: String,
+        /// Its genre.
+        genre: String,
+        /// Its musical key, as the medium spells it — Camelot on one export,
+        /// classical on another, because that is a rekordbox setting.
+        key: String,
+        /// Its record label.
+        label: String,
+        /// Its colour tag.
+        colour: String,
+        /// The DJ comment.
+        comment: String,
+        /// When it was added, as `2025-06-24`.
+        date_added: String,
+        /// How long it runs, in seconds.
+        duration_seconds: u32,
+        /// Its tempo in hundredths of a BPM, before any pitch fader.
+        tempo_centibpm: u32,
+        /// Its star rating.
+        rating: u32,
+        /// Its bitrate in kbps.
+        bitrate: u32,
+        /// The artwork to fetch, or zero.
+        artwork_id: u32,
+    }
+
+    /// What one of a player's slots holds.
+    #[derive(Debug, Clone)]
+    struct MediaInfo {
+        /// Which player.
+        device: u8,
+        /// Which slot.
+        slot: Slot,
+        /// Whether a medium is present and mounted.
+        has_media: bool,
+        /// The volume name, empty until the player has described the slot.
+        volume_name: String,
+        /// When the export was written, as `2025-06-24`. Empty until known.
+        created: String,
+        /// How many tracks it holds. Zero until known.
+        track_count: u32,
+        /// How many playlists. Zero until known.
+        playlist_count: u32,
+    }
+
+    /// How to serve local media to real players.
+    #[derive(Debug, Clone)]
+    struct ServeConfig {
+        /// The interface to use, or empty to choose one.
+        interface: String,
+        /// The medium to present in the USB slot, or empty for none.
+        usb_path: String,
+        /// The medium to present in the SD slot, or empty for none.
+        ///
+        /// A second USB stick shown as an SD card is exactly what a CDJ
+        /// expects to see.
+        sd_path: String,
+    }
+
+    /// What a running server is doing.
+    #[derive(Debug, Clone)]
+    struct ServeStatus {
+        /// Whether we hold a player number, without which nothing else here
+        /// matters: a deck validates it in every dbserver request (F45).
+        active: bool,
+        /// The number we hold, 1–4.
+        device_number: u8,
+        /// The address we serve from.
+        address: String,
+        /// The interface we serve on.
+        interface: String,
+        /// Where the portmapper is listening.
+        ///
+        /// **Must be 111.** With nothing there a deck retries `GETPORT` once a
+        /// second for ever rather than falling back to the well-known ports,
+        /// and never reaches the dbserver at all (F46).
+        portmap_port: u16,
+        /// Where mountd is listening.
+        mount_port: u16,
+        /// Where nfsd is listening.
+        nfs_port: u16,
+        /// Where the dbserver is listening.
+        dbserver_port: u16,
+        /// Whether a real player can actually find us — the portmapper is on
+        /// 111 and we hold a browsable number.
+        is_discoverable: bool,
+    }
+
     /// One thing that happened.
     ///
     /// Flat rather than a variant per kind, because C++ has no cheap sum type
@@ -352,6 +476,67 @@ pub mod ffi {
             local_path: &str,
         ) -> Result<u32>;
 
+        /// What every player's slots hold, as of now.
+        ///
+        /// A slot a player has not yet described comes back with
+        /// `has_media` true and the counts zero: the presence is published in
+        /// every status packet, the description only when a deck first asks
+        /// (F20, F37).
+        fn media(self: &Session) -> Vec<MediaInfo>;
+
+        /// The root menu of a player's slot, as its LINK button shows it.
+        ///
+        /// **Blocks on the network, and claims a browsable device number the
+        /// first time.** Call it off the UI thread; a dbserver request needs a
+        /// number in 1–4, which contends with the decks for one (F45).
+        fn root_menu(self: &mut Session, device_number: u8, slot: Slot) -> Result<Vec<Row>>;
+
+        /// Every track on a player's slot, under the given sort.
+        ///
+        /// Blocks; see `root_menu`. `sort` is zero for the default, which is
+        /// by title.
+        fn track_rows(
+            self: &mut Session,
+            device_number: u8,
+            slot: Slot,
+            sort: u32,
+        ) -> Result<Vec<Row>>;
+
+        /// Search a player's slot, the way its on-screen keyboard does.
+        ///
+        /// Blocks; see `root_menu`. The term is upper-cased on the way out,
+        /// because a deck's own keyboard has no lower case and its dbserver is
+        /// case-sensitive (F44).
+        fn search(
+            self: &mut Session,
+            device_number: u8,
+            slot: Slot,
+            term: &str,
+        ) -> Result<Vec<Row>>;
+
+        /// Everything a player will say about one track.
+        ///
+        /// Blocks; see `root_menu`.
+        fn metadata(
+            self: &mut Session,
+            device_number: u8,
+            slot: Slot,
+            track_id: u32,
+        ) -> Result<Metadata>;
+
+        /// Fetch a track's artwork and write it to `local_path`.
+        ///
+        /// Blocks; see `root_menu`. Artwork is small and comes over the
+        /// dbserver connection rather than NFS, so it is not worth the event
+        /// machinery a file transfer needs.
+        fn fetch_artwork(
+            self: &mut Session,
+            device_number: u8,
+            slot: Slot,
+            artwork_id: u32,
+            local_path: &str,
+        ) -> Result<()>;
+
         /// Fetch a player's `export.pdb`, the database a browse is built from.
         ///
         /// The same contract as `fetch_file`; this is the path a host does not
@@ -363,9 +548,44 @@ pub mod ffi {
             local_path: &str,
         ) -> Result<u32>;
     }
+
+    extern "Rust" {
+        /// A running server: our media, offered to real players.
+        type Server;
+
+        /// Start serving. Throws on failure, with the reason.
+        ///
+        /// **Needs UDP/111**, which is privileged: run as root, or on Linux
+        /// set `net.ipv4.ip_unprivileged_port_start=111`. Without it a deck
+        /// retries `GETPORT` once a second for ever and never finds us (F46).
+        fn serve(config: &ServeConfig) -> Result<Box<Server>>;
+
+        /// What this server is doing.
+        fn status(self: &Server) -> ServeStatus;
+
+        /// Stop serving, ejecting the media first.
+        ///
+        /// Not the same as dropping it. A deck reading our files has a mount
+        /// open, and sockets that simply vanish leave it retrying against
+        /// nothing; ejecting walks each slot through the unmounting states a
+        /// consumer waits for before the slot goes empty (F20).
+        fn stop(self: &mut Server);
+    }
 }
 
 pub use ffi::{
-    Config, Device, DeviceKind, Event, EventKind, NetworkInterface, PlayState, Player, Slot,
+    Config, Device, DeviceKind, Event, EventKind, MediaInfo, Metadata, NetworkInterface, PlayState,
+    Player, Row, ServeConfig, ServeStatus, Slot,
 };
+pub use serve::{Server, serve};
+
+/// One browse row, for tests that cannot reach a deck.
+///
+/// The two live marks a server puts on a track row are the thing most worth
+/// pinning, and a test cannot get one off the network on a build machine.
+#[doc(hidden)]
+#[must_use]
+pub fn row_for_test(item: &prolink_proto::dbserver::MenuItem) -> Row {
+    convert::row(item)
+}
 pub use session::{default_config, interfaces, open};

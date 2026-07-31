@@ -55,6 +55,32 @@ should be re-read.
 "not playing" from "0.00 BPM", and zero cannot. `cxx` has no `Option` in a
 shared struct, so the convention is explicit: `-1.0` means "no value".
 
+## What it covers
+
+Parity with the C++ it replaces, plus what hardware testing has since added.
+
+| | |
+|---|---|
+| Interfaces, session lifecycle, device table | `interfaces()`, `open()`, `devices()` |
+| Live player state | `players()` — tempo, pitch, beat and bar phase, master, sync, handoff target, play state, loaded track |
+| Events | `drain_events()` |
+| Slot contents per player | `media()` |
+| Browse | `root_menu()`, `track_rows()`, `search()`, `metadata()` |
+| Artwork | `fetch_artwork()` |
+| File and database transfer, with progress | `fetch_file()`, `fetch_database()` |
+| Serving local media | `serve()`, `Server::status()`, `Server::stop()` |
+
+**Two call styles, and the split is deliberate.** A browse is request/response
+and small — a menu is a few hundred rows in one round trip — so those block and
+return the rows, which is what a host wants and what Mixxx's network thread is
+already for. A **file** transfer is megabytes and seconds long, so it returns a
+transfer id immediately and reports progress as events.
+
+Browsing claims a device number in 1–4, because a deck validates the
+requester's number in every dbserver request and one outside that range is
+never offered as a source (F45). That contends with the decks for a number, so
+it happens on the first browse rather than at `open()`.
+
 ## Building
 
 `cargo build` produces `libprolink_cxx.a` and generates
