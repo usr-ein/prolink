@@ -34,6 +34,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 21 | `prolink-cli`: `devices`, `rpcinfo`, `pull-db`, `tracks`, `browse`, `serve`, `pcap`, `status` | done | ten commands, covering every capability on the acceptance list |
 | 22 | Docs: `PROTOCOL.md`, `ARCHITECTURE.md`, rustdoc, examples | done | plus `CONVENTIONS.md`, CI and a dependency licence gate |
 | 23 | Final pass: clippy, fmt, full test run, README polish, commit and push | done | 596 tests, clippy silent, rustdoc clean, pushed to `origin/main` |
+| 25 | Hardware testing round 1-3: what three captures ruled out, and what the fourth must contain | open | [025](025-the-one-minute-failure.md) |
 | 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
 
 ## Acceptance: what the CLI must be able to do
