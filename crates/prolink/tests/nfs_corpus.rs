@@ -714,10 +714,13 @@ fn describe(replayed: &Replayed) -> String {
     // says only that some lookup disagreed, which is not enough to tell a
     // fixture problem from a server one — and the difference showed up the
     // first time this ran on a case-sensitive filesystem.
-    let named = nfs2::Request::parse(nfs2::Proc(replayed.procedure), datagram_body(replayed))
+    // Through `Call::parse`, as everything else here does: the RPC header is
+    // not a fixed width and guessing one gets no name at all.
+    let named = Call::parse(&replayed.datagram)
         .ok()
+        .and_then(|call| nfs2::Request::parse(nfs2::Proc(call.procedure), call.arguments).ok())
         .and_then(|request| match request {
-            nfs2::Request::Lookup { name, .. } => Some(name),
+            nfs2::Request::Lookup { name, .. } => Some(name.to_string()),
             _ => None,
         });
     match named {
@@ -727,13 +730,6 @@ fn describe(replayed: &Replayed) -> String {
         ),
         None => procedure_name(replayed.program, replayed.procedure),
     }
-}
-
-/// The call arguments inside a replayed datagram.
-fn datagram_body(replayed: &Replayed) -> &[u8] {
-    // The RPC header is fixed-width for a call with AUTH_NULL, which is what a
-    // deck sends; anything else simply fails to parse and the name is omitted.
-    replayed.datagram.get(40..).unwrap_or_default()
 }
 
 fn check_portmap(replayed: &Replayed, results: &[u8], ports: Ports) {
