@@ -156,6 +156,7 @@ impl Session {
         body: impl FnOnce(&tokio::runtime::Runtime, &mut DbClient) -> prolink::Result<T>,
     ) -> Result<T, Error> {
         self.ensure_client(device_number)?;
+        let self_error = self.error_sink();
         let (runtime, connections) = self.runtime_and_connections();
         let client = connections
             .by_device
@@ -171,9 +172,9 @@ impl Session {
                 // every one after it would be one behind (F16). Drop it and
                 // let the next call reconnect.
                 connections.by_device.remove(&device_number);
-                Err(Error::new(format!(
-                    "browsing device {device_number}: {error}"
-                )))
+                let message = format!("browsing device {device_number}: {error}");
+                self_error.note(&message);
+                Err(Error::new(message))
             }
         }
     }

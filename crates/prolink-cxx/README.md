@@ -69,12 +69,25 @@ Parity with the C++ it replaces, plus what hardware testing has since added.
 | Artwork | `fetch_artwork()` |
 | File and database transfer, with progress | `fetch_file()`, `fetch_database()` |
 | Serving local media | `serve()`, `Server::status()`, `Server::stop()` |
+| Served slots and consumers | `ServeStatus::media`, `ServeStatus::consumers` |
+| Status line | `is_listening()`, `last_error()`, `refresh()` |
+| Stable identity | `device_number_of(mac)` |
 
 **Two call styles, and the split is deliberate.** A browse is request/response
 and small — a menu is a few hundred rows in one round trip — so those block and
 return the rows, which is what a host wants and what Mixxx's network thread is
 already for. A **file** transfer is megabytes and seconds long, so it returns a
 transfer id immediately and reports progress as events.
+
+**Transfers queue and retry.** One at a time, because two pulls from the same
+deck contend for its filehandle table — and a deck answers `NFSERR_STALE` to
+everything once that table churns (F28), which the transfer path recovers from
+by re-mounting once. Both behaviours match the C++ this replaces; neither is
+visible in the function list, which is why they are called out here.
+
+**Hold the MAC, not the number.** A player's number can be reassigned; its MAC
+cannot. `device_number_of(mac)` resolves late, so a request that outlives the
+device it named fails cleanly rather than reaching a different deck.
 
 Browsing claims a device number in 1–4, because a deck validates the
 requester's number in every dbserver request and one outside that range is

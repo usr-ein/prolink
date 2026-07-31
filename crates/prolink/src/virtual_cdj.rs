@@ -209,6 +209,23 @@ impl LoadedTracks {
         }
     }
 
+    /// Everyone reading from us, as `(device, slot, track)`.
+    ///
+    /// A serving host shows this: which players have taken a track off our
+    /// media and which one each is holding. It is the same registry that marks
+    /// the loaded row in a browse listing (F55), read the other way round.
+    pub fn consumers(&self) -> Vec<(u8, Slot, u32)> {
+        self.by_device.lock().map_or_else(
+            |_| Vec::new(),
+            |loaded| {
+                loaded
+                    .iter()
+                    .map(|((device, slot), track)| (*device, *slot, *track))
+                    .collect()
+            },
+        )
+    }
+
     /// What `device` has loaded from `slot`, if anything.
     pub fn track_on(&self, device: u8, slot: Slot) -> Option<u32> {
         self.by_device.lock().ok()?.get(&(device, slot)).copied()

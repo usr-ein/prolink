@@ -133,6 +133,8 @@ pub(crate) fn plain(kind: EventKind, device: u8, beat_in_bar: u8) -> Event {
         total: 0,
         ok: true,
         detail: String::new(),
+        path: String::new(),
+        slot: Slot::None,
     }
 }
 

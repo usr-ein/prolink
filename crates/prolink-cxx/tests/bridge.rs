@@ -131,3 +131,88 @@ fn a_row_reports_the_two_live_marks_a_server_puts_on_it() {
     assert_eq!(row.label, "Anti Gravity Racing");
     assert_eq!(row.detail, "Dax J");
 }
+
+#[test]
+fn a_transfer_done_event_carries_the_path_it_wrote() {
+    // Mixxx's signal carries the local path, and a host that keyed its own
+    // state on the path it asked for should not need an id table to get back
+    // to it. Both are reported.
+    let event = prolink_cxx::transfer_done_for_test(7, "/tmp/export.pdb", None);
+    assert_eq!(event.transfer, 7);
+    assert_eq!(event.path, "/tmp/export.pdb");
+    assert!(event.ok);
+    assert!(event.detail.is_empty());
+
+    let failed = prolink_cxx::transfer_done_for_test(8, "/tmp/x", Some("no such file"));
+    assert!(!failed.ok);
+    assert_eq!(failed.detail, "no such file");
+    assert_eq!(failed.path, "/tmp/x", "the path is reported either way");
+}
+
+#[test]
+fn a_stale_filehandle_is_the_one_nfs_error_with_a_remedy() {
+    // The transfer path retries once on this and on nothing else: a deck
+    // churns its filehandle table and then answers STALE to every lookup made
+    // against the old handles (F28). Getting the test wrong means either an
+    // unrecoverable transfer or a loop against a genuinely missing file.
+    use prolink_proto::rpc::nfs2::ErrorStatus;
+
+    let stale = prolink::Error::Nfs {
+        operation: "LOOKUP",
+        path: "/PIONEER/rekordbox/export.pdb".to_owned(),
+        status: ErrorStatus::STALE,
+    };
+    assert!(stale.is_stale());
+
+    for other in [ErrorStatus::NOENT, ErrorStatus::ACCES] {
+        let error = prolink::Error::Nfs {
+            operation: "LOOKUP",
+            path: "/x".to_owned(),
+            status: other,
+        };
+        assert!(
+            !error.is_stale(),
+            "{other:?} has no remedy and must not trigger a re-mount"
+        );
+    }
+}
+
+#[test]
+fn the_media_slot_conversion_round_trips() {
+    // A host names a slot and the library has to receive the same one; USB is
+    // the deliberate default for anything unnamed, since it is the slot a deck
+    // browses first.
+    use prolink_cxx::Slot;
+    for (given, expected) in [
+        (Slot::Usb, prolink_proto::Slot::USB),
+        (Slot::Sd, prolink_proto::Slot::SD),
+        (Slot::Cd, prolink_proto::Slot::CD),
+        (Slot::Rekordbox, prolink_proto::Slot::REKORDBOX),
+        (Slot::None, prolink_proto::Slot::USB),
+    ] {
+        assert_eq!(
+            prolink_cxx::slot_back_for_test(given),
+            expected,
+            "{given:?} did not map as documented"
+        );
+    }
+}
+
+#[test]
+fn a_player_with_no_status_reports_absent_rather_than_zero() {
+    // Without announcing there is no status packet, so tempo and phase are
+    // unknown rather than zero -- a host drawing a tempo has to be able to
+    // tell "not playing" from "0.00 BPM" (F21).
+    let player = prolink_cxx::empty_player_for_test();
+    assert!(!player.has_status);
+    assert!(
+        player.effective_bpm < 0.0,
+        "an unknown tempo must be negative, not zero: {}",
+        player.effective_bpm
+    );
+    assert!(player.track_bpm < 0.0);
+    assert!(player.beat_phase < 0.0);
+    assert!(player.bar_phase < 0.0);
+    assert_eq!(player.beat_in_bar, 0);
+    assert_eq!(player.track_id, 0);
+}

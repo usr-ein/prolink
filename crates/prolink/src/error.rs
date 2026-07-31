@@ -150,6 +150,23 @@ pub enum Error {
 }
 
 impl Error {
+    /// Whether a peer said its filehandles no longer refer to anything.
+    ///
+    /// The one NFS status with a defined remedy: re-`MNT` and walk again,
+    /// once (F28). Worth asking here rather than making every caller match on
+    /// the variant, because getting it wrong means either an unrecoverable
+    /// transfer or a loop against a genuinely missing file.
+    #[must_use]
+    pub fn is_stale(&self) -> bool {
+        matches!(
+            self,
+            Self::Nfs {
+                status: prolink_proto::rpc::nfs2::ErrorStatus::STALE,
+                ..
+            }
+        )
+    }
+
     pub(crate) fn io(context: &'static str) -> impl FnOnce(std::io::Error) -> Self {
         move |source| Self::Io { context, source }
     }

@@ -27,6 +27,14 @@ use crate::ffi::{Config, Device, Event, EventKind, NetworkInterface, Player, Slo
 /// tables — see `Event::dropped`.
 const EVENT_QUEUE: usize = 512;
 
+/// How often a peer's slot descriptions are re-read for changes.
+///
+/// A deck describes a slot **once**, when it first browses it, and never
+/// repeats it (F37). So the description arrives at a moment nothing else
+/// signals, and the only way to turn it into an event is to notice it. Half a
+/// second is far below what a person notices and far above what this costs.
+const MEDIA_POLL: std::time::Duration = std::time::Duration::from_millis(500);
+
 /// A running session: sockets, timers, and the state they maintain.
 ///
 /// Opaque to C++, which holds it as a `rust::Box<Session>` and drops it the
@@ -44,6 +52,10 @@ pub struct Session {
     next_transfer: AtomicU32,
     /// The dbserver connections held open for browsing, one per player.
     connections: crate::browse::Connections,
+    /// The last thing that went wrong, for a host's status line.
+    last_error: Arc<Mutex<String>>,
+    /// Transfers waiting their turn. See `fetch_file`.
+    transfers: Arc<tokio::sync::Semaphore>,
 }
 
 impl std::fmt::Debug for Session {
@@ -156,6 +168,39 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         }
     });
 
+    if let Some(watching) = cdj.as_ref() {
+        let media = watching.peer_media();
+        let sink = Arc::clone(&events);
+        runtime.spawn(async move {
+            let mut seen: std::collections::BTreeMap<(u8, prolink_proto::Slot), String> =
+                std::collections::BTreeMap::new();
+            loop {
+                tokio::time::sleep(MEDIA_POLL).await;
+                for slot in media.all() {
+                    let Some(description) = slot.description.as_ref() else {
+                        continue;
+                    };
+                    let key = (slot.device.get(), slot.slot);
+                    let now = format!(
+                        "{}/{}/{}",
+                        description.volume_name,
+                        description.track_count,
+                        description.playlist_count
+                    );
+                    if seen.get(&key) == Some(&now) {
+                        continue;
+                    }
+                    seen.insert(key, now);
+                    let mut event = plain(EventKind::MediaInfo, slot.device.get(), 0);
+                    event.slot = convert::slot(slot.slot);
+                    if let Ok(mut queue) = sink.lock() {
+                        queue.push(event);
+                    }
+                }
+            }
+        });
+    }
+
     Ok(Box::new(Session {
         runtime,
         monitor,
@@ -164,6 +209,12 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         events,
         next_transfer: AtomicU32::new(1),
         connections: crate::browse::Connections::default(),
+        last_error: Arc::new(Mutex::new(String::new())),
+        // One at a time. Two NFS pulls from the same deck contend for the same
+        // reply socket and the same filehandle table, and a deck answers
+        // NFSERR_STALE to everything once that table churns (F28) -- so this
+        // serialises them the way the C++ this replaces did with a queue.
+        transfers: Arc::new(tokio::sync::Semaphore::new(1)),
     }))
 }
 
@@ -220,17 +271,28 @@ impl Session {
         let id = self.next_transfer.fetch_add(1, Ordering::Relaxed);
         let events = Arc::clone(&self.events);
         let interface = self.monitor.interface().clone();
+        let queue = Arc::clone(&self.transfers);
+        let last_error = Arc::clone(&self.last_error);
         let slot = convert::slot_back(slot);
         let (remote, local) = (remote_path.to_owned(), local_path.to_owned());
 
         self.runtime.spawn(async move {
+            // One transfer at a time. Two pulls from the same deck contend for
+            // its filehandle table, and a deck answers NFSERR_STALE to
+            // everything once that table churns (F28) -- so they queue, as the
+            // C++ this replaces queued them.
+            let _turn = queue.acquire().await;
             let outcome = fetch(&interface, peer, slot, &remote, &local, id, &events).await;
             let mut done = plain(EventKind::TransferDone, 0, 0);
             done.transfer = id;
+            done.path.clone_from(&local);
             if let Err(reason) = outcome {
                 tracing::warn!(%peer, remote, "transfer failed: {reason}");
                 done.ok = false;
-                done.detail = reason;
+                done.detail.clone_from(&reason);
+                if let Ok(mut held) = last_error.lock() {
+                    *held = reason;
+                }
             }
             if let Ok(mut queue) = events.lock() {
                 queue.push(done);
@@ -256,6 +318,51 @@ impl Session {
             prolink::consume::nfs::EXPORT_PDB,
             local_path,
         )
+    }
+
+    /// Whether the sockets are up and we are hearing the network.
+    #[must_use]
+    pub fn is_listening(&self) -> bool {
+        // Discovery is the socket everything else depends on, and a device
+        // table that has ever seen anything proves traffic is arriving.
+        !self.discovery.devices().is_empty() || self.cdj.is_some()
+    }
+
+    /// The last thing that went wrong, or empty.
+    #[must_use]
+    pub fn last_error(&self) -> String {
+        self.last_error
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default()
+    }
+
+    /// A handle on the error slot, for a caller that already holds a mutable
+    /// borrow of the session and so cannot call [`Self::note_error`].
+    pub(crate) fn error_sink(&self) -> ErrorSink {
+        ErrorSink(Arc::clone(&self.last_error))
+    }
+
+    /// Drop every held connection so the next browse reconnects.
+    ///
+    /// The device table needs no refreshing — it is rebuilt from keep-alives
+    /// every two seconds and reaps what stops sending. What does go stale is a
+    /// dbserver connection, which is keyed on a device *number*, and a number
+    /// can move to a different deck between one browse and the next.
+    pub fn refresh(&mut self) {
+        let mut connections = std::mem::take(&mut self.connections);
+        connections.close_all(&self.runtime);
+    }
+
+    /// The device number a MAC currently holds, or zero.
+    #[must_use]
+    pub fn device_number_of(&self, mac: &str) -> u8 {
+        let wanted = mac.trim().to_ascii_lowercase();
+        self.discovery
+            .devices()
+            .into_iter()
+            .find(|device| device.mac.to_string().to_ascii_lowercase() == wanted)
+            .map_or(0, |device| device.number.get())
     }
 
     /// The virtual CDJ, if this session announced.
@@ -306,14 +413,29 @@ async fn fetch(
     let mut client = NfsClient::connect(peer, Some(interface))
         .await
         .map_err(|error| format!("connecting to {peer}: {error}"))?;
-    let mounted = client
+    let mut mounted = client
         .mount_slot(slot)
         .await
         .map_err(|error| format!("mounting {slot}: {error}"))?;
-    let file = client
-        .open(&mounted, remote)
-        .await
-        .map_err(|error| format!("opening {remote}: {error}"))?;
+
+    // A deck hands out filehandles from a table it churns, and once it has,
+    // it answers NFSERR_STALE to every lookup made against the old ones. The
+    // cure is to re-mount and walk again, once -- bounded, so a genuinely
+    // missing file cannot loop (F28).
+    let file = match client.open(&mounted, remote).await {
+        Ok(file) => file,
+        Err(error) if error.is_stale() => {
+            mounted = client
+                .refresh(mounted)
+                .await
+                .map_err(|error| format!("re-mounting {slot} after a stale handle: {error}"))?;
+            client
+                .open(&mounted, remote)
+                .await
+                .map_err(|error| format!("opening {remote} after a re-mount: {error}"))?
+        }
+        Err(error) => return Err(format!("opening {remote}: {error}")),
+    };
 
     let bytes = client
         .read_file_with(&file, |progress| {
@@ -343,6 +465,19 @@ impl Drop for Session {
         // to let go.
         let mut connections = std::mem::take(&mut self.connections);
         connections.close_all(&self.runtime);
+    }
+}
+
+/// Somewhere to record a failure while the session is mutably borrowed.
+#[derive(Debug, Clone)]
+pub(crate) struct ErrorSink(Arc<Mutex<String>>);
+
+impl ErrorSink {
+    /// Record a message.
+    pub(crate) fn note(&self, message: &str) {
+        if let Ok(mut held) = self.0.lock() {
+            message.clone_into(&mut held);
+        }
     }
 }
 

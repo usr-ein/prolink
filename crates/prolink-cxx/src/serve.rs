@@ -11,10 +11,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use prolink::Interface;
-use prolink::serve::{Medium, ProLinkServer, ServedSlot, ServerConfig};
+use prolink::serve::{Medium, ProLinkServer, ServedSlot as LibSlot, ServerConfig};
 use tokio::runtime::Runtime;
 
-use crate::ffi::{ServeConfig, ServeStatus};
+use crate::ffi::{ServeConfig, ServeConsumer, ServeStatus, ServedSlot};
 use crate::session::Error;
 
 /// A running server: our media, offered to real players.
@@ -63,8 +63,8 @@ pub fn serve(config: &ServeConfig) -> Result<Box<Server>, Error> {
 
     let mut media = Vec::new();
     for (path, slot) in [
-        (&config.usb_path, ServedSlot::USB),
-        (&config.sd_path, ServedSlot::SD),
+        (&config.usb_path, LibSlot::USB),
+        (&config.sd_path, LibSlot::SD),
     ] {
         if path.is_empty() {
             continue;
@@ -103,6 +103,8 @@ impl Server {
                 nfs_port: 0,
                 dbserver_port: 0,
                 is_discoverable: false,
+                media: Vec::new(),
+                consumers: Vec::new(),
             };
         };
         let ports = server.nfs_ports();
@@ -116,6 +118,26 @@ impl Server {
             nfs_port: ports.nfs,
             dbserver_port: server.dbserver_port(),
             is_discoverable: server.is_discoverable(),
+            media: server
+                .media()
+                .all()
+                .iter()
+                .map(|medium| {
+                    let description = medium.description();
+                    ServedSlot {
+                        slot: crate::convert::slot(medium.slot().slot()),
+                        volume_name: description.volume_name,
+                        local_path: medium
+                            .root()
+                            .map(|root| root.display().to_string())
+                            .unwrap_or_default(),
+                        export_path: medium.slot().export_path().to_owned(),
+                        track_count: description.track_count,
+                        playlist_count: description.playlist_count,
+                    }
+                })
+                .collect(),
+            consumers: consumers(server),
         }
     }
 
@@ -140,4 +162,27 @@ impl Drop for Server {
         // is no longer there.
         self.stop();
     }
+}
+
+/// The players reading from us, named from the device table.
+fn consumers(server: &ProLinkServer) -> Vec<ServeConsumer> {
+    server
+        .consumers()
+        .into_iter()
+        .map(|(device, slot, track)| ServeConsumer {
+            device_number: device,
+            // Filled from discovery where we can; a consumer we have not
+            // seen a keep-alive from still counts, because its status
+            // packet is what put it here.
+            device_name: String::new(),
+            address: String::new(),
+            slot: crate::convert::slot(slot),
+            track_id: track,
+            // Whether it is *playing* that track needs its status, which a
+            // serving virtual CDJ does not read: it holds UDP 50002 to
+            // answer media queries, and a unicast datagram goes to one
+            // socket only. Left false rather than guessed.
+            playing: false,
+        })
+        .collect()
 }

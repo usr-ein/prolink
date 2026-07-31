@@ -152,9 +152,15 @@ pub mod ffi {
         Stopped,
         /// A transfer advanced. `transfer`, `done` and `total` are set.
         TransferProgress,
-        /// A transfer finished. `ok` says whether it succeeded, and `detail`
-        /// carries the reason when it did not.
+        /// A transfer finished. `ok` says whether it succeeded, `detail`
+        /// carries the reason when it did not, and `path` is where it was
+        /// written.
         TransferDone,
+        /// A player described one of its slots: volume name and counts.
+        ///
+        /// A deck sends this once, when it first browses a slot, so a host
+        /// that only polls `media()` may wait a long time for it (F37).
+        MediaInfo,
     }
 
     /// How to start a session.
@@ -366,6 +372,40 @@ pub mod ffi {
         sd_path: String,
     }
 
+    /// One of our own slots, as we offer it.
+    #[derive(Debug, Clone)]
+    struct ServedSlot {
+        /// Which slot we present it in.
+        slot: Slot,
+        /// The volume name a deck shows.
+        volume_name: String,
+        /// Where it came from on this machine.
+        local_path: String,
+        /// The NFS export path a deck mounts.
+        export_path: String,
+        /// How many tracks it holds.
+        track_count: u32,
+        /// How many playlists.
+        playlist_count: u32,
+    }
+
+    /// A player that has taken a track off our media.
+    #[derive(Debug, Clone)]
+    struct ServeConsumer {
+        /// Which player.
+        device_number: u8,
+        /// Its name.
+        device_name: String,
+        /// Its address.
+        address: String,
+        /// Which of our slots it took the track from.
+        slot: Slot,
+        /// The track's row id.
+        track_id: u32,
+        /// Whether it is playing right now.
+        playing: bool,
+    }
+
     /// What a running server is doing.
     #[derive(Debug, Clone)]
     struct ServeStatus {
@@ -393,6 +433,10 @@ pub mod ffi {
         /// Whether a real player can actually find us — the portmapper is on
         /// 111 and we hold a browsable number.
         is_discoverable: bool,
+        /// The media we are offering.
+        media: Vec<ServedSlot>,
+        /// The players reading from us, and what each has loaded.
+        consumers: Vec<ServeConsumer>,
     }
 
     /// One thing that happened.
@@ -426,6 +470,14 @@ pub mod ffi {
         ok: bool,
         /// For a failed `TransferDone`, why. Empty otherwise.
         detail: String,
+        /// For `TransferDone`, the local path it was written to.
+        ///
+        /// Carried as well as the id, because a host that keyed its own state
+        /// on the path it asked for should not have to keep an id table to get
+        /// back to it.
+        path: String,
+        /// For `MediaInfo`, which slot was described.
+        slot: Slot,
     }
 
     extern "Rust" {
@@ -475,6 +527,19 @@ pub mod ffi {
             remote_path: &str,
             local_path: &str,
         ) -> Result<u32>;
+
+        /// Whether the sockets are up and we are hearing the network.
+        fn is_listening(self: &Session) -> bool;
+
+        /// The last thing that went wrong, or empty. For a status line.
+        fn last_error(self: &Session) -> String;
+
+        /// Forget every device and re-learn the network.
+        ///
+        /// A host offers this when a user has re-cabled the rig: a deck that
+        /// vanished without a keep-alive is otherwise held for the full
+        /// timeout.
+        fn refresh(self: &mut Session);
 
         /// What every player's slots hold, as of now.
         ///
@@ -537,6 +602,13 @@ pub mod ffi {
             local_path: &str,
         ) -> Result<()>;
 
+        /// The device number a MAC currently holds, or zero.
+        ///
+        /// A player's *number* can be reassigned while its MAC cannot, so a
+        /// host that keeps a request across time should hold the MAC and
+        /// resolve it here rather than cache the number.
+        fn device_number_of(self: &Session, mac: &str) -> u8;
+
         /// Fetch a player's `export.pdb`, the database a browse is built from.
         ///
         /// The same contract as `fetch_file`; this is the path a host does not
@@ -578,6 +650,39 @@ pub use ffi::{
     Player, Row, ServeConfig, ServeStatus, Slot,
 };
 pub use serve::{Server, serve};
+
+/// The slot the library receives for one C++ named, for tests.
+#[doc(hidden)]
+#[must_use]
+pub fn slot_back_for_test(slot: Slot) -> prolink_proto::Slot {
+    convert::slot_back(slot)
+}
+
+/// A `TransferDone` event as the transfer path builds it, for tests.
+#[doc(hidden)]
+#[must_use]
+pub fn transfer_done_for_test(id: u32, path: &str, failure: Option<&str>) -> Event {
+    let mut event = convert::plain(EventKind::TransferDone, 0, 0);
+    event.transfer = id;
+    path.clone_into(&mut event.path);
+    if let Some(reason) = failure {
+        event.ok = false;
+        reason.clone_into(&mut event.detail);
+    }
+    event
+}
+
+/// A player we have heard beats from but no status, for tests.
+#[doc(hidden)]
+#[must_use]
+pub fn empty_player_for_test() -> Player {
+    convert::player(&prolink::PlayerState {
+        device: prolink::DeviceNumber::ONE,
+        name: prolink::DeviceName::default(),
+        beat: None,
+        status: None,
+    })
+}
 
 /// One browse row, for tests that cannot reach a deck.
 ///

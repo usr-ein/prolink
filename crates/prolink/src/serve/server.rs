@@ -467,6 +467,17 @@ impl ProLinkServer {
     }
 
     /// The media being served.
+    /// Which players have taken a track off our media, and which one each
+    /// holds.
+    ///
+    /// A serving host shows this. It comes from the peers' own status packets,
+    /// which name the source player and slot, so a track loaded from another
+    /// deck is not counted as ours (F55).
+    pub fn consumers(&self) -> Vec<(u8, Slot, u32)> {
+        self.cdj.loaded().consumers()
+    }
+
+    /// The media we are serving, one per slot.
     pub fn media(&self) -> &MediaSet {
         &self.media
     }
