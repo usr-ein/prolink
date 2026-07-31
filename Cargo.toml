@@ -5,7 +5,11 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+# 1.88 is the floor and it is a measured one: Debian trixie ships 1.85 and
+# this workspace fails on it with nine "`let` expressions in this position
+# are unstable" -- let-chains stabilised in 1.88. Edition 2024 alone would
+# only need 1.85.
+rust-version = "1.88"
 license = "GPL-3.0-only"
 repository = "https://github.com/usr-ein/prolink"
 homepage = "https://github.com/usr-ein/prolink"

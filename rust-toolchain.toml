@@ -1,0 +1,10 @@
+# The toolchain this is built with, pinned rather than "stable".
+#
+# The binary this ends up in is swapped onto a Raspberry Pi, and a build that
+# silently changes compiler between one upload and the next is a variable
+# nobody is tracking. Debian trixie's own rustc is 1.85, which cannot build
+# this at all -- see `rust-version` in Cargo.toml -- so the container installs
+# a toolchain regardless; pinning it costs nothing and buys reproducibility.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
