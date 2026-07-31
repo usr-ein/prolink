@@ -55,7 +55,6 @@ unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
 indexing_slicing = "warn"
-integer_division = "warn"
 as_conversions = "warn"
 todo = "warn"
 unimplemented = "warn"
@@ -77,6 +76,11 @@ missing_errors_doc = "allow"
 # Nothing outside a test is allowed to panic (see `panic` above), so this
 # section would document a case that cannot arise.
 missing_panics_doc = "allow"
+# `integer_division` is not kept: in a byte codec every division is a
+# deliberate truncation (a chunk count, a frame index at 150 fps), and an
+# `expect` on each would be noise rather than safety. `as_conversions` stays,
+# because a silent numeric cast is where a length prefix quietly wraps.
+#
 # Offsets, lengths and counts are genuinely similar names in a wire codec.
 similar_names = "allow"
 # Dependency trees are not ours to deduplicate.
