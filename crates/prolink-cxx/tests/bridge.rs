@@ -288,3 +288,25 @@ fn a_database_that_does_not_parse_is_a_value_and_not_an_exception() {
     );
     assert!(contents.tracks.is_empty());
 }
+
+#[test]
+fn a_transfer_creates_the_directories_its_destination_needs() {
+    // The destination mirrors the medium's own tree — /Contents/<artist>/
+    // <album>/<track>.mp3, or /PIONEER/Artwork/000NN/ — and none of those
+    // directories exist until something makes them. Without this the transfer
+    // completes, the progress bar reaches 100%, and the write fails with
+    // ENOENT: on hardware the track never appeared and neither did a cover.
+    let root = std::env::temp_dir().join("prolink-cxx-parents");
+    let _ = std::fs::remove_dir_all(&root);
+    let nested = root.join("Contents/Akiba/LOST DREAMS");
+    let target = nested.join("01. track.mp3");
+    assert!(!nested.exists(), "the tree must not exist yet");
+
+    // The write path a transfer takes, with the directory step it was missing.
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).expect("the transfer creates its tree");
+    }
+    std::fs::write(&target, b"bytes").expect("and then writes");
+    assert!(target.exists());
+    let _ = std::fs::remove_dir_all(&root);
+}

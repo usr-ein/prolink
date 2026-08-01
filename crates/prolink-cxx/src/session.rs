@@ -450,6 +450,16 @@ async fn fetch(
         .await
         .map_err(|error| format!("reading {remote}: {error}"))?;
 
+    // The caller names a destination inside a tree that mirrors the medium —
+    // `/Contents/<artist>/<album>/<track>.mp3`, or `/PIONEER/Artwork/000NN/` —
+    // and none of those directories exist until something makes them. Without
+    // this the transfer completes, the progress bar reaches 100%, and the
+    // write fails with ENOENT: the track never appears and neither does a
+    // cover image.
+    if let Some(parent) = std::path::Path::new(local).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("creating {}: {error}", parent.display()))?;
+    }
     // Written once, never incrementally: a truncated `export.pdb` parses far
     // enough to look plausible and then yields a library missing its last few
     // hundred tracks.

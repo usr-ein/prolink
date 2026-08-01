@@ -128,6 +128,13 @@ impl Session {
         let bytes = self.with_client(device_number, |runtime, client| {
             runtime.block_on(client.artwork(slot, artwork_id))
         })?;
+        // As in a file transfer: the destination mirrors the medium's own
+        // tree, `/PIONEER/Artwork/000NN/aNNN.jpg`, and those directories do
+        // not exist until something makes them.
+        if let Some(parent) = std::path::Path::new(local_path).parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| Error::new(format!("creating {}: {error}", parent.display())))?;
+        }
         std::fs::write(local_path, &bytes)
             .map_err(|error| Error::new(format!("writing {local_path}: {error}")))
     }
