@@ -977,19 +977,19 @@ async fn reconcile(
             // falls into.
             Some(slot) if serving(live, slot) => continue,
             Some(slot) => slot,
-            None => match LOCAL_SLOTS
-                .into_iter()
-                .find(|slot| !ours.contains_key(slot))
-            {
-                Some(slot) => slot,
-                None => {
+            None => {
+                let Some(slot) = LOCAL_SLOTS
+                    .into_iter()
+                    .find(|slot| !ours.contains_key(slot))
+                else {
                     // A third stick and nowhere to put it. Said once per scan
                     // rather than silently ignored: the DJ plugged something in
                     // and nothing happened.
                     tracing::info!(path, "no free slot; a CDJ has only USB and SD");
                     break;
-                }
-            },
+                };
+                slot
+            }
         };
 
         match mount(live, served, slot, &path).await {
