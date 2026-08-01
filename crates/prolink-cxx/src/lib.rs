@@ -730,18 +730,29 @@ pub mod ffi {
             track_id: u32,
         ) -> Result<Metadata>;
 
-        /// Fetch a track's artwork and write it to `local_path`.
+        /// Fetch a track's artwork into `local_path`.
         ///
-        /// Blocks; see `root_menu`. Artwork is small and comes over the
-        /// dbserver connection rather than NFS, so it is not worth the event
-        /// machinery a file transfer needs.
+        /// Returns a transfer id and does **not** block: the answer arrives as
+        /// a `TransferDone` event carrying that id and the path.
+        ///
+        /// A host asks for these by the hundred — a 651-track medium has some
+        /// six hundred distinct covers — so a blocking call would freeze a UI
+        /// for six hundred round trips. They are queued onto one connection
+        /// and answered in order.
+        ///
+        /// **Over dbserver, not NFS.** Two full load-and-play captures contain
+        /// LOOKUPs for audio files and not one image; asking NFS for covers
+        /// works for the first hundred and then fails wholesale, because
+        /// walking `PIONEER/Artwork/000NN` per image churns the player's
+        /// filehandle table until it answers `NFSERR_STALE` to handles a
+        /// millisecond old (F28).
         fn fetch_artwork(
-            self: &mut Session,
+            self: &Session,
             device_number: u8,
             slot: Slot,
             artwork_id: u32,
             local_path: &str,
-        ) -> Result<()>;
+        ) -> Result<u32>;
 
         /// The device number a MAC currently holds, or zero.
         ///

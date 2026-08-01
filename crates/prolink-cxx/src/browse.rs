@@ -30,6 +30,7 @@ use prolink_proto::{BrowsableDeviceNumber, Slot as LibSlot};
 
 use crate::convert;
 use crate::ffi::{MediaInfo, Metadata, Row, Slot};
+use crate::session::Events;
 use crate::session::{Error, Session};
 
 /// The dbserver connections a session holds open, one per player.
@@ -112,31 +113,62 @@ impl Session {
         Ok(convert::metadata(&found))
     }
 
-    /// Fetch a track's artwork and write it to `local_path`.
+    /// Fetch a track's artwork into `local_path`, without blocking.
     ///
     /// # Errors
     ///
-    /// As [`Self::root_menu`], and when the file cannot be written.
+    /// When the player is not on the network, or no browsable device number is
+    /// free. Everything after that is asynchronous and reported as a
+    /// `TransferDone` event.
     pub fn fetch_artwork(
-        &mut self,
+        &self,
         device_number: u8,
         slot: Slot,
         artwork_id: u32,
         local_path: &str,
-    ) -> Result<(), Error> {
-        let slot = convert::slot_back(slot);
-        let bytes = self.with_client(device_number, |runtime, client| {
-            runtime.block_on(client.artwork(slot, artwork_id))
+    ) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error::new(format!("no device {device_number} on the network")))?;
+        let number = self.browsable_number().ok_or_else(|| {
+            Error::new("artwork needs a device number in 1-4 and every one is taken".to_owned())
         })?;
-        // As in a file transfer: the destination mirrors the medium's own
-        // tree, `/PIONEER/Artwork/000NN/aNNN.jpg`, and those directories do
-        // not exist until something makes them.
-        if let Some(parent) = std::path::Path::new(local_path).parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| Error::new(format!("creating {}: {error}", parent.display())))?;
-        }
-        std::fs::write(local_path, &bytes)
-            .map_err(|error| Error::new(format!("writing {local_path}: {error}")))
+
+        let id = self.next_transfer_id();
+        let events = self.events_handle();
+        let queue = self.artwork_queue();
+        let slot = convert::slot_back(slot);
+        let local = local_path.to_owned();
+
+        self.runtime_handle().spawn(async move {
+            // One connection, one request at a time. A host asks for these by
+            // the hundred, and a deck answers a dbserver connection in order
+            // anyway — opening one per cover would claim a device number per
+            // cover and get nowhere faster.
+            let mut held = queue.lock().await;
+            let client = match held.as_mut() {
+                Some(client) => client,
+                None => match DbClient::connect(peer, number).await {
+                    Ok(opened) => held.insert(opened),
+                    Err(error) => {
+                        finish(&events, id, &local, Err(format!("connecting: {error}")));
+                        return;
+                    }
+                },
+            };
+
+            let outcome = match client.artwork(slot, artwork_id).await {
+                Ok(bytes) => write_artwork(&local, &bytes),
+                Err(error) => {
+                    // The connection may be mid-message; drop it so the next
+                    // cover reconnects rather than reading the wrong reply.
+                    *held = None;
+                    Err(format!("fetching artwork {artwork_id}: {error}"))
+                }
+            };
+            finish(&events, id, &local, outcome);
+        });
+        Ok(id)
     }
 
     /// Run one menu request and turn the rows into the shared shape.
@@ -232,4 +264,36 @@ impl Connections {
 /// The number a session browses with, if it has one.
 pub(crate) fn browsable(number: u8) -> Option<BrowsableDeviceNumber> {
     BrowsableDeviceNumber::new(number)
+}
+
+/// Write a cover, making the directory it lives in.
+///
+/// The path mirrors the medium's own tree, `PIONEER/Artwork/000NN/aNNN.jpg`,
+/// and none of those directories exist until something makes them.
+fn write_artwork(local: &str, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(local).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("creating {}: {error}", parent.display()))?;
+    }
+    std::fs::write(local, bytes).map_err(|error| format!("writing {local}: {error}"))
+}
+
+/// Report a finished artwork fetch the way a file transfer is reported.
+fn finish(
+    events: &std::sync::Arc<std::sync::Mutex<Events>>,
+    id: u32,
+    local: &str,
+    outcome: Result<(), String>,
+) {
+    let mut done = crate::convert::plain(crate::ffi::EventKind::TransferDone, 0, 0);
+    done.transfer = id;
+    local.clone_into(&mut done.path);
+    if let Err(reason) = outcome {
+        tracing::warn!(local, "artwork failed: {reason}");
+        done.ok = false;
+        done.detail = reason;
+    }
+    if let Ok(mut queue) = events.lock() {
+        queue.push(done);
+    }
 }

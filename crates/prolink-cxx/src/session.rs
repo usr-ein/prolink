@@ -52,6 +52,13 @@ pub struct Session {
     next_transfer: AtomicU32,
     /// The dbserver connections held open for browsing, one per player.
     connections: crate::browse::Connections,
+    /// The connection artwork is fetched over, opened on first use.
+    ///
+    /// Separate from the browse connections, and behind an async lock: a host
+    /// asks for covers by the hundred while the user is browsing, and sharing
+    /// one connection would interleave a cover reply into the middle of a menu
+    /// the user is scrolling.
+    artwork: Arc<tokio::sync::Mutex<Option<prolink::consume::DbClient>>>,
     /// The last thing that went wrong, for a host's status line.
     last_error: Arc<Mutex<String>>,
     /// Transfers waiting their turn. See `fetch_file`.
@@ -69,14 +76,14 @@ impl std::fmt::Debug for Session {
 
 /// The drained event queue.
 #[derive(Debug, Default)]
-struct Events {
+pub(crate) struct Events {
     queue: VecDeque<Event>,
     /// Discarded since the host last drained.
     dropped: u32,
 }
 
 impl Events {
-    fn push(&mut self, event: Event) {
+    pub(crate) fn push(&mut self, event: Event) {
         if self.queue.len() >= EVENT_QUEUE {
             self.queue.pop_front();
             self.dropped = self.dropped.saturating_add(1);
@@ -209,6 +216,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         events,
         next_transfer: AtomicU32::new(1),
         connections: crate::browse::Connections::default(),
+        artwork: Arc::new(tokio::sync::Mutex::new(None)),
         last_error: Arc::new(Mutex::new(String::new())),
         // One at a time. Two NFS pulls from the same deck contend for the same
         // reply socket and the same filehandle table, and a deck answers
@@ -363,6 +371,28 @@ impl Session {
             .into_iter()
             .find(|device| device.mac.to_string().to_ascii_lowercase() == wanted)
             .map_or(0, |device| device.number.get())
+    }
+
+    /// The next transfer id. From 1, so zero always means "not a transfer".
+    pub(crate) fn next_transfer_id(&self) -> u32 {
+        self.next_transfer.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// The event queue, for a task that finishes after the caller returns.
+    pub(crate) fn events_handle(&self) -> Arc<Mutex<Events>> {
+        Arc::clone(&self.events)
+    }
+
+    /// The connection artwork is fetched over.
+    pub(crate) fn artwork_queue(
+        &self,
+    ) -> Arc<tokio::sync::Mutex<Option<prolink::consume::DbClient>>> {
+        Arc::clone(&self.artwork)
+    }
+
+    /// The runtime, for spawning work that outlives the call.
+    pub(crate) fn runtime_handle(&self) -> &Runtime {
+        &self.runtime
     }
 
     /// The virtual CDJ, if this session announced.
