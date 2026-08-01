@@ -39,7 +39,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 27 | The key-matching indicator beside a playing track | done | argument 11 of a track row is the Camelot wheel index; decoded by correlating 1265 real deck rows in S27 against `testdata/export.pdb` |
 | 28 | Beat sync and tempo sharing: UDP 50001 `0x26` master request / `0x27` handoff response | done | [026](026-beat-sync-and-tempo-master.md); both packets modelled, plus the sync/pitch/yield status fields |
 | 29 | Tag list: tagging and the TAG LIST menu | done | [027](027-the-tag-list.md); `0x3002` adds, `0x100f` lists, flags bit 0 marks a tagged row. Playlist creation deliberately ignored |
-| 30 | How AUTO device numbering resolves when two decks boot simultaneously, both on AUTO | todo | S26, from a cold boot of both |
+| 30 | How AUTO device numbering resolves when two decks boot simultaneously, both on AUTO | done | S26: it does not resolve anything — each deck asks for a remembered number in its first CLAIM_IP and neither moves (F58). Nothing to implement |
 | 32 | Mixxx parity audit: nine gaps a read of the C++ turned up | done | [029](029-mixxx-parity-audit.md); five were behaviours rather than functions |
 | 31 | The key-matching indicator: why it does not light against this server | open | [028](028-the-key-matching-indicator.md); every field byte-compared against a real CDJ serving the same medium |
 | 31 | Stopping cleanly: eject the media on ctrl-c so consumers unmount | done | [028](028-stopping-cleanly.md); `0x02` for 1.5 s then `0x03`, which is what draws the deck's `UMNT` — 9 and 16 ms later in S15b |
@@ -80,7 +80,7 @@ a real CDJ, and these are the places where that matters most:
 
 | | |
 |---|---|
-| **The claim chain's back-off** | No capture in the corpus contains a type-`0x08` conflict packet — nothing has ever contested a number on that rig — so our response to one is written from the specification and never observed. The corpus test asserts the absence, so the day a capture contains one, it says so. |
+| **The claim chain's back-off** | No capture in the corpus contains a type-`0x08` conflict packet — nothing has ever contested a number on that rig — so our response to one is written from the specification and never observed. The corpus test asserts the absence, so the day a capture contains one, it says so. What hardware *does* send is type `0x05`, and it carries the sender's own number rather than the contested one (F58), so it is not a rejection and we are right not to treat it as one. We can only fail to notice a taken number if its holder sent no keep-alive during the five seconds we watch, and they go out every 2.0026 s. |
 | **`0x3d03`** | Acknowledged with a reply shaped like the one a deck sends for `0x3100`. No capture shows a real answer. Erroring is known to be worse (F25). |
 | **The `0x35` settings variants** | Four `*SETTING*.DAT` files exist and nothing in the request obviously selects between them. We answer with `MYSETTING.DAT`, which is what the one captured exchange carried. |
 | **Serving on macOS** | UDP/111 needs root there and there is no sysctl equivalent. Tested only on ephemeral ports. |

@@ -94,15 +94,43 @@ ever been seen — `research/02` marked this "confirmed" on documentation alone.
 
 An auto-numbered deck alone on an empty network **picked 2, not 1**, with 1
 free. So auto assignment is not "lowest free number"; the deck's previous manual
-setting was 2, which suggests it is remembered *(inferred)*.
+setting was 2, which suggested it is remembered.
+
+**AUTO is a remembered preference, not a negotiation** (F58). Both decks
+cold-booted together, 200 ms apart, both on AUTO — `S26-initialization-both-auto`:
+
+```
+0.000  .202.84   hello ×3            0.200  .103.172  hello ×3
+0.898  .202.84   claim_mac ×3        1.091  .103.172  claim_mac ×3
+1.799  .202.84   claim_ip ×3  wants=2  mode=auto
+1.993  .103.172  claim_ip ×3  wants=1  mode=auto
+2.701  .202.84   claim_number ×3  wants=2
+2.894  .103.172  claim_number ×3  wants=1
+3.602  .202.84   keep_alive 2        3.795  .103.172  keep_alive 1
+```
+
+Each deck asked for a different number **in its very first CLAIM_IP** and neither
+ever moved: no back-off, no re-try at another number, nothing exchanged that
+could be called arbitration. Both were settled 3.6 s after the first packet. So
+there is no contention protocol to implement for the simultaneous case — two
+decks that both remembered the same number would presumably fight, but no
+capture has ever produced that and this one shows the mechanism is memory.
+
+Both also ran the **final stage three times**, although the second deck began
+200 ms after the first. That is consistent with C13 rather than a counterexample:
+what the rule turns on is peers already *keep-aliving*, and at 0.200 s the first
+deck had sent nothing but hellos.
 
 **Type `0x05` is not only a mixer packet.** `research/02` §1.7 files it under
-mixer channel assignment. In the same instant a joining deck sent its stage-3
-claim, an auto-numbered deck **unicast** a type `0x05` back carrying its own
-number — same 38-byte layout as CLAIM_NUMBER, differing only in the type byte.
-Absent from every capture with two manually-numbered decks. Reading it as "this
-number is taken" fits what an auto-assigning device must publish *(inferred,
-n=1)*.
+mixer channel assignment. An auto-numbered deck sends it carrying **its own**
+number — same 38-byte layout as CLAIM_NUMBER, differing only in the type byte —
+and it is absent from every capture with two manually-numbered decks.
+
+It is **not** a rejection of the claim it answers (F58). At 5.605 s in S26 the
+deck holding 1 answered a stray second CLAIM_NUMBER round *for number 2* with
+`0x05` carrying **1**. A rejection would have named 2. So it advertises what the
+sender holds, and it is only evidence against a claim when the two numbers
+happen to match.
 
 ### 2.4 Keep-alive fields *(confirmed)*
 
