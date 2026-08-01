@@ -27,6 +27,7 @@ prolink-rekordbox.workspace = true
 cxx = "1"
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "sync"] }
 tracing = { workspace = true }
+tracing-subscriber.workspace = true
 
 [build-dependencies]
 cxx-build = "1"

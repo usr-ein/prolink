@@ -55,10 +55,12 @@
 
 mod browse;
 mod convert;
+mod logging;
 mod pdb;
 mod serve;
 mod session;
 
+pub use logging::init_logging;
 pub use session::Session;
 
 /// The shared vocabulary, and the entry points.
@@ -642,6 +644,23 @@ pub mod ffi {
 
         /// A config that chooses an interface and announces.
         fn default_config() -> Config;
+
+        /// Send this library's own log to standard error.
+        ///
+        /// Off until asked for, because a host owns its output and a library
+        /// that writes to it uninvited is a nuisance. But the protocol's
+        /// diagnosis lives in these lines and nowhere else — which player
+        /// number was claimed and why, which stick was mounted, and whether
+        /// the portmapper got port 111, without which no deck will ever list
+        /// us however well everything else works (F46).
+        ///
+        /// `filter` is a `tracing` directive: empty for a sensible default of
+        /// `prolink=info`, `prolink=debug` for the packet-level detail, or
+        /// whatever `PROLINK_LOG` says when that is set — which wins, so a
+        /// deck can be turned up without a rebuild.
+        ///
+        /// Safe to call more than once; only the first call installs anything.
+        fn init_logging(filter: &str);
 
         /// Read a rekordbox `export.pdb` off disk.
         ///

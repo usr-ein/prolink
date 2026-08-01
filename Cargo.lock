@@ -753,6 +753,7 @@ dependencies = [
  "prolink-rekordbox",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
