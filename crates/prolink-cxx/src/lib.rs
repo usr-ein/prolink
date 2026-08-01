@@ -181,6 +181,20 @@ pub mod ffi {
         /// that have announced themselves and to nobody else (F21). Tempo and
         /// beat phase still arrive, since beats are broadcast.
         announce: bool,
+
+        /// The player number to ask for, 1–4, or 0 for whichever is free.
+        ///
+        /// Not a cosmetic choice, and not a number to invent: a deck offers
+        /// LINK sources and answers browse requests only for players 1–4, and
+        /// at any other number it accepts the announcement in full and then
+        /// silently never asks us anything (F45). The claim chain negotiates
+        /// for real — it watches first, backs off when a number is defended,
+        /// and defends the one it takes — so this is a preference, not an
+        /// assertion.
+        ///
+        /// A host restarting a session should pass back the number it last
+        /// held, so a refresh keeps the identity the decks already know.
+        preferred_number: u8,
     }
 
     /// A network interface that could carry Pro DJ Link traffic.
@@ -671,6 +685,15 @@ pub mod ffi {
 
         /// Whether the sockets are up and we are hearing the network.
         fn is_listening(self: &Session) -> bool;
+
+        /// Whether startup has finished.
+        ///
+        /// `open` returns before the sockets are bound, because claiming a
+        /// player number takes about five seconds of watching and negotiating
+        /// and a host must not spend that frozen. Until this is true
+        /// `device_number` is zero and the tables are empty; if it stays false,
+        /// `last_error` says what went wrong.
+        fn is_ready(self: &Session) -> bool;
 
         /// The last thing that went wrong, or empty. For a status line.
         fn last_error(self: &Session) -> String;

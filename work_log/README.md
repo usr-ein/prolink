@@ -44,6 +44,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 31 | The key-matching indicator: why it does not light against this server | open | [028](028-the-key-matching-indicator.md); every field byte-compared against a real CDJ serving the same medium |
 | 31 | Stopping cleanly: eject the media on ctrl-c so consumers unmount | done | [028](028-stopping-cleanly.md); `0x02` for 1.5 s then `0x03`, which is what draws the deck's `UMNT` — 9 and 16 ms later in S15b |
 | 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
+| 33 | Becoming a real player: claim 1–4 from the consumer side, share UDP 50002, and stop blocking the host's UI thread | done | [030](030-becoming-a-real-player.md); five defects from a Pi running Mixxx against two CDJs |
 
 ## Acceptance: what the CLI must be able to do
 

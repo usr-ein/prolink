@@ -53,7 +53,7 @@ use prolink_proto::{
     BrowsableDeviceNumber, DISCOVERY_PORT, DeviceKind, DeviceName, DeviceNumber, STATUS_PORT, Slot,
 };
 use tokio::net::UdpSocket;
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
@@ -380,9 +380,24 @@ pub struct VirtualCdj {
     /// [`VirtualCdjConfig::emit_status`] is off and something else, typically a
     /// [`crate::Monitor`], has the port.
     status_socket: Option<Arc<UdpSocket>>,
+    /// Every datagram the status socket receives, for anything else that needs
+    /// to read UDP 50002.
+    ///
+    /// A second socket is not an option. Only one member of a `SO_REUSEPORT`
+    /// group receives a given *unicast* datagram, and status is only ever
+    /// unicast (F21) — so two readers would each get an arbitrary half of the
+    /// stream and both would be wrong. `None` when we do not hold the port.
+    status_tap: Option<broadcast::Sender<Arc<Vec<u8>>>>,
     status_counter: Arc<AtomicU32>,
     tasks: Vec<JoinHandle<()>>,
 }
+
+/// How many datagrams a slow tap subscriber may fall behind by.
+///
+/// Status arrives every 200 ms per peer, so four decks make 20 a second: a
+/// subscriber this far behind has stopped reading altogether, and dropping is
+/// better than growing without bound.
+const TAP_CAPACITY: usize = 64;
 
 impl VirtualCdj {
     /// Announce on the network `discovery` is listening to.
@@ -430,6 +445,9 @@ impl VirtualCdj {
         } else {
             None
         };
+        let status_tap = status_socket
+            .as_ref()
+            .map(|_| broadcast::Sender::new(TAP_CAPACITY));
 
         let mut cdj = Self {
             config,
@@ -440,6 +458,7 @@ impl VirtualCdj {
             loaded: Arc::new(LoadedTracks::default()),
             peers: Arc::new(PeerMedia::default()),
             status_socket,
+            status_tap,
             status_counter: Arc::new(AtomicU32::new(0)),
             tasks: Vec::new(),
         };
@@ -460,6 +479,14 @@ impl VirtualCdj {
     /// The number currently held.
     pub fn number(&self) -> DeviceNumber {
         DeviceNumber::new(self.number.load(Ordering::Relaxed)).unwrap_or(OBSERVER_NUMBER)
+    }
+
+    /// Every datagram arriving on UDP 50002, when we are the one holding it.
+    ///
+    /// `None` means we do not have the port and a reader should bind its own.
+    /// See [`VirtualCdj::status_tap`] for why there is no third option.
+    pub fn status_datagrams(&self) -> Option<broadcast::Receiver<Arc<Vec<u8>>>> {
+        self.status_tap.as_ref().map(broadcast::Sender::subscribe)
     }
 
     /// The number currently held, if a peer would browse it.
@@ -697,6 +724,7 @@ impl VirtualCdj {
         let media = Arc::clone(&self.media);
         let loaded = Arc::clone(&self.loaded);
         let peers = Arc::clone(&self.peers);
+        let tap = self.status_tap.clone();
 
         tokio::spawn(async move {
             let mut buffer = vec![0u8; MAX_DATAGRAM];
@@ -715,6 +743,14 @@ impl VirtualCdj {
                 let Some(ours) = DeviceNumber::new(number.load(Ordering::Relaxed)) else {
                     continue;
                 };
+                // Before the decode, and unconditionally: a tap subscriber is
+                // interested in packets this responder ignores, and copying is
+                // only paid for when somebody is listening.
+                if let Some(tap) = tap.as_ref()
+                    && tap.receiver_count() > 0
+                {
+                    let _ = tap.send(Arc::new(datagram.to_vec()));
+                }
 
                 let reply = match status::decode(datagram) {
                     // Not a query, but the packet that tells us what this deck
@@ -1022,7 +1058,7 @@ async fn claim_one(
     interface: &crate::Interface,
     candidate: BrowsableDeviceNumber,
     was_first: bool,
-    conflicts: &mut tokio::sync::broadcast::Receiver<crate::discovery::Announcement>,
+    conflicts: &mut broadcast::Receiver<crate::discovery::Announcement>,
 ) -> std::result::Result<(), Ipv4Addr> {
     // N is 3 into an empty network and 1 into a populated one (C13).
     let final_stage = if was_first { 3 } else { 1 };

@@ -85,7 +85,9 @@ pub use media::{MediaDescription, MediaSource};
 pub use monitor::{Monitor, MonitorEvent, PlayerState};
 /// The beat-packet types that appear in [`monitor`]'s signatures.
 pub use prolink_proto::beat::{Beat, BeatInBar, Pitch};
-pub use virtual_cdj::{PeerMedia, PeerSlot, VirtualCdj, VirtualCdjConfig};
+pub use virtual_cdj::{
+    Numbering, OBSERVER_NUMBER, PeerMedia, PeerSlot, VirtualCdj, VirtualCdjConfig,
+};
 
 /// Re-exported so callers do not need a direct dependency on the codec crate
 /// for the handful of its types that appear in this one's signatures.

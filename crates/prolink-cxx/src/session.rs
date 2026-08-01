@@ -9,10 +9,12 @@
 use std::collections::VecDeque;
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use prolink::consume::NfsClient;
-use prolink::{Discovery, Interface, Monitor, VirtualCdj, VirtualCdjConfig};
+use prolink::{
+    BrowsableDeviceNumber, Discovery, Interface, Monitor, Numbering, VirtualCdj, VirtualCdjConfig,
+};
 use tokio::runtime::Runtime;
 
 use crate::convert::{self, plain};
@@ -42,11 +44,17 @@ const MEDIA_POLL: std::time::Duration = std::time::Duration::from_millis(500);
 pub struct Session {
     /// Dropped last, because the tasks below run on it.
     runtime: Runtime,
-    monitor: Monitor,
-    discovery: Discovery,
-    /// Held for as long as the session announces: dropping it gives up the
-    /// device number that makes peers unicast their status to us (F21).
-    cdj: Option<VirtualCdj>,
+    /// The interface chosen at `open`, known before anything is bound.
+    interface: Interface,
+    /// The sockets, once they are up. `None` while starting, and again if
+    /// starting failed — in which case `last_error` says why.
+    ///
+    /// **Starting is asynchronous**, and that is not an optimisation. Claiming
+    /// a player number means watching the network for 2.5 s and then sending a
+    /// nine-packet chain 300 ms apart: about five seconds during which a host
+    /// that called this on its UI thread would be frozen. So `open` returns at
+    /// once and the number appears when it is held.
+    live: Arc<RwLock<Option<Live>>>,
     events: Arc<Mutex<Events>>,
     /// Hands out transfer ids, from 1, so zero always means "not a transfer".
     next_transfer: AtomicU32,
@@ -69,9 +77,18 @@ impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Session")
             .field("device_number", &self.device_number())
-            .field("interface", &self.monitor.interface().name)
+            .field("interface", &self.interface.name)
             .finish_non_exhaustive()
     }
+}
+
+/// The parts that only exist once the sockets are up.
+struct Live {
+    monitor: Monitor,
+    discovery: Discovery,
+    /// Held for as long as the session announces: dropping it gives up the
+    /// device number that makes peers unicast their status to us (F21).
+    cdj: Option<VirtualCdj>,
 }
 
 /// The drained event queue.
@@ -111,22 +128,28 @@ pub fn interfaces() -> Vec<NetworkInterface> {
         .collect()
 }
 
-/// A config that chooses an interface and announces.
+/// A config that chooses an interface, announces, and claims any free number.
 #[must_use]
 pub fn default_config() -> Config {
     Config {
         interface: String::new(),
         announce: true,
+        preferred_number: 0,
     }
 }
 
 /// Start a session.
 ///
+/// Returns as soon as the interface is resolved. Everything after that —
+/// binding the sockets, and claiming a player number, which takes about five
+/// seconds — happens in the background, so this never blocks a UI thread.
+/// `device_number` is zero until a number is held, and `last_error` carries
+/// anything that went wrong on the way.
+///
 /// # Errors
 ///
-/// When no interface matches, or a socket cannot be bound — usually another
-/// Pro DJ Link program already running. `cxx` turns this into a C++ exception
-/// carrying the message.
+/// When no interface matches, or the runtime cannot be created. `cxx` turns
+/// this into a C++ exception carrying the message.
 pub fn open(config: &Config) -> Result<Box<Session>, Error> {
     let interface = if config.interface.is_empty() {
         Interface::best_guess().map_err(|error| Error(format!("no usable interface: {error}")))?
@@ -136,84 +159,11 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
     };
 
     let runtime = Runtime::new().map_err(|error| Error(format!("no runtime: {error}")))?;
-    let started = runtime.block_on(async {
-        let discovery = Discovery::start(interface.clone()).await?;
-        let cdj = if config.announce {
-            Some(
-                VirtualCdj::observe(
-                    &discovery,
-                    VirtualCdjConfig {
-                        emit_status: false,
-                        ..VirtualCdjConfig::default()
-                    },
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
-        // With a virtual CDJ the monitor also reads UDP 50002, which is what
-        // carries the loaded track and the tempo master (F21).
-        let monitor = match cdj.as_ref() {
-            Some(cdj) => Monitor::with_status(interface.clone(), cdj).await?,
-            None => Monitor::start(interface.clone()).await?,
-        };
-        Ok::<_, prolink::Error>((discovery, cdj, monitor))
-    });
-    let (discovery, cdj, monitor) =
-        started.map_err(|error| Error(format!("could not start: {error}")))?;
-
-    let events = Arc::new(Mutex::new(Events::default()));
-    let sink = Arc::clone(&events);
-    let mut incoming = monitor.subscribe();
-    // Ends when the session is dropped, because the sender goes with it.
-    runtime.spawn(async move {
-        while let Ok(event) = incoming.recv().await {
-            if let Ok(mut queue) = sink.lock() {
-                queue.push(convert::event(&event));
-            }
-        }
-    });
-
-    if let Some(watching) = cdj.as_ref() {
-        let media = watching.peer_media();
-        let sink = Arc::clone(&events);
-        runtime.spawn(async move {
-            let mut seen: std::collections::BTreeMap<(u8, prolink_proto::Slot), String> =
-                std::collections::BTreeMap::new();
-            loop {
-                tokio::time::sleep(MEDIA_POLL).await;
-                for slot in media.all() {
-                    let Some(description) = slot.description.as_ref() else {
-                        continue;
-                    };
-                    let key = (slot.device.get(), slot.slot);
-                    let now = format!(
-                        "{}/{}/{}",
-                        description.volume_name,
-                        description.track_count,
-                        description.playlist_count
-                    );
-                    if seen.get(&key) == Some(&now) {
-                        continue;
-                    }
-                    seen.insert(key, now);
-                    let mut event = plain(EventKind::MediaInfo, slot.device.get(), 0);
-                    event.slot = convert::slot(slot.slot);
-                    if let Ok(mut queue) = sink.lock() {
-                        queue.push(event);
-                    }
-                }
-            }
-        });
-    }
-
-    Ok(Box::new(Session {
+    let session = Session {
         runtime,
-        monitor,
-        discovery,
-        cdj,
-        events,
+        interface: interface.clone(),
+        live: Arc::new(RwLock::new(None)),
+        events: Arc::new(Mutex::new(Events::default())),
         next_transfer: AtomicU32::new(1),
         connections: crate::browse::Connections::default(),
         artwork: Arc::new(tokio::sync::Mutex::new(None)),
@@ -223,30 +173,202 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         // NFSERR_STALE to everything once that table churns (F28) -- so this
         // serialises them the way the C++ this replaces did with a queue.
         transfers: Arc::new(tokio::sync::Semaphore::new(1)),
-    }))
+    };
+
+    let live = Arc::clone(&session.live);
+    let events = Arc::clone(&session.events);
+    let last_error = Arc::clone(&session.last_error);
+    let announce = config.announce;
+    let preferred = BrowsableDeviceNumber::new(config.preferred_number);
+    session.runtime.spawn(async move {
+        match start(&interface, announce, preferred, &events).await {
+            Ok(started) => {
+                if let Ok(mut slot) = live.write() {
+                    *slot = Some(started);
+                }
+            }
+            Err(error) => {
+                let message = format!("could not start: {error}");
+                tracing::warn!("{message}");
+                if let Ok(mut held) = last_error.lock() {
+                    *held = message;
+                }
+            }
+        }
+    });
+
+    Ok(Box::new(session))
+}
+
+/// Bring up discovery, the virtual CDJ and the monitor, in that order.
+///
+/// The order is the protocol's: nothing unicasts status to a device it has not
+/// heard a keep-alive from, so announcing has to precede listening for it.
+async fn start(
+    interface: &Interface,
+    announce: bool,
+    preferred: Option<BrowsableDeviceNumber>,
+    events: &Arc<Mutex<Events>>,
+) -> Result<Live, prolink::Error> {
+    let discovery = Discovery::start(interface.clone()).await?;
+    let cdj = if announce {
+        // Wait for a scan before contending, so a number in use is seen as in
+        // use rather than claimed out from under a deck that is still booting.
+        tokio::time::sleep(prolink::discovery::SCAN_DURATION).await;
+        Some(announce_as_player(&discovery, preferred).await?)
+    } else {
+        None
+    };
+    // With a virtual CDJ the monitor also reads UDP 50002, which is what
+    // carries the loaded track and the tempo master (F21). It shares the CDJ's
+    // socket rather than binding its own; see `Monitor::with_status`.
+    let monitor = match cdj.as_ref() {
+        Some(cdj) => Monitor::with_status(interface.clone(), cdj).await?,
+        None => Monitor::start(interface.clone()).await?,
+    };
+
+    let sink = Arc::clone(events);
+    let mut incoming = monitor.subscribe();
+    // Ends when the session is dropped, because the sender goes with it.
+    tokio::spawn(async move {
+        while let Ok(event) = incoming.recv().await {
+            if let Ok(mut queue) = sink.lock() {
+                queue.push(convert::event(&event));
+            }
+        }
+    });
+
+    if let Some(watching) = cdj.as_ref() {
+        spawn_media_watch(watching.peer_media(), Arc::clone(events));
+    }
+
+    Ok(Live {
+        monitor,
+        discovery,
+        cdj,
+    })
+}
+
+/// Take a real player number, falling back to watching from outside the range.
+///
+/// A number in 1–4 is not a preference. A deck will not offer us as a LINK
+/// source at any other number, and will not browse us: the check precedes the
+/// whole browse path and fails silently (F45). So the claim chain runs first,
+/// and only if every browsable number is defended do we settle for observing —
+/// which still shows tempo, beats and what each deck has loaded, and is a great
+/// deal better than refusing to start at all.
+async fn announce_as_player(
+    discovery: &Discovery,
+    preferred: Option<BrowsableDeviceNumber>,
+) -> Result<VirtualCdj, prolink::Error> {
+    let claiming = VirtualCdjConfig {
+        numbering: Numbering::Claim { preferred },
+        // A player that never says what is in its slots is not offered as a
+        // source, however good its number (F24).
+        emit_status: true,
+        ..VirtualCdjConfig::default()
+    };
+    match VirtualCdj::observe(discovery, claiming).await {
+        Ok(cdj) => {
+            tracing::info!(number = cdj.number().get(), "claimed a player number");
+            Ok(cdj)
+        }
+        Err(error) => {
+            tracing::warn!(
+                "{error}; watching from device {} instead, which cannot be browsed",
+                prolink::OBSERVER_NUMBER
+            );
+            VirtualCdj::observe(
+                discovery,
+                VirtualCdjConfig {
+                    numbering: Numbering::Observer(prolink::OBSERVER_NUMBER),
+                    emit_status: false,
+                    ..VirtualCdjConfig::default()
+                },
+            )
+            .await
+        }
+    }
+}
+
+/// Turn a peer's slot description into an event the first time it appears.
+///
+/// A deck describes a slot **once**, when it first browses it, and never
+/// repeats it (F37) — so there is nothing to subscribe to and the change has to
+/// be noticed.
+fn spawn_media_watch(media: Arc<prolink::PeerMedia>, sink: Arc<Mutex<Events>>) {
+    tokio::spawn(async move {
+        let mut seen: std::collections::BTreeMap<(u8, prolink_proto::Slot), String> =
+            std::collections::BTreeMap::new();
+        loop {
+            tokio::time::sleep(MEDIA_POLL).await;
+            for slot in media.all() {
+                let Some(description) = slot.description.as_ref() else {
+                    continue;
+                };
+                let key = (slot.device.get(), slot.slot);
+                let now = format!(
+                    "{}/{}/{}",
+                    description.volume_name, description.track_count, description.playlist_count
+                );
+                if seen.get(&key) == Some(&now) {
+                    continue;
+                }
+                seen.insert(key, now);
+                let mut event = plain(EventKind::MediaInfo, slot.device.get(), 0);
+                event.slot = convert::slot(slot.slot);
+                if let Ok(mut queue) = sink.lock() {
+                    queue.push(event);
+                }
+            }
+        }
+    });
 }
 
 impl Session {
-    /// The number we announced as, or zero if we did not announce.
+    /// Read the live parts, if the sockets are up yet.
+    ///
+    /// Everything a host can ask about the network goes through here, and
+    /// answers with a default while starting rather than blocking: a host polls
+    /// this from its UI thread several times a second.
+    fn with_live<T>(&self, read: impl FnOnce(&Live) -> T) -> Option<T> {
+        let held = self.live.read().ok()?;
+        held.as_ref().map(read)
+    }
+
+    /// Whether the sockets are up and the device number, if any, is settled.
+    ///
+    /// False means starting or failed; `last_error` distinguishes the two.
+    #[must_use]
+    pub fn is_ready(&self) -> bool {
+        self.with_live(|_| true).unwrap_or(false)
+    }
+
+    /// The number we announced as, or zero if we have not announced yet.
     #[must_use]
     pub fn device_number(&self) -> u8 {
-        self.cdj.as_ref().map_or(0, |cdj| cdj.number().get())
+        self.with_live(|live| live.cdj.as_ref().map_or(0, |cdj| cdj.number().get()))
+            .unwrap_or(0)
     }
 
     /// Everyone on the network, as of now.
     #[must_use]
     pub fn devices(&self) -> Vec<Device> {
-        self.discovery
-            .devices()
-            .iter()
-            .map(convert::device)
-            .collect()
+        self.with_live(|live| {
+            live.discovery
+                .devices()
+                .iter()
+                .map(convert::device)
+                .collect()
+        })
+        .unwrap_or_default()
     }
 
     /// What every player is doing, as of now.
     #[must_use]
     pub fn players(&self) -> Vec<Player> {
-        self.monitor.players().iter().map(convert::player).collect()
+        self.with_live(|live| live.monitor.players().iter().map(convert::player).collect())
+            .unwrap_or_default()
     }
 
     /// Everything that has happened since the last call.
@@ -278,7 +400,7 @@ impl Session {
 
         let id = self.next_transfer.fetch_add(1, Ordering::Relaxed);
         let events = Arc::clone(&self.events);
-        let interface = self.monitor.interface().clone();
+        let interface = self.interface.clone();
         let queue = Arc::clone(&self.transfers);
         let last_error = Arc::clone(&self.last_error);
         let slot = convert::slot_back(slot);
@@ -333,7 +455,8 @@ impl Session {
     pub fn is_listening(&self) -> bool {
         // Discovery is the socket everything else depends on, and a device
         // table that has ever seen anything proves traffic is arriving.
-        !self.discovery.devices().is_empty() || self.cdj.is_some()
+        self.with_live(|live| !live.discovery.devices().is_empty() || live.cdj.is_some())
+            .unwrap_or(false)
     }
 
     /// The last thing that went wrong, or empty.
@@ -366,11 +489,14 @@ impl Session {
     #[must_use]
     pub fn device_number_of(&self, mac: &str) -> u8 {
         let wanted = mac.trim().to_ascii_lowercase();
-        self.discovery
-            .devices()
-            .into_iter()
-            .find(|device| device.mac.to_string().to_ascii_lowercase() == wanted)
-            .map_or(0, |device| device.number.get())
+        self.with_live(|live| {
+            live.discovery
+                .devices()
+                .into_iter()
+                .find(|device| device.mac.to_string().to_ascii_lowercase() == wanted)
+                .map_or(0, |device| device.number.get())
+        })
+        .unwrap_or(0)
     }
 
     /// The next transfer id. From 1, so zero always means "not a transfer".
@@ -395,9 +521,13 @@ impl Session {
         &self.runtime
     }
 
-    /// The virtual CDJ, if this session announced.
-    pub(crate) fn cdj(&self) -> Option<&VirtualCdj> {
-        self.cdj.as_ref()
+    /// What our peers have in their own slots, if we have announced.
+    ///
+    /// An `Arc` rather than a borrow: the virtual CDJ lives behind the lock
+    /// that `with_live` takes, and nothing may hold that across a browse.
+    pub(crate) fn peer_media(&self) -> Option<Arc<prolink::PeerMedia>> {
+        self.with_live(|live| live.cdj.as_ref().map(VirtualCdj::peer_media))
+            .flatten()
     }
 
     /// The number this session can browse with, if it holds a browsable one.
@@ -422,11 +552,14 @@ impl Session {
 
     /// The address of a device by number, if it is on the network.
     pub(crate) fn address_of(&self, number: u8) -> Option<Ipv4Addr> {
-        self.discovery
-            .devices()
-            .into_iter()
-            .find(|device| device.number.get() == number)
-            .map(|device| device.ip)
+        self.with_live(|live| {
+            live.discovery
+                .devices()
+                .into_iter()
+                .find(|device| device.number.get() == number)
+                .map(|device| device.ip)
+        })
+        .flatten()
     }
 }
 

@@ -43,16 +43,12 @@ impl Session {
     /// What every player's slots hold, as of now.
     #[must_use]
     pub fn media(&self) -> Vec<MediaInfo> {
-        let Some(cdj) = self.cdj() else {
+        let Some(media) = self.peer_media() else {
             // Without announcing, slot occupancy never reaches us: it is
             // published in status packets and nowhere else (F20, F21).
             return Vec::new();
         };
-        cdj.peer_media()
-            .all()
-            .iter()
-            .map(convert::media_info)
-            .collect()
+        media.all().iter().map(convert::media_info).collect()
     }
 
     /// The root menu of a player's slot, as its LINK button shows it.

@@ -723,8 +723,36 @@ impl Monitor {
     /// The virtual CDJ should be configured with `emit_status: false` — see the
     /// module documentation for why a serving virtual CDJ and a monitor cannot
     /// share port 50002.
+    /// Watch beats and status alongside a virtual CDJ.
+    ///
+    /// When that CDJ emits status it already holds UDP 50002, and this reads
+    /// its tap rather than binding a second socket — see
+    /// [`VirtualCdj::status_datagrams`]. Binding anyway would split the
+    /// unicast stream arbitrarily between the two sockets and silently lose
+    /// half of every deck's status.
     pub async fn with_status(interface: Interface, announcing: &VirtualCdj) -> Result<Self> {
-        Self::build(interface, Some(announcing.number())).await
+        match announcing.status_datagrams() {
+            Some(tap) => Self::build_shared(interface, announcing.number(), tap).await,
+            None => Self::build(interface, Some(announcing.number())).await,
+        }
+    }
+
+    /// Like [`Monitor::build`], but reading status from someone else's socket.
+    #[expect(
+        clippy::unused_async,
+        reason = "spawns tasks, so it needs a tokio runtime; matches build's signature"
+    )]
+    async fn build_shared(
+        interface: Interface,
+        ours: DeviceNumber,
+        tap: broadcast::Receiver<Arc<Vec<u8>>>,
+    ) -> Result<Self> {
+        let mut monitor = Self::empty(interface, true);
+        let beats = socket::bind(BEAT_PORT, Some(&monitor.interface))?;
+        monitor.tasks.push(monitor.spawn_beats(beats));
+        monitor.tasks.push(monitor.spawn_tapped_status(tap, ours));
+        monitor.tasks.push(monitor.spawn_reaper());
+        Ok(monitor)
     }
 
     #[expect(
@@ -733,15 +761,7 @@ impl Monitor {
                   at the call site, and keeps the signature stable if setup later awaits"
     )]
     async fn build(interface: Interface, ours: Option<DeviceNumber>) -> Result<Self> {
-        let players = Arc::new(Mutex::new(PlayerTable::default()));
-        let (events, _) = broadcast::channel(EVENT_CAPACITY);
-        let mut monitor = Self {
-            interface,
-            players,
-            events,
-            watches_status: ours.is_some(),
-            tasks: Vec::new(),
-        };
+        let mut monitor = Self::empty(interface, ours.is_some());
         let beats = socket::bind(BEAT_PORT, Some(&monitor.interface))?;
         monitor.tasks.push(monitor.spawn_beats(beats));
         if let Some(ours) = ours {
@@ -750,6 +770,18 @@ impl Monitor {
         }
         monitor.tasks.push(monitor.spawn_reaper());
         Ok(monitor)
+    }
+
+    /// The parts every constructor shares, with no tasks started yet.
+    fn empty(interface: Interface, watches_status: bool) -> Self {
+        let (events, _) = broadcast::channel(EVENT_CAPACITY);
+        Self {
+            interface,
+            players: Arc::new(Mutex::new(PlayerTable::default())),
+            events,
+            watches_status,
+            tasks: Vec::new(),
+        }
     }
 
     /// The interface being listened on.
@@ -840,20 +872,34 @@ impl Monitor {
                 let Some(datagram) = receive(&socket, &mut buffer, "status").await else {
                     return;
                 };
-                let Ok(status::Packet::CdjStatus(packet)) = status::decode(&datagram) else {
-                    continue;
+                observe_status_datagram(&players, &events, &datagram, ours);
+            }
+        })
+    }
+
+    /// The status half, reading datagrams somebody else received.
+    fn spawn_tapped_status(
+        &self,
+        mut tap: broadcast::Receiver<Arc<Vec<u8>>>,
+        ours: DeviceNumber,
+    ) -> JoinHandle<()> {
+        let players = Arc::clone(&self.players);
+        let events = self.events.clone();
+        tokio::spawn(async move {
+            loop {
+                let datagram = match tap.recv().await {
+                    Ok(datagram) => datagram,
+                    Err(broadcast::error::RecvError::Lagged(missed)) => {
+                        // The picture is stale rather than wrong: the next
+                        // status packet from each player is 200 ms away and
+                        // carries the whole state, so nothing has to be
+                        // reconstructed.
+                        warn!(missed, "fell behind the status tap");
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => return,
                 };
-                // Our own status, echoed back by a switch or reflected by a
-                // peer, would show up as a player claiming our number.
-                if packet.sender() == Some(ours) {
-                    continue;
-                }
-                let now = Instant::now();
-                let produced = with_table_mut(&players, |table| table.observe_status(&packet, now));
-                for event in produced {
-                    debug!(?event, "player status changed");
-                    let _ = events.send(event);
-                }
+                observe_status_datagram(&players, &events, &datagram, ours);
             }
         })
     }
@@ -880,6 +926,31 @@ impl Drop for Monitor {
         for task in &self.tasks {
             task.abort();
         }
+    }
+}
+
+/// Fold one datagram from UDP 50002 into the player table.
+///
+/// Shared by the two status tasks, which differ only in where the bytes come
+/// from — our own socket, or the tap of a virtual CDJ that holds the port.
+fn observe_status_datagram(
+    players: &Arc<Mutex<PlayerTable>>,
+    events: &broadcast::Sender<MonitorEvent>,
+    datagram: &[u8],
+    ours: DeviceNumber,
+) {
+    let Ok(status::Packet::CdjStatus(packet)) = status::decode(datagram) else {
+        return;
+    };
+    // Our own status, echoed back by a switch or reflected by a peer, would
+    // show up as a player claiming our number.
+    if packet.sender() == Some(ours) {
+        return;
+    }
+    let now = Instant::now();
+    for event in with_table_mut(players, |table| table.observe_status(&packet, now)) {
+        debug!(?event, "player status changed");
+        let _ = events.send(event);
     }
 }
 
@@ -954,6 +1025,39 @@ mod tests {
         raw[0x92..0x94].copy_from_slice(&14500u16.to_be_bytes());
         raw[0x9e] = u8::from(master);
         CdjStatus::parse(&raw).expect("a status packet")
+    }
+
+    #[test]
+    fn a_tapped_datagram_lands_in_the_table_unless_it_is_our_own() {
+        // The path a session takes when a virtual CDJ holds UDP 50002: the
+        // bytes arrive from its tap rather than from a socket of ours, and
+        // everything downstream has to behave as though they had not.
+        let players = Arc::new(Mutex::new(PlayerTable::default()));
+        let (events, mut heard) = broadcast::channel(16);
+        let ours = device(4);
+
+        let foreign = status_from(2, PlayState::PLAYING.0, true, 0x1234).into_bytes();
+        observe_status_datagram(&players, &events, &foreign, ours);
+        let now = Instant::now();
+        let state = with_table_mut(&players, |table| table.state(device(2), now))
+            .expect("the deck is in the table");
+        assert!(
+            state
+                .status
+                .as_ref()
+                .is_some_and(|seen| seen.status.is_tempo_master),
+            "device 2 said it was the tempo master"
+        );
+        assert!(heard.try_recv().is_ok(), "and that was worth an event");
+
+        // Our own status, reflected back to us. A device claiming our number
+        // is us, and adding ourselves would show Mixxx as a player.
+        let echo = status_from(ours.get(), PlayState::PLAYING.0, false, 0).into_bytes();
+        observe_status_datagram(&players, &events, &echo, ours);
+        assert!(
+            with_table_mut(&players, |table| table.state(ours, now)).is_none(),
+            "our own echo must not become a player"
+        );
     }
 
     #[test]
