@@ -10,9 +10,9 @@
 pub mod dbserver;
 pub mod medium;
 pub mod nfs;
-pub mod server;
+pub mod player;
 pub mod vfs;
 
 pub use medium::{Analysis, Medium, ServedSlot};
-pub use server::{MediaSet, ProLinkServer, ServerConfig};
+pub use player::{MediaSet, VirtualPlayer, VirtualPlayerConfig};
 pub use vfs::{Node, Vfs};

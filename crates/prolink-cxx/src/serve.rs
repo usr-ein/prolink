@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use prolink::Interface;
-use prolink::serve::{Medium, ProLinkServer, ServedSlot as LibSlot, ServerConfig};
+use prolink::serve::{Medium, ServedSlot as LibSlot, VirtualPlayer, VirtualPlayerConfig};
 use tokio::runtime::Runtime;
 
 use crate::ffi::{ServeConfig, ServeConsumer, ServeStatus, ServedSlot};
@@ -24,7 +24,7 @@ pub struct Server {
     runtime: Runtime,
     /// `None` once stopped. Held in an `Option` because shutting down consumes
     /// the server, and C++ calls `stop` on a reference.
-    inner: Option<ProLinkServer>,
+    inner: Option<VirtualPlayer>,
     interface: String,
     /// Kept from the interface we started on: the server does not hand its own
     /// address back, and a host shows this beside the port numbers.
@@ -77,7 +77,10 @@ pub fn serve(config: &ServeConfig) -> Result<Box<Server>, Error> {
     let runtime = Runtime::new().map_err(|error| Error::new(format!("no runtime: {error}")))?;
     let name = interface.name.clone();
     let address = interface.ip.to_string();
-    let started = runtime.block_on(ProLinkServer::start(ServerConfig::new(interface), media));
+    let started = runtime.block_on(VirtualPlayer::start(
+        VirtualPlayerConfig::new(interface),
+        media,
+    ));
     let inner = started.map_err(|error| Error::new(format!("could not serve: {error}")))?;
 
     Ok(Box::new(Server {
@@ -92,52 +95,9 @@ impl Server {
     /// What this server is doing.
     #[must_use]
     pub fn status(&self) -> ServeStatus {
-        let Some(server) = self.inner.as_ref() else {
-            return ServeStatus {
-                active: false,
-                device_number: 0,
-                address: String::new(),
-                interface: self.interface.clone(),
-                portmap_port: 0,
-                mount_port: 0,
-                nfs_port: 0,
-                dbserver_port: 0,
-                is_discoverable: false,
-                media: Vec::new(),
-                consumers: Vec::new(),
-            };
-        };
-        let ports = server.nfs_ports();
-        ServeStatus {
-            active: true,
-            device_number: server.device_number().get(),
-            address: self.address.clone(),
-            interface: self.interface.clone(),
-            portmap_port: ports.portmap,
-            mount_port: ports.mount,
-            nfs_port: ports.nfs,
-            dbserver_port: server.dbserver_port(),
-            is_discoverable: server.is_discoverable(),
-            media: server
-                .media()
-                .all()
-                .iter()
-                .map(|medium| {
-                    let description = medium.description();
-                    ServedSlot {
-                        slot: crate::convert::slot(medium.slot().slot()),
-                        volume_name: description.volume_name,
-                        local_path: medium
-                            .root()
-                            .map(|root| root.display().to_string())
-                            .unwrap_or_default(),
-                        export_path: medium.slot().export_path().to_owned(),
-                        track_count: description.track_count,
-                        playlist_count: description.playlist_count,
-                    }
-                })
-                .collect(),
-            consumers: consumers(server),
+        match self.inner.as_ref() {
+            Some(player) => describe(player, self.interface.clone(), self.address.clone()),
+            None => nothing(self.interface.clone()),
         }
     }
 
@@ -145,13 +105,70 @@ impl Server {
     ///
     /// Idempotent, so a host may call it and then drop the handle.
     pub fn stop(&mut self) {
-        let Some(server) = self.inner.take() else {
+        let Some(player) = self.inner.take() else {
             return;
         };
         // Ejecting walks each slot through the unmounting states a consuming
         // deck waits for; sockets that simply vanish leave it retrying against
         // nothing (F20).
-        self.runtime.block_on(server.shutdown());
+        self.runtime.block_on(player.shutdown());
+    }
+}
+
+/// Everything a host shows about the serve side, from a running player.
+///
+/// Shared with `Session::serve_status`, because a session that holds a player
+/// number serves exactly the way a standalone server does — it is the same
+/// type underneath, and two descriptions of it would drift.
+pub(crate) fn describe(player: &VirtualPlayer, interface: String, address: String) -> ServeStatus {
+    let ports = player.nfs_ports();
+    ServeStatus {
+        active: true,
+        device_number: player.device_number().get(),
+        address,
+        interface,
+        portmap_port: ports.portmap,
+        mount_port: ports.mount,
+        nfs_port: ports.nfs,
+        dbserver_port: player.dbserver_port(),
+        is_discoverable: player.is_discoverable(),
+        media: player
+            .media()
+            .all()
+            .iter()
+            .map(|medium| {
+                let description = medium.description();
+                ServedSlot {
+                    slot: crate::convert::slot(medium.slot().slot()),
+                    volume_name: description.volume_name,
+                    local_path: medium
+                        .root()
+                        .map(|root| root.display().to_string())
+                        .unwrap_or_default(),
+                    export_path: medium.slot().export_path().to_owned(),
+                    track_count: description.track_count,
+                    playlist_count: description.playlist_count,
+                }
+            })
+            .collect(),
+        consumers: consumers(player),
+    }
+}
+
+/// What a host shows when nothing is being served.
+pub(crate) fn nothing(interface: String) -> ServeStatus {
+    ServeStatus {
+        active: false,
+        device_number: 0,
+        address: String::new(),
+        interface,
+        portmap_port: 0,
+        mount_port: 0,
+        nfs_port: 0,
+        dbserver_port: 0,
+        is_discoverable: false,
+        media: Vec::new(),
+        consumers: Vec::new(),
     }
 }
 
@@ -165,7 +182,7 @@ impl Drop for Server {
 }
 
 /// The players reading from us, named from the device table.
-fn consumers(server: &ProLinkServer) -> Vec<ServeConsumer> {
+fn consumers(server: &VirtualPlayer) -> Vec<ServeConsumer> {
     server
         .consumers()
         .into_iter()

@@ -230,6 +230,48 @@ impl Vfs {
         Ok(mounted)
     }
 
+    /// Remove a mounted subtree, and the mount point itself.
+    ///
+    /// Returns how many entries went. A prefix that was never mounted is not an
+    /// error: a caller unmounting a slot does not always know whether anything
+    /// was grafted into it.
+    ///
+    /// The handles under it become unresolvable, which is the point — a deck
+    /// still holding one gets `NFSERR_STALE`, which is what a real player
+    /// answers for a stick that has been pulled, and is what makes it let go.
+    pub fn unmount(&mut self, prefix: &str) -> usize {
+        let prefix = prefix.trim_matches('/');
+        let mount_point = format!("/{prefix}");
+        let under = format!("{mount_point}/");
+
+        let doomed: Vec<FileHandleKey> = self
+            .entries
+            .iter()
+            .filter(|(_, entry)| entry.path == mount_point || entry.path.starts_with(&under))
+            .map(|(key, _)| *key)
+            .collect();
+        for key in &doomed {
+            self.entries.remove(key);
+        }
+
+        // The parent still lists it as a child, and a READDIR that names an
+        // entry LOOKUP then cannot find reads to a deck as a corrupt medium
+        // rather than an absent one.
+        if let Some((parent, name)) = split(&mount_point) {
+            self.remove_child(&parent, &name);
+        }
+        doomed.len()
+    }
+
+    /// Drop a name from a directory's listing.
+    fn remove_child(&mut self, directory: &str, name: &str) {
+        if let Some(entry) = self.entries.get_mut(&Self::handle_for(directory).key())
+            && let Node::Directory { children } = &mut entry.node
+        {
+            children.retain(|child| child != name);
+        }
+    }
+
     /// Add a file held in memory, creating any directories it needs.
     pub fn add_file(&mut self, path: &str, data: Vec<u8>) {
         self.ensure_parents(path);
@@ -453,6 +495,46 @@ mod tests {
             b"nfd".to_vec(),
         );
         vfs
+    }
+
+    #[test]
+    fn unmounting_takes_the_subtree_and_the_name_its_parent_lists() {
+        // A stick is pulled. Every handle under it has to stop resolving, so a
+        // deck still holding one gets NFSERR_STALE -- which is exactly what a
+        // real player answers, and what makes the deck let go.
+        let mut vfs = tree();
+        let root = vfs.root();
+        assert!(
+            vfs.read_dir(root)
+                .is_some_and(|names| names.contains(&"C".to_owned())),
+            "the mount point is listed before it goes"
+        );
+        let file = Vfs::handle_for("/C/Contents/GESAFFELSTEIN/track.mp3");
+        assert!(vfs.resolve(file).is_some());
+
+        let removed = vfs.unmount("C");
+        assert!(removed > 0, "something was there");
+        assert!(
+            vfs.resolve(file).is_none(),
+            "a handle under a pulled medium must stop resolving"
+        );
+        assert!(
+            vfs.resolve(Vfs::handle_for("/C")).is_none(),
+            "and so must the mount point itself"
+        );
+        assert!(
+            !vfs.read_dir(root)
+                .is_some_and(|names| names.contains(&"C".to_owned())),
+            "a READDIR that names an entry LOOKUP cannot find reads as a corrupt \
+             medium rather than an absent one"
+        );
+
+        assert_eq!(
+            vfs.unmount("C"),
+            0,
+            "unmounting an empty slot is not an error: a caller does not always \
+             know whether anything was there"
+        );
     }
 
     #[test]

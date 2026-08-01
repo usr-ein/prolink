@@ -73,6 +73,7 @@ pub mod media;
 pub mod monitor;
 pub mod serve;
 pub mod virtual_cdj;
+pub mod volumes;
 
 mod error;
 mod socket;
@@ -85,9 +86,11 @@ pub use media::{MediaDescription, MediaSource};
 pub use monitor::{Monitor, MonitorEvent, PlayerState};
 /// The beat-packet types that appear in [`monitor`]'s signatures.
 pub use prolink_proto::beat::{Beat, BeatInBar, Pitch};
+pub use serve::{MediaSet, Medium, VirtualPlayer, VirtualPlayerConfig};
 pub use virtual_cdj::{
     Numbering, OBSERVER_NUMBER, PeerMedia, PeerSlot, VirtualCdj, VirtualCdjConfig,
 };
+pub use volumes::{Volume, rekordbox_volumes};
 
 /// Re-exported so callers do not need a direct dependency on the codec crate
 /// for the handful of its types that appear in this one's signatures.

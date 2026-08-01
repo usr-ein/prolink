@@ -429,10 +429,7 @@ fn shared(media: impl IntoIterator<Item = Arc<Medium>>) -> Shared {
         tags: TagLists::default(),
         loaded: Arc::new(LoadedTracks::default()),
         device: BrowsableDeviceNumber::new(2).expect("device 2 is browsable"),
-        media: media
-            .into_iter()
-            .map(|medium| (medium.slot().slot(), medium))
-            .collect(),
+        media: Arc::new(MediaSet::new(media)),
         started: Instant::now(),
     }
 }

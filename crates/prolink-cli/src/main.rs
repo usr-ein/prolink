@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use prolink::consume::{DbClient, NfsClient};
-use prolink::serve::{Medium, ProLinkServer, ServedSlot, ServerConfig};
+use prolink::serve::{Medium, ServedSlot, VirtualPlayer, VirtualPlayerConfig};
 use prolink::virtual_cdj::{Numbering, VirtualCdjConfig};
 use prolink::{
     BeatInBar, BrowsableDeviceNumber, DeviceName, DeviceNumber, Discovery, Interface, Monitor,
@@ -567,14 +567,14 @@ async fn serve(
         media.push(std::sync::Arc::new(medium));
     }
 
-    let config = ServerConfig {
+    let config = VirtualPlayerConfig {
         preferred_number: number,
         name: DeviceName::new(name),
         generation,
         portmap_port,
-        ..ServerConfig::new(interface)
+        ..VirtualPlayerConfig::new(interface)
     };
-    let server = ProLinkServer::start(config, media).await?;
+    let server = VirtualPlayer::start(config, media).await?;
 
     let ports = server.nfs_ports();
     println!("announcing as device {}", server.device_number());

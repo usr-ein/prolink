@@ -98,6 +98,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use crate::serve::medium::{Medium, ServedSlot};
+use crate::serve::player::MediaSet;
 use crate::virtual_cdj::LoadedTracks;
 use crate::{Error, Result};
 
@@ -229,9 +230,12 @@ struct Shared {
     /// Shared with the [`crate::virtual_cdj::VirtualCdj`] that fills it; a
     /// dbserver started without one simply marks nothing.
     loaded: Arc<LoadedTracks>,
-    /// Slot → medium. Resolved per *message* and never cached on a connection
-    /// (F37).
-    media: BTreeMap<Slot, Arc<Medium>>,
+    /// What we are serving. The registry itself, not a copy of it: media are
+    /// mounted and unmounted while the server runs, and a snapshot taken at
+    /// start would answer for a stick that has since been pulled.
+    ///
+    /// Resolved per *message* and never cached on a connection (F37).
+    media: Arc<MediaSet>,
     /// When the server started, for the prefix word the beat grid and detail
     /// waveform carry — which must be non-zero and must not go backwards (F33).
     started: Instant,
@@ -245,11 +249,11 @@ impl Shared {
     /// any slot — a deck asks about the slot it thinks it is browsing, and a
     /// unit with one medium has nothing else to offer. With two media there is
     /// no such licence: the slot byte is the only thing distinguishing them.
-    fn medium(&self, slot: Slot) -> Option<&Medium> {
-        if let Some(medium) = self.media.get(&slot) {
+    fn medium(&self, slot: Slot) -> Option<Arc<Medium>> {
+        if let Some(medium) = self.media.get(slot) {
             return Some(medium);
         }
-        let mut media = self.media.values();
+        let mut media = self.media.all().into_iter();
         match (media.next(), media.next()) {
             (Some(only), None) => Some(only),
             _ => None,
@@ -267,7 +271,12 @@ impl DbServer {
         config: DbServerConfig,
         media: impl IntoIterator<Item = Arc<Medium>>,
     ) -> Result<Self> {
-        Self::start_watching(config, media, Arc::new(LoadedTracks::default())).await
+        Self::start_watching(
+            config,
+            Arc::new(MediaSet::new(media)),
+            Arc::new(LoadedTracks::default()),
+        )
+        .await
     }
 
     /// Start one that marks the loaded track's row.
@@ -278,14 +287,9 @@ impl DbServer {
     /// (F55).
     pub async fn start_watching(
         config: DbServerConfig,
-        media: impl IntoIterator<Item = Arc<Medium>>,
+        media: Arc<MediaSet>,
         loaded: Arc<LoadedTracks>,
     ) -> Result<Self> {
-        let media: BTreeMap<Slot, Arc<Medium>> = media
-            .into_iter()
-            .map(|medium| (medium.slot().slot(), medium))
-            .collect();
-
         let listener = bind(config.address, config.port).await?;
         let port = local_port(&listener)?;
         let shared = Arc::new(Shared {
@@ -355,11 +359,12 @@ impl DbServer {
         self.query_port
     }
 
-    /// The slots this server has a medium for.
+    /// The slots this server has a medium for, as of now.
     pub fn slots(&self) -> Vec<ServedSlot> {
         self.shared
             .media
-            .values()
+            .all()
+            .iter()
             .map(|medium| medium.slot())
             .collect()
     }
@@ -580,7 +585,11 @@ impl Session {
         // connection (F37).
         let descriptor = message.descriptor();
         let slot = descriptor.map_or(Slot::NONE, |descriptor| descriptor.slot);
+        // Held as an owned handle rather than a borrow: the registry it comes
+        // from can change under us between messages, and a request must be
+        // answered from the medium it started against.
         let medium = shared.medium(slot);
+        let medium = medium.as_deref();
 
         match kind {
             MessageKind::INTRODUCE => {

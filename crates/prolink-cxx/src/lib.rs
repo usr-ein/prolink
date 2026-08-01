@@ -195,6 +195,18 @@ pub mod ffi {
         /// A host restarting a session should pass back the number it last
         /// held, so a refresh keeps the identity the decks already know.
         preferred_number: u8,
+
+        /// Whether to offer this machine's own rekordbox sticks to the players.
+        ///
+        /// On, the session scans the mount points every two seconds and serves
+        /// what it finds — USB first, then SD, which is all a CDJ has. That is
+        /// what makes this machine appear in a deck's LINK menu; a player with
+        /// no media is listed nowhere, whatever its number (F24).
+        ///
+        /// Off, `serve_media` still works: a host that knows its own media,
+        /// or wants a stick the DJ chose rather than every stick, drives it
+        /// directly.
+        share_local_media: bool,
     }
 
     /// A network interface that could carry Pro DJ Link traffic.
@@ -685,6 +697,35 @@ pub mod ffi {
 
         /// Whether the sockets are up and we are hearing the network.
         fn is_listening(self: &Session) -> bool;
+
+        /// Offer a local rekordbox medium to the players on the network.
+        ///
+        /// `path` is the mount point — the directory holding `PIONEER/`.
+        /// Replaces whatever was in that slot. Returns at once; reading the
+        /// database and walking the files takes a second or two, and a path
+        /// that is not a rekordbox export is reported through `last_error`.
+        ///
+        /// Not needed when `Config::share_local_media` is on, which serves
+        /// every stick this machine has.
+        fn serve_media(self: &Session, slot: Slot, path: &str);
+
+        /// Stop offering whatever is in a slot.
+        ///
+        /// Ejects it first, which takes a couple of seconds when a deck is
+        /// reading from us — it is told through the slot state in our status
+        /// packets and answers with UMNT. Returns at once; the eject happens
+        /// on the session's own runtime.
+        fn stop_serving(self: &Session, slot: Slot);
+
+        /// What we are offering, and which players are reading it.
+        fn serve_status(self: &Session) -> ServeStatus;
+
+        /// The interface currently bound, or empty if none is.
+        ///
+        /// Not fixed for the life of the session: a host is often started
+        /// before its ethernet is plugged in, and the session moves when a
+        /// better interface appears.
+        fn interface_name(self: &Session) -> String;
 
         /// Whether startup has finished.
         ///

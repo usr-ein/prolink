@@ -30,7 +30,7 @@
 //! portmapper, arrived at from the other side. Real hardware does not do that:
 //! ejecting a stick walks the slot through two unmounting states first, and the
 //! consuming deck releases its mount when it sees the second (see
-//! [`ProLinkServer::shutdown`]). So we eject before we stop.
+//! [`VirtualPlayer::shutdown`]). So we eject before we stop.
 
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -53,7 +53,7 @@ use crate::{Error, Result};
 
 /// How to present ourselves as a player with media.
 #[derive(Clone, Debug)]
-pub struct ServerConfig {
+pub struct VirtualPlayerConfig {
     /// The interface facing the CDJs.
     pub interface: Interface,
     /// The number to try first. Any other browsable number is tried if it is
@@ -71,7 +71,7 @@ pub struct ServerConfig {
     pub portmap_port: u16,
 }
 
-impl ServerConfig {
+impl VirtualPlayerConfig {
     /// Sensible defaults for an interface.
     pub fn new(interface: Interface) -> Self {
         Self {
@@ -96,45 +96,105 @@ impl ServerConfig {
 /// second from its own task, and an eject writes it from another.
 #[derive(Debug, Default)]
 pub struct MediaSet {
-    media: Vec<Arc<Medium>>,
-    /// One per entry of `media`, at the same index. A slot with no medium has
-    /// no cell, and is empty by construction rather than by bookkeeping.
-    states: Vec<AtomicU8>,
+    /// One entry per occupied slot. Behind a lock because media come and go
+    /// while the server runs — a DJ pulls a stick out mid-set — and because
+    /// three separate readers share this one registry: the virtual CDJ
+    /// answering media queries, the dbserver resolving a request's slot byte,
+    /// and a host drawing a status page.
+    slots: RwLock<Vec<Entry>>,
+}
+
+/// One slot's medium and the state currently being published for it.
+#[derive(Debug)]
+struct Entry {
+    medium: Arc<Medium>,
+    /// Behind an atomic rather than covered by the outer lock: the status timer
+    /// reads it five times a second from its own task, and an eject writes it
+    /// from another, and neither should wait on a mount walking a filesystem.
+    state: AtomicU8,
 }
 
 impl MediaSet {
     /// Collect media, keeping the last one given for any slot.
     pub fn new(media: impl IntoIterator<Item = Arc<Medium>>) -> Self {
-        let mut set = Self::default();
+        let set = Self::default();
         for medium in media {
-            set.media
-                .retain(|existing| existing.slot() != medium.slot());
-            set.media.push(medium);
+            set.insert(medium);
         }
-        set.states = set
-            .media
-            .iter()
-            .map(|_| AtomicU8::new(MediaState::LOADED.0))
-            .collect();
         set
     }
 
+    /// Put a medium in its slot, replacing whatever was there.
+    ///
+    /// Published as [`MediaState::LOADED`] at once. A caller that has more to
+    /// do before peers should see it — grafting the files into the VFS, most
+    /// obviously — should do that first: a deck that asks between the two gets
+    /// a description of a medium it cannot then read.
+    pub fn insert(&self, medium: Arc<Medium>) {
+        let slot = medium.slot().slot();
+        self.write(|slots| {
+            slots.retain(|entry| entry.medium.slot().slot() != slot);
+            slots.push(Entry {
+                medium,
+                state: AtomicU8::new(MediaState::LOADED.0),
+            });
+        });
+    }
+
+    /// Take a medium out of its slot.
+    ///
+    /// Returns what was there, so a caller can unmount the files it grafted.
+    /// **This is not an eject**: it removes the medium immediately, where a
+    /// deck reading from us expects to be walked through the unmounting states
+    /// first (F20). See [`VirtualPlayer::eject`].
+    pub fn remove(&self, slot: Slot) -> Option<Arc<Medium>> {
+        self.write(|slots| {
+            let index = slots
+                .iter()
+                .position(|entry| entry.medium.slot().slot() == slot)?;
+            Some(slots.remove(index).medium)
+        })
+    }
+
     /// The medium in a slot, if any.
-    pub fn get(&self, slot: Slot) -> Option<&Arc<Medium>> {
-        self.media
-            .iter()
-            .find(|medium| medium.slot().slot() == slot)
+    pub fn get(&self, slot: Slot) -> Option<Arc<Medium>> {
+        self.read(|slots| {
+            slots
+                .iter()
+                .find(|entry| entry.medium.slot().slot() == slot)
+                .map(|entry| Arc::clone(&entry.medium))
+        })
     }
 
     /// Every medium.
-    pub fn all(&self) -> &[Arc<Medium>] {
-        &self.media
+    pub fn all(&self) -> Vec<Arc<Medium>> {
+        self.read(|slots| {
+            slots
+                .iter()
+                .map(|entry| Arc::clone(&entry.medium))
+                .collect()
+        })
+    }
+
+    /// How many slots hold something.
+    pub fn len(&self) -> usize {
+        self.read(Vec::len)
+    }
+
+    /// Whether nothing is being served.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// What peers are currently being told about a slot.
     pub fn state(&self, slot: Slot) -> MediaState {
-        self.cell(slot).map_or(MediaState::EMPTY, |cell| {
-            MediaState(cell.load(Ordering::Relaxed))
+        self.read(|slots| {
+            slots
+                .iter()
+                .find(|entry| entry.medium.slot().slot() == slot)
+                .map_or(MediaState::EMPTY, |entry| {
+                    MediaState(entry.state.load(Ordering::Relaxed))
+                })
         })
     }
 
@@ -144,34 +204,53 @@ impl MediaSet {
     /// to record a state for a medium that does not exist, and such a slot is
     /// reported empty anyway.
     pub fn publish(&self, slot: Slot, state: MediaState) {
-        if let Some(cell) = self.cell(slot) {
-            cell.store(state.0, Ordering::Relaxed);
-        }
+        self.read(|slots| {
+            if let Some(entry) = slots
+                .iter()
+                .find(|entry| entry.medium.slot().slot() == slot)
+            {
+                entry.state.store(state.0, Ordering::Relaxed);
+            }
+        });
     }
 
     /// Publish one state for every slot being served.
     pub fn publish_all(&self, state: MediaState) {
-        for cell in &self.states {
-            cell.store(state.0, Ordering::Relaxed);
+        self.read(|slots| {
+            for entry in slots {
+                entry.state.store(state.0, Ordering::Relaxed);
+            }
+        });
+    }
+
+    fn read<T>(&self, with: impl FnOnce(&Vec<Entry>) -> T) -> T {
+        match self.slots.read() {
+            Ok(slots) => with(&slots),
+            // A panic in one of the closures above would poison this, and the
+            // data behind it is a list of media rather than an invariant that
+            // can be half-updated. Refusing to serve anything ever again is the
+            // worse failure.
+            Err(poisoned) => with(&poisoned.into_inner()),
         }
     }
 
-    fn cell(&self, slot: Slot) -> Option<&AtomicU8> {
-        let index = self
-            .media
-            .iter()
-            .position(|medium| medium.slot().slot() == slot)?;
-        self.states.get(index)
+    fn write<T>(&self, with: impl FnOnce(&mut Vec<Entry>) -> T) -> T {
+        match self.slots.write() {
+            Ok(mut slots) => with(&mut slots),
+            Err(poisoned) => with(&mut poisoned.into_inner()),
+        }
     }
 }
 
 impl MediaSource for MediaSet {
     fn occupied_slots(&self) -> std::collections::BTreeSet<Slot> {
-        self.media
-            .iter()
-            .map(|medium| medium.slot().slot())
-            .filter(|slot| self.state(*slot).has_media())
-            .collect()
+        self.read(|slots| {
+            slots
+                .iter()
+                .filter(|entry| MediaState(entry.state.load(Ordering::Relaxed)).has_media())
+                .map(|entry| entry.medium.slot().slot())
+                .collect()
+        })
     }
 
     fn describe(&self, slot: Slot) -> Option<MediaDescription> {
@@ -224,15 +303,46 @@ const EMPTY_HOLD: Duration = Duration::from_millis(600);
 /// How often to read the mount table while waiting for the `UMNT`s.
 const UMNT_POLL: Duration = Duration::from_millis(25);
 
+/// Graft a medium's files into the tree.
+///
+/// Each medium gets its own subtree, because a filehandle is a hash of its path
+/// and a CDJ keeps only the leading twelve bytes of one (F28) — two media under
+/// one prefix would collide.
+fn graft(vfs: &Arc<RwLock<Vfs>>, medium: &Medium) -> Result<()> {
+    let Some(root) = medium.root() else {
+        return Ok(());
+    };
+    let mounted = with_vfs_mut(vfs, |tree| tree.mount(medium.slot().vfs_prefix(), root))
+        .map_err(Error::io("walking a medium"))?;
+    info!(
+        slot = %medium.slot().slot(),
+        export = medium.slot().export_path(),
+        files = mounted,
+        volume = medium.volume_name(),
+        tracks = medium.library().tracks.len(),
+        "mounted a medium",
+    );
+    Ok(())
+}
+
+/// Write to the tree, taking the lock back from a panicking reader if it comes
+/// to that: a poisoned VFS would mean no player could read anything ever again.
+fn with_vfs_mut<T>(vfs: &Arc<RwLock<Vfs>>, write: impl FnOnce(&mut Vfs) -> T) -> T {
+    match vfs.write() {
+        Ok(mut tree) => write(&mut tree),
+        Err(poisoned) => write(&mut poisoned.into_inner()),
+    }
+}
+
 /// A virtual CDJ with media in its slots, browsable by real players.
 ///
-/// [`ProLinkServer::shutdown`] is the clean way to stop: it ejects the media
+/// [`VirtualPlayer::shutdown`] is the clean way to stop: it ejects the media
 /// first, so a deck reading from us is told to let go rather than left holding
 /// a mount on a server that has vanished. Dropping it stops everything in the
 /// same order without the ejection, which is what a failed start wants and not
 /// what a DJ pressing ctrl-c does.
 #[derive(Debug)]
-pub struct ProLinkServer {
+pub struct VirtualPlayer {
     // Declaration order is drop order, and this is the order a deck reaches
     // these in, reversed: the last thing it gets to is the first thing to go.
     dbserver: DbServer,
@@ -243,35 +353,22 @@ pub struct ProLinkServer {
     vfs: Arc<RwLock<Vfs>>,
 }
 
-impl ProLinkServer {
+impl VirtualPlayer {
     /// Start serving `media`, in the order described in the module docs.
     pub async fn start(
-        config: ServerConfig,
+        config: VirtualPlayerConfig,
         media: impl IntoIterator<Item = Arc<Medium>>,
     ) -> Result<Self> {
+        // Empty is allowed. A host that serves whatever stick happens to be
+        // plugged in has to be able to start with none, and `mount` is what
+        // fills the slots afterwards -- otherwise the only way to gain a
+        // medium would be to restart, which costs the device number and every
+        // deck's picture of us.
         let media = Arc::new(MediaSet::new(media));
-        if media.all().is_empty() {
-            return Err(Error::NothingToServe);
-        }
-
-        // Each medium gets its own subtree, because a filehandle is a hash of
-        // its path and a CDJ keeps only the leading twelve bytes of one (F28).
-        let mut tree = Vfs::new();
+        let vfs = Arc::new(RwLock::new(Vfs::new()));
         for medium in media.all() {
-            let Some(root) = medium.root() else { continue };
-            let mounted = tree
-                .mount(medium.slot().vfs_prefix(), root)
-                .map_err(Error::io("walking a medium"))?;
-            info!(
-                slot = %medium.slot().slot(),
-                export = medium.slot().export_path(),
-                files = mounted,
-                volume = medium.volume_name(),
-                tracks = medium.library().tracks.len(),
-                "mounted a medium",
-            );
+            graft(&vfs, &medium)?;
         }
-        let vfs = Arc::new(RwLock::new(tree));
 
         // Step 1: the file servers, and the privileged port, before anything
         // contends for a device number.
@@ -329,7 +426,7 @@ impl ProLinkServer {
                 address: Ipv4Addr::UNSPECIFIED,
                 ..DbServerConfig::default()
             },
-            media.all().iter().map(Arc::clone),
+            Arc::clone(&media),
             cdj.loaded(),
         )
         .await?;
@@ -348,6 +445,60 @@ impl ProLinkServer {
             media,
             vfs,
         })
+    }
+
+    /// Serve a medium, from now on.
+    ///
+    /// Replaces whatever was in its slot. The files are grafted into the tree
+    /// **before** the slot is published, because a deck that asks in between
+    /// would be given a description of a medium it cannot then read.
+    ///
+    /// # Errors
+    ///
+    /// When the medium's directory cannot be walked.
+    pub fn mount(&self, medium: Arc<Medium>) -> Result<()> {
+        graft(&self.vfs, &medium)?;
+        self.media.insert(medium);
+        Ok(())
+    }
+
+    /// Stop serving whatever is in a slot, having ejected it first.
+    ///
+    /// The eject is not politeness. A deck holding an NFS mount is not
+    /// watching for our health; it is told the medium is going through the
+    /// slot state in our status packets, and it answers the second of them
+    /// with `UMNT` (F20). Pulling the files out from under it instead leaves
+    /// it with a filehandle onto nothing.
+    ///
+    /// Does nothing if the slot is already empty.
+    pub async fn unmount(&self, slot: Slot) {
+        if self.media.get(slot).is_none() {
+            return;
+        }
+        self.eject(slot).await;
+        let Some(medium) = self.media.remove(slot) else {
+            return;
+        };
+        with_vfs_mut(&self.vfs, |tree| {
+            tree.unmount(medium.slot().vfs_prefix());
+        });
+        info!(slot = %slot, "unmounted a medium");
+    }
+
+    /// Walk one slot through the states a consuming deck acts on.
+    ///
+    /// The sequence and its timings are hardware's; see [`Self::shutdown`],
+    /// which does the same for every slot at once.
+    async fn eject(&self, slot: Slot) {
+        if self.nfs.mounts().is_empty() {
+            self.media.publish(slot, MediaState::EMPTY);
+            return;
+        }
+        self.media.publish(slot, MediaState::UNMOUNTING);
+        tokio::time::sleep(SPIN_DOWN).await;
+        self.media.publish(slot, MediaState::UNMOUNTING_ALT);
+        let _ = self.await_unmounts().await;
+        self.media.publish(slot, MediaState::EMPTY);
     }
 
     /// Eject the media the way a deck does, then stop.
@@ -482,6 +633,32 @@ impl ProLinkServer {
         &self.media
     }
 
+    /// The virtual CDJ, for a caller that wants to watch as well as be seen.
+    ///
+    /// This is the composition point. A player emits status, so it holds
+    /// UDP 50002, and a [`Monitor`] must not bind that port a second time —
+    /// only one member of a `SO_REUSEPORT` group receives a given unicast
+    /// datagram, and status is only ever unicast (F21), so two sockets would
+    /// each get an arbitrary half of every deck's status. `Monitor::with_status`
+    /// takes this and reads the CDJ's tap instead:
+    ///
+    /// ```no_run
+    /// # async fn run(interface: prolink::Interface) -> prolink::Result<()> {
+    /// use prolink::{Monitor, VirtualPlayer, VirtualPlayerConfig};
+    ///
+    /// // One device on the network, doing both jobs.
+    /// let player =
+    ///     VirtualPlayer::start(VirtualPlayerConfig::new(interface.clone()), []).await?;
+    /// let monitor = Monitor::with_status(interface, player.cdj()).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`Monitor`]: crate::Monitor
+    pub fn cdj(&self) -> &VirtualCdj {
+        &self.cdj
+    }
+
     /// The peers we can see.
     pub fn discovery(&self) -> &Discovery {
         &self.discovery
@@ -545,6 +722,60 @@ mod tests {
         assert_eq!(
             set.describe(Slot::USB).map(|d| d.volume_name).as_deref(),
             Some("SECOND")
+        );
+    }
+
+    #[test]
+    fn a_stick_can_be_plugged_in_and_pulled_out_while_the_player_runs() {
+        // The whole point of the registry being mutable. A DJ plugs a stick in
+        // mid-set, and the alternative is restarting -- which costs the device
+        // number and every deck's picture of us.
+        let set = MediaSet::new([]);
+        assert!(set.is_empty());
+        assert!(set.occupied_slots().is_empty());
+
+        set.insert(Arc::new(Medium::synthetic(
+            ServedSlot::USB,
+            library(),
+            "PLUGGED IN",
+        )));
+        assert_eq!(set.occupied_slots(), [Slot::USB].into_iter().collect());
+        assert_eq!(
+            set.describe(Slot::USB)
+                .map(|found| found.volume_name)
+                .as_deref(),
+            Some("PLUGGED IN")
+        );
+
+        let taken = set.remove(Slot::USB).expect("it was there");
+        assert_eq!(taken.volume_name(), "PLUGGED IN");
+        assert!(set.is_empty());
+        assert!(
+            set.describe(Slot::USB).is_none(),
+            "a pulled stick must not still be offered"
+        );
+        assert!(
+            set.remove(Slot::USB).is_none(),
+            "and removing it twice is not an error"
+        );
+    }
+
+    #[test]
+    fn a_slot_being_ejected_is_not_offered_afresh() {
+        // The eject sequence publishes states a deck acts on, and a media query
+        // arriving mid-eject must not be told about a medium that is leaving.
+        let set = MediaSet::new([Arc::new(Medium::synthetic(
+            ServedSlot::USB,
+            library(),
+            "GOING",
+        ))]);
+        set.publish(Slot::USB, MediaState::UNMOUNTING_ALT);
+        assert!(set.occupied_slots().is_empty());
+        assert!(set.describe(Slot::USB).is_none());
+        assert_eq!(
+            set.all().len(),
+            1,
+            "still ours until it is removed, so the eject can finish"
         );
     }
 

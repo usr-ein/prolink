@@ -13,12 +13,13 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use prolink::consume::NfsClient;
 use prolink::{
-    BrowsableDeviceNumber, Discovery, Interface, Monitor, Numbering, VirtualCdj, VirtualCdjConfig,
+    Discovery, Interface, Monitor, Numbering, VirtualCdj, VirtualCdjConfig, VirtualPlayer,
+    VirtualPlayerConfig,
 };
 use tokio::runtime::Runtime;
 
 use crate::convert::{self, plain};
-use crate::ffi::{Config, Device, Event, EventKind, NetworkInterface, Player, Slot};
+use crate::ffi::{Config, Device, Event, EventKind, NetworkInterface, Player, ServeStatus, Slot};
 
 /// How many events a session queues before it discards the oldest.
 ///
@@ -44,8 +45,16 @@ const MEDIA_POLL: std::time::Duration = std::time::Duration::from_millis(500);
 pub struct Session {
     /// Dropped last, because the tasks below run on it.
     runtime: Runtime,
-    /// The interface chosen at `open`, known before anything is bound.
-    interface: Interface,
+    /// The interface currently in use. Empty until something is bound.
+    ///
+    /// Not fixed at `open`: a host is often started before its ethernet is
+    /// plugged in, and the whole session moves when a better interface appears.
+    interface: Arc<Mutex<Option<Interface>>>,
+    /// Media a host has asked us to serve, by local path.
+    ///
+    /// Held here rather than only in the player, because the player is rebuilt
+    /// when the interface moves and what we serve must survive that.
+    served: Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
     /// The sockets, once they are up. `None` while starting, and again if
     /// starting failed — in which case `last_error` says why.
     ///
@@ -77,18 +86,73 @@ impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Session")
             .field("device_number", &self.device_number())
-            .field("interface", &self.interface.name)
+            .field("interface", &self.interface().map(|found| found.name))
             .finish_non_exhaustive()
     }
 }
 
 /// The parts that only exist once the sockets are up.
 struct Live {
+    /// What everyone else is doing. Always present: watching costs nothing and
+    /// needs no permission.
     monitor: Monitor,
-    discovery: Discovery,
-    /// Held for as long as the session announces: dropping it gives up the
-    /// device number that makes peers unicast their status to us (F21).
-    cdj: Option<VirtualCdj>,
+    /// What we are, which depends on what the network let us be.
+    role: Role,
+}
+
+/// Which of the two things a session turned out to be able to do.
+///
+/// Not a configuration choice. A host asks to be a player; whether it gets to
+/// be one depends on whether a number in 1–4 was free, and the difference
+/// matters to every caller — a player can be browsed and can serve, an observer
+/// can do neither.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "see below; there is one of these per session"
+)]
+enum Role {
+    /// A claimed player number. Browsable, and serving whatever is mounted.
+    Player(Arc<VirtualPlayer>),
+    // The two differ in size by a discovery listener and a virtual CDJ. Boxing
+    // the larger would cost an allocation and an indirection on every accessor
+    // to save a word on a value there is exactly one of per session.
+    /// Every player number was defended, or the host asked not to announce.
+    ///
+    /// Still sees beats, tempo and — if it announced at all — status.
+    Observer {
+        discovery: Discovery,
+        cdj: Option<VirtualCdj>,
+    },
+}
+
+impl Role {
+    fn discovery(&self) -> &Discovery {
+        match self {
+            Self::Player(player) => player.discovery(),
+            Self::Observer { discovery, .. } => discovery,
+        }
+    }
+
+    fn cdj(&self) -> Option<&VirtualCdj> {
+        match self {
+            Self::Player(player) => Some(player.cdj()),
+            Self::Observer { cdj, .. } => cdj.as_ref(),
+        }
+    }
+
+    fn number(&self) -> u8 {
+        match self {
+            Self::Player(player) => player.device_number().number().get(),
+            Self::Observer { cdj, .. } => cdj.as_ref().map_or(0, |cdj| cdj.number().get()),
+        }
+    }
+
+    fn player(&self) -> Option<&Arc<VirtualPlayer>> {
+        match self {
+            Self::Player(player) => Some(player),
+            Self::Observer { .. } => None,
+        }
+    }
 }
 
 /// The drained event queue.
@@ -135,33 +199,44 @@ pub fn default_config() -> Config {
         interface: String::new(),
         announce: true,
         preferred_number: 0,
+        share_local_media: true,
     }
 }
 
+/// How often the supervisor looks for a better interface.
+///
+/// A DJ plugs the ethernet in and expects the rig to find itself; two seconds
+/// is below what that feels like a wait for, and enumerating interfaces is a
+/// handful of syscalls.
+const INTERFACE_RECHECK: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Start a session.
 ///
-/// Returns as soon as the interface is resolved. Everything after that —
-/// binding the sockets, and claiming a player number, which takes about five
-/// seconds — happens in the background, so this never blocks a UI thread.
-/// `device_number` is zero until a number is held, and `last_error` carries
-/// anything that went wrong on the way.
+/// Returns immediately. **Nothing is bound yet**, and that is deliberate twice
+/// over: claiming a player number takes about five seconds of watching and
+/// negotiating, and there may be no network at all yet — a host is routinely
+/// started before its ethernet is plugged in. A supervisor task binds when an
+/// interface appears, and rebinds if a better one turns up later.
+///
+/// `device_number` is zero until a number is held, `is_ready` says whether the
+/// sockets are up, and `last_error` carries anything that went wrong.
 ///
 /// # Errors
 ///
-/// When no interface matches, or the runtime cannot be created. `cxx` turns
-/// this into a C++ exception carrying the message.
+/// When the runtime cannot be created, or a named interface does not exist.
+/// Choosing automatically never fails here: an absent network is something to
+/// wait for, not to refuse.
 pub fn open(config: &Config) -> Result<Box<Session>, Error> {
-    let interface = if config.interface.is_empty() {
-        Interface::best_guess().map_err(|error| Error(format!("no usable interface: {error}")))?
-    } else {
+    if !config.interface.is_empty() {
         Interface::named(&config.interface)
-            .map_err(|error| Error(format!("no interface {}: {error}", config.interface)))?
-    };
+            .map_err(|error| Error(format!("no interface {}: {error}", config.interface)))?;
+    }
 
     let runtime = Runtime::new().map_err(|error| Error(format!("no runtime: {error}")))?;
     let session = Session {
         runtime,
-        interface: interface.clone(),
+        interface: Arc::new(Mutex::new(None)),
+        served: Arc::new(Mutex::new(Vec::new())),
         live: Arc::new(RwLock::new(None)),
         events: Arc::new(Mutex::new(Events::default())),
         next_transfer: AtomicU32::new(1),
@@ -175,54 +250,163 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         transfers: Arc::new(tokio::sync::Semaphore::new(1)),
     };
 
-    let live = Arc::clone(&session.live);
-    let events = Arc::clone(&session.events);
-    let last_error = Arc::clone(&session.last_error);
-    let announce = config.announce;
-    let preferred = BrowsableDeviceNumber::new(config.preferred_number);
-    session.runtime.spawn(async move {
-        match start(&interface, announce, preferred, &events).await {
-            Ok(started) => {
-                if let Ok(mut slot) = live.write() {
-                    *slot = Some(started);
-                }
-            }
-            Err(error) => {
-                let message = format!("could not start: {error}");
-                tracing::warn!("{message}");
-                if let Ok(mut held) = last_error.lock() {
-                    *held = message;
-                }
-            }
-        }
-    });
-
+    let supervisor = Supervisor {
+        config: config.clone(),
+        live: Arc::clone(&session.live),
+        interface: Arc::clone(&session.interface),
+        served: Arc::clone(&session.served),
+        events: Arc::clone(&session.events),
+        last_error: Arc::clone(&session.last_error),
+    };
+    session.runtime.spawn(supervisor.run());
+    if config.share_local_media {
+        spawn_volume_watch(Arc::clone(&session.live), Arc::clone(&session.served));
+    }
     Ok(Box::new(session))
 }
 
-/// Bring up discovery, the virtual CDJ and the monitor, in that order.
+/// Keeps the session bound to the right interface, for as long as it lives.
 ///
-/// The order is the protocol's: nothing unicasts status to a device it has not
-/// heard a keep-alive from, so announcing has to precede listening for it.
+/// A single task rather than a rebuild triggered from the host: the host has no
+/// way to know that the link came up, and polling `is_ready` and calling
+/// `refresh` would make every host reimplement this.
+struct Supervisor {
+    config: Config,
+    live: Arc<RwLock<Option<Live>>>,
+    interface: Arc<Mutex<Option<Interface>>>,
+    served: Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
+    events: Arc<Mutex<Events>>,
+    last_error: Arc<Mutex<String>>,
+}
+
+impl Supervisor {
+    async fn run(self) {
+        let mut announced_failure = false;
+        loop {
+            let wanted = self.choose();
+            let current = self.current();
+
+            match (wanted, current) {
+                // Nothing to bind to. Keep the last error current so a host can
+                // say why, and wait: an unplugged cable is not a failure to
+                // report once and give up on.
+                (None, _) => {
+                    if !announced_failure {
+                        self.note("no usable network interface; waiting for one");
+                        announced_failure = true;
+                    }
+                    self.teardown();
+                }
+                // Already on it.
+                (Some(wanted), Some(current))
+                    if wanted.name == current.name && wanted.ip == current.ip =>
+                {
+                    announced_failure = false;
+                }
+                (Some(wanted), current) => {
+                    announced_failure = false;
+                    if let Some(current) = current {
+                        tracing::info!(
+                            from = current.name,
+                            to = wanted.name,
+                            "the network moved; rebinding"
+                        );
+                    }
+                    // Torn down before the rebuild, not after: the old session
+                    // holds UDP 50000 and 50002, and the new one cannot bind
+                    // what the old one still has.
+                    self.teardown();
+                    self.build(wanted).await;
+                }
+            }
+            tokio::time::sleep(INTERFACE_RECHECK).await;
+        }
+    }
+
+    /// The interface this session should be on, if there is one.
+    fn choose(&self) -> Option<Interface> {
+        if self.config.interface.is_empty() {
+            Interface::best_guess().ok()
+        } else {
+            Interface::named(&self.config.interface).ok()
+        }
+    }
+
+    fn current(&self) -> Option<Interface> {
+        self.interface.lock().ok().and_then(|held| held.clone())
+    }
+
+    /// Give up the device number and close every socket.
+    fn teardown(&self) {
+        let had = match self.live.write() {
+            Ok(mut slot) => slot.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        if had.is_some() {
+            tracing::info!("released the device number");
+        }
+        drop(had);
+        if let Ok(mut held) = self.interface.lock() {
+            *held = None;
+        }
+    }
+
+    async fn build(&self, interface: Interface) {
+        let served = self
+            .served
+            .lock()
+            .map(|held| held.clone())
+            .unwrap_or_default();
+        match start(&self.config, &interface, &served, &self.events).await {
+            Ok(live) => {
+                if let Ok(mut held) = self.interface.lock() {
+                    *held = Some(interface);
+                }
+                match self.live.write() {
+                    Ok(mut slot) => *slot = Some(live),
+                    Err(poisoned) => *poisoned.into_inner() = Some(live),
+                }
+                self.note("");
+            }
+            Err(error) => self.note(&format!("could not start: {error}")),
+        }
+    }
+
+    fn note(&self, message: &str) {
+        if !message.is_empty() {
+            tracing::warn!("{message}");
+        }
+        if let Ok(mut held) = self.last_error.lock() {
+            message.clone_into(&mut held);
+        }
+    }
+}
+
+/// Bring up one session on one interface.
+///
+/// The order is the protocol's. Files first, because a deck asks the portmapper
+/// where our mount service is *before* it opens dbserver and retries for ever
+/// if nothing answers (F46). Then the device number, then the database — and
+/// only then the monitor, which shares the socket the announcement created.
 async fn start(
+    config: &Config,
     interface: &Interface,
-    announce: bool,
-    preferred: Option<BrowsableDeviceNumber>,
+    served: &[(prolink_proto::Slot, String)],
     events: &Arc<Mutex<Events>>,
 ) -> Result<Live, prolink::Error> {
-    let discovery = Discovery::start(interface.clone()).await?;
-    let cdj = if announce {
-        // Wait for a scan before contending, so a number in use is seen as in
-        // use rather than claimed out from under a deck that is still booting.
-        tokio::time::sleep(prolink::discovery::SCAN_DURATION).await;
-        Some(announce_as_player(&discovery, preferred).await?)
+    let role = if config.announce {
+        announce_as_player(config, interface, served).await?
     } else {
-        None
+        Role::Observer {
+            discovery: Discovery::start(interface.clone()).await?,
+            cdj: None,
+        }
     };
+
     // With a virtual CDJ the monitor also reads UDP 50002, which is what
     // carries the loaded track and the tempo master (F21). It shares the CDJ's
     // socket rather than binding its own; see `Monitor::with_status`.
-    let monitor = match cdj.as_ref() {
+    let monitor = match role.cdj() {
         Some(cdj) => Monitor::with_status(interface.clone(), cdj).await?,
         None => Monitor::start(interface.clone()).await?,
     };
@@ -238,57 +422,78 @@ async fn start(
         }
     });
 
-    if let Some(watching) = cdj.as_ref() {
+    if let Some(watching) = role.cdj() {
         spawn_media_watch(watching.peer_media(), Arc::clone(events));
     }
 
-    Ok(Live {
-        monitor,
-        discovery,
-        cdj,
-    })
+    Ok(Live { monitor, role })
 }
 
 /// Take a real player number, falling back to watching from outside the range.
 ///
 /// A number in 1–4 is not a preference. A deck will not offer us as a LINK
 /// source at any other number, and will not browse us: the check precedes the
-/// whole browse path and fails silently (F45). So the claim chain runs first,
-/// and only if every browsable number is defended do we settle for observing —
-/// which still shows tempo, beats and what each deck has loaded, and is a great
-/// deal better than refusing to start at all.
+/// whole browse path and fails silently (F45). So the full player is tried
+/// first, and only if every browsable number is defended do we settle for
+/// observing — which still shows tempo, beats and what each deck has loaded,
+/// and is a great deal better than refusing to start at all.
 async fn announce_as_player(
-    discovery: &Discovery,
-    preferred: Option<BrowsableDeviceNumber>,
-) -> Result<VirtualCdj, prolink::Error> {
-    let claiming = VirtualCdjConfig {
-        numbering: Numbering::Claim { preferred },
-        // A player that never says what is in its slots is not offered as a
-        // source, however good its number (F24).
-        emit_status: true,
-        ..VirtualCdjConfig::default()
+    config: &Config,
+    interface: &Interface,
+    served: &[(prolink_proto::Slot, String)],
+) -> Result<Role, prolink::Error> {
+    let mut media = Vec::new();
+    for (slot, path) in served {
+        match load_medium(*slot, path) {
+            Ok(medium) => media.push(medium),
+            // One unreadable stick must not cost the device number, and with it
+            // every other thing this session does.
+            Err(error) => tracing::warn!(path, "not serving it: {error}"),
+        }
+    }
+
+    let settings = VirtualPlayerConfig {
+        preferred_number: prolink::BrowsableDeviceNumber::new(config.preferred_number),
+        ..VirtualPlayerConfig::new(interface.clone())
     };
-    match VirtualCdj::observe(discovery, claiming).await {
-        Ok(cdj) => {
-            tracing::info!(number = cdj.number().get(), "claimed a player number");
-            Ok(cdj)
+    match VirtualPlayer::start(settings, media).await {
+        Ok(player) => {
+            tracing::info!(number = %player.device_number(), "claimed a player number");
+            Ok(Role::Player(Arc::new(player)))
         }
         Err(error) => {
             tracing::warn!(
-                "{error}; watching from device {} instead, which cannot be browsed",
+                "{error}; watching as device {} instead, which cannot be browsed or serve",
                 prolink::OBSERVER_NUMBER
             );
-            VirtualCdj::observe(
-                discovery,
+            let discovery = Discovery::start(interface.clone()).await?;
+            let cdj = VirtualCdj::observe(
+                &discovery,
                 VirtualCdjConfig {
                     numbering: Numbering::Observer(prolink::OBSERVER_NUMBER),
                     emit_status: false,
                     ..VirtualCdjConfig::default()
                 },
             )
-            .await
+            .await?;
+            Ok(Role::Observer {
+                discovery,
+                cdj: Some(cdj),
+            })
         }
     }
+}
+
+/// Read a rekordbox medium off a local path.
+fn load_medium(
+    slot: prolink_proto::Slot,
+    path: &str,
+) -> Result<Arc<prolink::Medium>, prolink::Error> {
+    let served = match slot {
+        prolink_proto::Slot::SD => prolink::serve::ServedSlot::SD,
+        _ => prolink::serve::ServedSlot::USB,
+    };
+    prolink::Medium::from_volume(std::path::Path::new(path), served).map(Arc::new)
 }
 
 /// Turn a peer's slot description into an event the first time it appears.
@@ -326,6 +531,18 @@ fn spawn_media_watch(media: Arc<prolink::PeerMedia>, sink: Arc<Mutex<Events>>) {
 }
 
 impl Session {
+    /// The interface currently bound, or empty if none is.
+    #[must_use]
+    pub fn interface_name(&self) -> String {
+        self.interface()
+            .map_or_else(String::new, |found| found.name)
+    }
+
+    /// The interface currently bound, if any.
+    pub(crate) fn interface(&self) -> Option<Interface> {
+        self.interface.lock().ok().and_then(|held| held.clone())
+    }
+
     /// Read the live parts, if the sockets are up yet.
     ///
     /// Everything a host can ask about the network goes through here, and
@@ -347,15 +564,15 @@ impl Session {
     /// The number we announced as, or zero if we have not announced yet.
     #[must_use]
     pub fn device_number(&self) -> u8 {
-        self.with_live(|live| live.cdj.as_ref().map_or(0, |cdj| cdj.number().get()))
-            .unwrap_or(0)
+        self.with_live(|live| live.role.number()).unwrap_or(0)
     }
 
     /// Everyone on the network, as of now.
     #[must_use]
     pub fn devices(&self) -> Vec<Device> {
         self.with_live(|live| {
-            live.discovery
+            live.role
+                .discovery()
                 .devices()
                 .iter()
                 .map(convert::device)
@@ -400,7 +617,9 @@ impl Session {
 
         let id = self.next_transfer.fetch_add(1, Ordering::Relaxed);
         let events = Arc::clone(&self.events);
-        let interface = self.interface.clone();
+        let Some(interface) = self.interface() else {
+            return Err(Error("the network is not up yet".to_owned()));
+        };
         let queue = Arc::clone(&self.transfers);
         let last_error = Arc::clone(&self.last_error);
         let slot = convert::slot_back(slot);
@@ -455,8 +674,69 @@ impl Session {
     pub fn is_listening(&self) -> bool {
         // Discovery is the socket everything else depends on, and a device
         // table that has ever seen anything proves traffic is arriving.
-        self.with_live(|live| !live.discovery.devices().is_empty() || live.cdj.is_some())
-            .unwrap_or(false)
+        self.with_live(|live| {
+            !live.role.discovery().devices().is_empty() || live.role.cdj().is_some()
+        })
+        .unwrap_or(false)
+    }
+
+    /// Offer a local rekordbox medium to the players on the network.
+    ///
+    /// `path` is the mount point of a stick — the directory holding `PIONEER/`.
+    /// Replaces whatever was in that slot.
+    ///
+    /// Returns at once and does the work on the session's own runtime: reading
+    /// the database and walking the files takes a second or two for a full
+    /// stick, and a host calling this from a UI thread must not wear that. A
+    /// path that turns out not to be a rekordbox export is reported through
+    /// `last_error`.
+    ///
+    /// Remembered across a rebind, so a stick stays served when the session
+    /// moves to another interface, and it does not matter whether the network
+    /// is up yet: a host should call this when it notices the medium.
+    pub fn serve_media(&self, slot: Slot, path: &str) {
+        let slot = convert::slot_back(slot);
+        let path = path.to_owned();
+        let served = Arc::clone(&self.served);
+        let live = Arc::clone(&self.live);
+        let last_error = self.error_sink();
+        self.runtime.spawn(async move {
+            if let Err(error) = mount(&live, &served, slot, &path).await {
+                last_error.note(&format!("serving {path}: {error}"));
+            }
+        });
+    }
+
+    /// Stop offering whatever is in a slot.
+    ///
+    /// Ejects it first, which takes a couple of seconds when a deck is reading
+    /// from us: it is told through the slot state in our status packets and
+    /// answers with `UMNT` (F20). Pulling the files out from under it instead
+    /// leaves it holding a filehandle onto nothing. That wait happens on the
+    /// session's runtime, so this returns at once.
+    pub fn stop_serving(&self, slot: Slot) {
+        let slot = convert::slot_back(slot);
+        let served = Arc::clone(&self.served);
+        let live = Arc::clone(&self.live);
+        self.runtime
+            .spawn(async move { unmount(&live, &served, slot).await });
+    }
+
+    /// What we are offering, and to whom.
+    #[must_use]
+    pub fn serve_status(&self) -> ServeStatus {
+        let interface = self.interface();
+        let name = interface
+            .as_ref()
+            .map_or_else(String::new, |found| found.name.clone());
+        let address = interface.map_or_else(String::new, |found| found.ip.to_string());
+        self.with_live(|live| {
+            live.role
+                .player()
+                .map(|player| crate::serve::describe(player, name.clone(), address))
+        })
+        .flatten()
+        .unwrap_or_else(|| crate::serve::nothing(name))
     }
 
     /// The last thing that went wrong, or empty.
@@ -490,7 +770,8 @@ impl Session {
     pub fn device_number_of(&self, mac: &str) -> u8 {
         let wanted = mac.trim().to_ascii_lowercase();
         self.with_live(|live| {
-            live.discovery
+            live.role
+                .discovery()
                 .devices()
                 .into_iter()
                 .find(|device| device.mac.to_string().to_ascii_lowercase() == wanted)
@@ -526,7 +807,7 @@ impl Session {
     /// An `Arc` rather than a borrow: the virtual CDJ lives behind the lock
     /// that `with_live` takes, and nothing may hold that across a browse.
     pub(crate) fn peer_media(&self) -> Option<Arc<prolink::PeerMedia>> {
-        self.with_live(|live| live.cdj.as_ref().map(VirtualCdj::peer_media))
+        self.with_live(|live| live.role.cdj().map(VirtualCdj::peer_media))
             .flatten()
     }
 
@@ -553,7 +834,8 @@ impl Session {
     /// The address of a device by number, if it is on the network.
     pub(crate) fn address_of(&self, number: u8) -> Option<Ipv4Addr> {
         self.with_live(|live| {
-            live.discovery
+            live.role
+                .discovery()
                 .devices()
                 .into_iter()
                 .find(|device| device.number.get() == number)
@@ -561,6 +843,121 @@ impl Session {
         })
         .flatten()
     }
+}
+
+/// Put a medium in a slot, and remember it for the next rebind.
+///
+/// The registry is updated whether or not a player is running: a session that
+/// has not yet claimed a number still knows what it is meant to be offering,
+/// and serves it the moment it does.
+#[expect(
+    clippy::unused_async,
+    reason = "the sibling unmount awaits an eject, and a caller should not have \
+              to know which of the pair blocks"
+)]
+async fn mount(
+    live: &Arc<RwLock<Option<Live>>>,
+    served: &Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
+    slot: prolink_proto::Slot,
+    path: &str,
+) -> Result<(), prolink::Error> {
+    let medium = load_medium(slot, path)?;
+    if let Ok(mut held) = served.lock() {
+        held.retain(|(existing, _)| *existing != slot);
+        held.push((slot, path.to_owned()));
+    }
+    if let Some(player) = player_of(live) {
+        player.mount(medium)?;
+    }
+    Ok(())
+}
+
+/// Take a medium out of a slot, ejecting it the way a deck does.
+async fn unmount(
+    live: &Arc<RwLock<Option<Live>>>,
+    served: &Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
+    slot: prolink_proto::Slot,
+) {
+    if let Ok(mut held) = served.lock() {
+        held.retain(|(existing, _)| *existing != slot);
+    }
+    if let Some(player) = player_of(live) {
+        player.unmount(slot).await;
+    }
+}
+
+/// The running player, cloned out from under the lock.
+///
+/// Cloned rather than borrowed because the caller then awaits, and the guard on
+/// this lock is what every accessor takes thirty times a second.
+fn player_of(live: &Arc<RwLock<Option<Live>>>) -> Option<Arc<VirtualPlayer>> {
+    let held = live.read().ok()?;
+    held.as_ref()?.role.player().map(Arc::clone)
+}
+
+/// How often the local sticks are re-scanned.
+///
+/// Two seconds, which is what the C++ this replaces used: fast enough that a
+/// stick appears before the DJ has finished reaching for the deck, cheap enough
+/// to run forever.
+const VOLUME_POLL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Serve whatever rekordbox media is plugged into this machine.
+///
+/// A CDJ has two slots and so do we, so at most two sticks are offered: USB
+/// first, because that is where a DJ expects one to appear.
+fn spawn_volume_watch(
+    live: Arc<RwLock<Option<Live>>>,
+    served: Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
+) {
+    const SLOTS: [prolink_proto::Slot; 2] = [prolink_proto::Slot::USB, prolink_proto::Slot::SD];
+    tokio::spawn(async move {
+        // slot -> the path currently in it. Ours rather than read back from
+        // `served`, which a host may also be writing to by hand.
+        let mut mine: std::collections::BTreeMap<prolink_proto::Slot, String> =
+            std::collections::BTreeMap::new();
+        loop {
+            tokio::time::sleep(VOLUME_POLL).await;
+            let found: Vec<String> = prolink::rekordbox_volumes()
+                .into_iter()
+                .map(|volume| volume.path.display().to_string())
+                .collect();
+
+            // Gone first, so a stick swapped between two scans frees its slot
+            // before the replacement asks for one.
+            for slot in SLOTS {
+                if let Some(path) = mine.get(&slot)
+                    && !found.contains(path)
+                {
+                    tracing::info!(%slot, path, "the medium was removed");
+                    mine.remove(&slot);
+                    unmount(&live, &served, slot).await;
+                }
+            }
+
+            for path in found {
+                if mine.values().any(|held| *held == path) {
+                    continue;
+                }
+                let Some(slot) = SLOTS.into_iter().find(|slot| !mine.contains_key(slot)) else {
+                    // A third stick and nowhere to put it. Said once per scan
+                    // rather than silently ignored: the DJ plugged something in
+                    // and nothing happened.
+                    tracing::info!(path, "no free slot; a CDJ has only USB and SD");
+                    break;
+                };
+                match mount(&live, &served, slot, &path).await {
+                    Ok(()) => {
+                        tracing::info!(%slot, path, "serving a local medium");
+                        mine.insert(slot, path);
+                    }
+                    // Not every stick is a rekordbox export, and a DJ plugging
+                    // in an ordinary one has done nothing wrong.
+                    Err(error) => tracing::debug!(path, "not a rekordbox medium: {error}"),
+                }
+            }
+        }
+    });
 }
 
 /// One transfer, start to finish, reporting progress as it goes.
