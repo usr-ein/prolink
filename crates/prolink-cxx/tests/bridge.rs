@@ -310,3 +310,32 @@ fn a_transfer_creates_the_directories_its_destination_needs() {
     assert!(target.exists());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn opening_a_session_does_not_panic_on_the_caller_s_thread() {
+    // `open` is called from the host's own thread, which has no tokio runtime
+    // in context. Anything inside it that reaches for one -- `tokio::spawn`,
+    // most easily -- panics, and a panic crossing the `cxx` boundary is an
+    // abort rather than an exception. The host does not get an error it can
+    // report; it gets SIGABRT, and on hardware that was Mixxx crash-looping at
+    // startup with a stack trace in a file nobody was reading.
+    //
+    // Nothing is bound here. `open` resolves the interface name and returns;
+    // the sockets are the supervisor's business, on the runtime, and dropping
+    // the session below stops it.
+    let mut config = default_config();
+    // No claim chain and no keep-alive: this must not put a device on the
+    // network of whoever is running the tests.
+    config.announce = false;
+    // The path that was actually broken. On by default, so a test that turned
+    // it off would pass while the shipped default aborts.
+    config.share_local_media = true;
+
+    let session = prolink_cxx::open(&config).expect("choosing an interface cannot fail");
+    assert_eq!(
+        session.device_number(),
+        0,
+        "a number is claimed on the runtime, not before open returns"
+    );
+    drop(session);
+}

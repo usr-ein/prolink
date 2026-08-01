@@ -260,7 +260,11 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
     };
     session.runtime.spawn(supervisor.run());
     if config.share_local_media {
-        spawn_volume_watch(Arc::clone(&session.live), Arc::clone(&session.served));
+        spawn_volume_watch(
+            &session.runtime,
+            Arc::clone(&session.live),
+            Arc::clone(&session.served),
+        );
     }
     Ok(Box::new(session))
 }
@@ -907,11 +911,16 @@ const VOLUME_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 /// A CDJ has two slots and so do we, so at most two sticks are offered: USB
 /// first, because that is where a DJ expects one to appear.
 fn spawn_volume_watch(
+    runtime: &Runtime,
     live: Arc<RwLock<Option<Live>>>,
     served: Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
 ) {
     const SLOTS: [prolink_proto::Slot; 2] = [prolink_proto::Slot::USB, prolink_proto::Slot::SD];
-    tokio::spawn(async move {
+    // Through the runtime, not `tokio::spawn`. This is called from `open`, on
+    // the host's own thread, where there is no runtime in context -- and the
+    // panic that causes crosses the `cxx` boundary, where an unwind is an
+    // abort. The host does not get an exception; it gets SIGABRT at startup.
+    runtime.spawn(async move {
         // slot -> the path currently in it. Ours rather than read back from
         // `served`, which a host may also be writing to by hand.
         let mut mine: std::collections::BTreeMap<prolink_proto::Slot, String> =
