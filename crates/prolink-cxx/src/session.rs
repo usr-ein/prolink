@@ -910,63 +910,107 @@ const VOLUME_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 ///
 /// A CDJ has two slots and so do we, so at most two sticks are offered: USB
 /// first, because that is where a DJ expects one to appear.
+///
+/// **Reconciled every tick, not driven by changes.** A stick plugged in while
+/// the session is still claiming its number has nowhere to go yet — the player
+/// does not exist — and an edge-triggered watcher would record it as done and
+/// never look again, which is exactly what happened on hardware: the medium was
+/// mounted eight seconds before the player came up and the player served
+/// nothing for the rest of the session. So each tick compares what is plugged
+/// in against what the *player* is actually serving, and anything the two
+/// disagree about is put right, however it came to be wrong.
 fn spawn_volume_watch(
     runtime: &Runtime,
     live: Arc<RwLock<Option<Live>>>,
     served: Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
 ) {
-    const SLOTS: [prolink_proto::Slot; 2] = [prolink_proto::Slot::USB, prolink_proto::Slot::SD];
     // Through the runtime, not `tokio::spawn`. This is called from `open`, on
     // the host's own thread, where there is no runtime in context -- and the
     // panic that causes crosses the `cxx` boundary, where an unwind is an
     // abort. The host does not get an exception; it gets SIGABRT at startup.
     runtime.spawn(async move {
-        // slot -> the path currently in it. Ours rather than read back from
-        // `served`, which a host may also be writing to by hand.
-        let mut mine: std::collections::BTreeMap<prolink_proto::Slot, String> =
+        // The slots this watcher manages. A medium a host mounted by hand
+        // through `serve_media` is none of its business and is left alone.
+        let mut ours: std::collections::BTreeMap<prolink_proto::Slot, String> =
             std::collections::BTreeMap::new();
         loop {
             tokio::time::sleep(VOLUME_POLL).await;
-            let found: Vec<String> = prolink::rekordbox_volumes()
+            reconcile(&live, &served, &mut ours).await;
+        }
+    });
+}
+
+/// The slots a local stick may be offered in, in the order they are filled.
+const LOCAL_SLOTS: [prolink_proto::Slot; 2] = [prolink_proto::Slot::USB, prolink_proto::Slot::SD];
+
+/// Make what we are serving match what is plugged in.
+async fn reconcile(
+    live: &Arc<RwLock<Option<Live>>>,
+    served: &Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
+    ours: &mut std::collections::BTreeMap<prolink_proto::Slot, String>,
+) {
+    let found: Vec<String> = prolink::rekordbox_volumes()
+        .into_iter()
+        .map(|volume| volume.path.display().to_string())
+        .collect();
+
+    // Gone first, so a stick swapped between two scans frees its slot before
+    // the replacement asks for one.
+    for slot in LOCAL_SLOTS {
+        if let Some(path) = ours.get(&slot)
+            && !found.contains(path)
+        {
+            tracing::info!(%slot, path, "the medium was removed");
+            ours.remove(&slot);
+            unmount(live, served, slot).await;
+        }
+    }
+
+    for path in found {
+        let already = ours
+            .iter()
+            .find(|(_, held)| *held == &path)
+            .map(|(slot, _)| *slot);
+        let slot = match already {
+            // Known. Mounted again only if the player is not in fact serving
+            // it, which is the case a stick found before the player existed
+            // falls into.
+            Some(slot) if serving(live, slot) => continue,
+            Some(slot) => slot,
+            None => match LOCAL_SLOTS
                 .into_iter()
-                .map(|volume| volume.path.display().to_string())
-                .collect();
-
-            // Gone first, so a stick swapped between two scans frees its slot
-            // before the replacement asks for one.
-            for slot in SLOTS {
-                if let Some(path) = mine.get(&slot)
-                    && !found.contains(path)
-                {
-                    tracing::info!(%slot, path, "the medium was removed");
-                    mine.remove(&slot);
-                    unmount(&live, &served, slot).await;
-                }
-            }
-
-            for path in found {
-                if mine.values().any(|held| *held == path) {
-                    continue;
-                }
-                let Some(slot) = SLOTS.into_iter().find(|slot| !mine.contains_key(slot)) else {
+                .find(|slot| !ours.contains_key(slot))
+            {
+                Some(slot) => slot,
+                None => {
                     // A third stick and nowhere to put it. Said once per scan
                     // rather than silently ignored: the DJ plugged something in
                     // and nothing happened.
                     tracing::info!(path, "no free slot; a CDJ has only USB and SD");
                     break;
-                };
-                match mount(&live, &served, slot, &path).await {
-                    Ok(()) => {
-                        tracing::info!(%slot, path, "serving a local medium");
-                        mine.insert(slot, path);
-                    }
-                    // Not every stick is a rekordbox export, and a DJ plugging
-                    // in an ordinary one has done nothing wrong.
-                    Err(error) => tracing::debug!(path, "not a rekordbox medium: {error}"),
                 }
+            },
+        };
+
+        match mount(live, served, slot, &path).await {
+            Ok(()) => {
+                tracing::info!(%slot, path, offered = serving(live, slot), "serving a local medium");
+                ours.insert(slot, path);
             }
+            // Not every stick is a rekordbox export, and a DJ plugging in an
+            // ordinary one has done nothing wrong. Not recorded, so it is not
+            // holding a slot a real medium could use.
+            Err(error) => tracing::debug!(path, "not a rekordbox medium: {error}"),
         }
-    });
+    }
+}
+
+/// Whether the running player has something in a slot right now.
+///
+/// False when there is no player at all, which is the point: it means "this is
+/// not being offered to anyone", whatever the reason.
+fn serving(live: &Arc<RwLock<Option<Live>>>, slot: prolink_proto::Slot) -> bool {
+    player_of(live).is_some_and(|player| player.media().get(slot).is_some())
 }
 
 /// One transfer, start to finish, reporting progress as it goes.
