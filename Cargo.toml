@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 # 1.88 is the floor and it is a measured one: Debian trixie ships 1.85 and
 # this workspace fails on it with nine "`let` expressions in this position
@@ -20,10 +20,10 @@ keywords = ["dj", "pioneer", "cdj", "rekordbox", "prolink"]
 categories = ["network-programming", "multimedia::audio", "parser-implementations"]
 
 [workspace.dependencies]
-prolink = { version = "0.1.0", path = "crates/prolink" }
-prolink-capture = { version = "0.1.0", path = "crates/prolink-capture" }
-prolink-proto = { version = "0.1.0", path = "crates/prolink-proto" }
-prolink-rekordbox = { version = "0.1.0", path = "crates/prolink-rekordbox" }
+prolink = { version = "0.2.0", path = "crates/prolink" }
+prolink-capture = { version = "0.2.0", path = "crates/prolink-capture" }
+prolink-proto = { version = "0.2.0", path = "crates/prolink-proto" }
+prolink-rekordbox = { version = "0.2.0", path = "crates/prolink-rekordbox" }
 
 binrw = "0.15"
 bytes = "1"
