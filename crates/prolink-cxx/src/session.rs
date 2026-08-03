@@ -654,6 +654,88 @@ impl Session {
         Ok(id)
     }
 
+    /// Fetch a track the way a CDJ plays one: enough to start, then the rest.
+    ///
+    /// A whole-file fetch makes loading a remote track take as long as
+    /// downloading it, which is the wait this exists to remove. Instead the
+    /// local file is created at its FULL size immediately and filled in from
+    /// the network, head first. That matters more than it sounds: a decoder
+    /// opening a short file reads a short duration off it and will not play
+    /// past what was there when it looked, whereas a full-size file that is
+    /// still filling has the right length from the first moment.
+    ///
+    /// `head_bytes` is fetched before the first progress event is emitted, so a
+    /// caller can wait for that and start playing knowing there is a runway.
+    /// The rest arrives behind the playhead -- a network measured in tens of
+    /// megabytes a second against playback measured in tens of KILOBYTES a
+    /// second, so it is not a close race.
+    ///
+    /// **The tail is fetched second, before the middle.** MP3 decodes happily
+    /// from the front, but M4A and MP4 commonly keep the `moov` atom at the END
+    /// of the file, and a decoder cannot open one at all without it. Fetching
+    /// the last chunk early costs one round trip and is the difference between
+    /// AAC working and AAC not opening.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::fetch_file`].
+    pub fn fetch_file_streaming(
+        &self,
+        device_number: u8,
+        slot: Slot,
+        remote_path: &str,
+        local_path: &str,
+        head_bytes: u32,
+    ) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error(format!("no device {device_number} on the network")))?;
+
+        let id = self.next_transfer.fetch_add(1, Ordering::Relaxed);
+        let events = Arc::clone(&self.events);
+        let Some(interface) = self.interface() else {
+            return Err(Error("the network is not up yet".to_owned()));
+        };
+        let queue = Arc::clone(&self.transfers);
+        let last_error = Arc::clone(&self.last_error);
+        let slot = convert::slot_back(slot);
+        let (remote, local) = (remote_path.to_owned(), local_path.to_owned());
+
+        self.runtime.spawn(async move {
+            let _turn = queue.acquire().await;
+            let outcome = fetch_streaming(
+                &interface,
+                peer,
+                slot,
+                &remote,
+                &local,
+                u64::from(head_bytes),
+                id,
+                &events,
+            )
+            .await;
+            let mut done = plain(EventKind::TransferDone, 0, 0);
+            done.transfer = id;
+            done.path.clone_from(&local);
+            if let Err(reason) = outcome {
+                tracing::warn!(%peer, remote, "streaming transfer failed: {reason}");
+                done.ok = false;
+                done.detail.clone_from(&reason);
+                if let Ok(mut held) = last_error.lock() {
+                    *held = reason;
+                }
+            } else {
+                // The line a host follows to know the switch from network to
+                // local reads is safe to make.
+                tracing::info!(remote, local, "background download complete");
+            }
+            if let Ok(mut queue) = events.lock() {
+                queue.push(done);
+            }
+        });
+        Ok(id)
+    }
+
     /// Fetch a player's `export.pdb`.
     ///
     /// # Errors
@@ -1077,6 +1159,131 @@ async fn fetch(
     // enough to look plausible and then yields a library missing its last few
     // hundred tracks.
     std::fs::write(local, &bytes).map_err(|error| format!("writing {local}: {error}"))?;
+    let _ = client.unmount(&mounted).await;
+    Ok(())
+}
+
+/// Fill `local` from `remote`, head first, tail second, middle last.
+#[allow(clippy::too_many_arguments)]
+async fn fetch_streaming(
+    interface: &Interface,
+    peer: Ipv4Addr,
+    slot: prolink_proto::Slot,
+    remote: &str,
+    local: &str,
+    head_bytes: u64,
+    id: u32,
+    events: &Arc<Mutex<Events>>,
+) -> Result<(), String> {
+    use std::io::{Seek, SeekFrom, Write};
+
+    /// Enough of the end to carry an M4A/MP4 `moov` atom.
+    const TAIL: u64 = 256 * 1024;
+    /// How much of the middle to ask for per round trip.
+    const CHUNK: u64 = 1024 * 1024;
+
+    let mut client = NfsClient::connect(peer, Some(interface))
+        .await
+        .map_err(|error| format!("connecting to {peer}: {error}"))?;
+    let mut mounted = client
+        .mount_slot(slot)
+        .await
+        .map_err(|error| format!("mounting {slot}: {error}"))?;
+
+    // Same stale-handle dance as the whole-file path: a deck churns its
+    // filehandle table and then answers NFSERR_STALE to everything made against
+    // the old ones (F28). Re-mount and walk again, once.
+    let file = match client.open(&mounted, remote).await {
+        Ok(file) => file,
+        Err(error) if error.is_stale() => {
+            mounted = client
+                .refresh(mounted)
+                .await
+                .map_err(|error| format!("re-mounting {slot} after a stale handle: {error}"))?;
+            client
+                .open(&mounted, remote)
+                .await
+                .map_err(|error| format!("opening {remote} after a re-mount: {error}"))?
+        }
+        Err(error) => return Err(format!("opening {remote}: {error}")),
+    };
+
+    if let Some(parent) = std::path::Path::new(local).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("creating {}: {error}", parent.display()))?;
+    }
+
+    let size = file.size();
+    let mut handle =
+        std::fs::File::create(local).map_err(|error| format!("creating {local}: {error}"))?;
+    // Full size from the outset, sparse. This is what gives a decoder the right
+    // duration while the bytes are still arriving.
+    handle
+        .set_len(size)
+        .map_err(|error| format!("sizing {local}: {error}"))?;
+
+    let emit = |done: u64| {
+        let mut event = plain(EventKind::TransferProgress, 0, 0);
+        event.transfer = id;
+        event.done = done;
+        event.total = size;
+        if let Ok(mut queue) = events.lock() {
+            queue.push(event);
+        }
+    };
+
+    let write_at = |handle: &mut std::fs::File, offset: u64, bytes: &[u8]| -> Result<(), String> {
+        handle
+            .seek(SeekFrom::Start(offset))
+            .map_err(|error| format!("seeking {local}: {error}"))?;
+        handle
+            .write_all(bytes)
+            .map_err(|error| format!("writing {local}: {error}"))
+    };
+
+    // 1. The head, so there is a runway to start playing on.
+    let head = head_bytes.min(size);
+    if head > 0 {
+        let bytes = client
+            .read_range(&file, 0, head)
+            .await
+            .map_err(|error| format!("reading the head of {remote}: {error}"))?;
+        write_at(&mut handle, 0, &bytes)?;
+    }
+
+    // 2. The tail, for the containers that keep their index there.
+    let tail_start = size.saturating_sub(TAIL).max(head);
+    if tail_start < size {
+        let bytes = client
+            .read_range(&file, tail_start, size - tail_start)
+            .await
+            .map_err(|error| format!("reading the tail of {remote}: {error}"))?;
+        write_at(&mut handle, tail_start, &bytes)?;
+    }
+
+    // Only now: the caller may start playing.
+    emit(head);
+
+    // 3. The middle, in order, behind the playhead.
+    let mut offset = head;
+    while offset < tail_start {
+        let len = CHUNK.min(tail_start - offset);
+        let bytes = client
+            .read_range(&file, offset, len)
+            .await
+            .map_err(|error| format!("reading {remote} at {offset}: {error}"))?;
+        if bytes.is_empty() {
+            return Err(format!("{remote} returned no bytes at {offset}"));
+        }
+        write_at(&mut handle, offset, &bytes)?;
+        offset += bytes.len() as u64;
+        emit(offset);
+    }
+
+    handle
+        .flush()
+        .map_err(|error| format!("flushing {local}: {error}"))?;
+    emit(size);
     let _ = client.unmount(&mounted).await;
     Ok(())
 }

@@ -729,6 +729,19 @@ pub mod ffi {
         /// written once, because a truncated `export.pdb` parses far enough to
         /// look plausible and then yields a library missing its last few
         /// hundred tracks.
+        /// Fetch a track head-first so it can be played before it has fully
+        /// arrived. The local file is created at its full size immediately;
+        /// the first TransferProgress event means `head_bytes` are there and
+        /// playback may start, and TransferDone means the whole file is local.
+        fn fetch_file_streaming(
+            self: &Session,
+            device_number: u8,
+            slot: Slot,
+            remote_path: &str,
+            local_path: &str,
+            head_bytes: u32,
+        ) -> Result<u32>;
+
         fn fetch_file(
             self: &Session,
             device_number: u8,
