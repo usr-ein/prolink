@@ -146,7 +146,7 @@ impl MediaSet {
     /// Returns what was there, so a caller can unmount the files it grafted.
     /// **This is not an eject**: it removes the medium immediately, where a
     /// deck reading from us expects to be walked through the unmounting states
-    /// first (F20). See [`VirtualPlayer::eject`].
+    /// first (F20). See the private `eject`.
     pub fn remove(&self, slot: Slot) -> Option<Arc<Medium>> {
         self.write(|slots| {
             let index = slots

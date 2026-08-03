@@ -20,13 +20,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux is the deployment target (a Raspberry Pi beside the decks) and
-        # macOS is where captures are taken; the socket layer differs between
-        # them — SO_BINDTODEVICE against IP_BOUND_IF — so both are built.
-        os: [ubuntu-latest, macos-latest]
+        # **arm64 Linux is the deployment target.** This library is linked
+        # statically into Mixxx on a Raspberry Pi 4 beside the decks, so that is
+        # the architecture that has to be green. x86_64 stays alongside it
+        # because that is where the code is written, and a failure on one of the
+        # two but not the other is the interesting kind.
+        #
+        # GitHub's arm64 Linux runners are free for public repositories, which
+        # this is.
+        #
+        # macOS was here and is deliberately gone. It was justified by the
+        # socket layer differing — SO_BINDTODEVICE against IP_BOUND_IF — but
+        # that bought a build for the machine captures happen to be taken on, at
+        # the cost of never building for the machine the code actually runs on.
+        #
+        # **The consequence, so it is not a surprise later: the IP_BOUND_IF
+        # branch is no longer compiled by CI.** A change that breaks the macOS
+        # build will be found by whoever next runs a capture, not by this
+        # workflow. Add a `cargo check` job on macos-latest if that starts
+        # costing more than the runner minutes it saves.
+        os: [ubuntu-latest, ubuntu-24.04-arm]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install the toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -38,34 +54,43 @@ jobs:
       - name: Formatting
         run: cargo fmt --all --check
 
+      # --locked throughout. The Pi's Docker build runs `--locked` as well, so a
+      # Cargo.lock that has drifted out of step with the manifests must fail
+      # here rather than in a build nobody is watching.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features
+        run: cargo clippy --workspace --all-targets --all-features --locked
 
       - name: Tests
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features --locked
 
       - name: Documentation
-        run: cargo doc --workspace --no-deps --all-features
+        run: cargo doc --workspace --no-deps --all-features --locked
         env:
+          # Catches, among other things, a public item whose documentation links
+          # to a private one — which rustdoc renders as plain text, so the docs
+          # degrade silently rather than visibly.
           RUSTDOCFLAGS: -D warnings
 
   msrv:
     name: minimum supported Rust version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
         with:
           # Keep in step with `rust-version` in the workspace manifest.
           toolchain: "1.88"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --all-features
+      - run: cargo check --workspace --all-features --locked
 
   licences:
     name: dependency licences
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      # Left on x86_64 on purpose: this runs in the action's own container,
+      # reads manifests, and never builds anything, so the architecture is
+      # irrelevant and there is no arm64 image for it.
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check licenses bans sources

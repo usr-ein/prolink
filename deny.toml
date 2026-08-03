@@ -20,7 +20,12 @@ allow = [
     "MPL-2.0",
     "Unicode-3.0",
     "Zlib",
-    "GPL-3.0",
+    # This project's own licence, and it has to be spelled the CURRENT way.
+    # `GPL-3.0` is the deprecated SPDX identifier; the crates declare
+    # `GPL-3.0-only`, cargo-deny compares identifiers exactly, and the two do
+    # not match -- so the old spelling allowed nothing at all and every crate in
+    # the workspace was rejected as "not explicitly allowed".
+    "GPL-3.0-only",
 ]
 confidence-threshold = 0.9
 

@@ -484,7 +484,7 @@ impl VirtualCdj {
     /// Every datagram arriving on UDP 50002, when we are the one holding it.
     ///
     /// `None` means we do not have the port and a reader should bind its own.
-    /// See [`VirtualCdj::status_tap`] for why there is no third option.
+    /// See the `status_tap` field for why there is no third option.
     pub fn status_datagrams(&self) -> Option<broadcast::Receiver<Arc<Vec<u8>>>> {
         self.status_tap.as_ref().map(broadcast::Sender::subscribe)
     }
