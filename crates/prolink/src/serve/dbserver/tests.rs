@@ -2608,3 +2608,92 @@ fn unloading_clears_the_mark_on_a_menu_already_paged() {
         "the mark goes when the deck unloads, without a new menu request"
     );
 }
+
+// -- a phantom medium -------------------------------------------------------
+//
+// The stick is out and a player is still playing off it. What a phantom must do
+// is finish that track; what it must not do is let anyone start another one it
+// cannot produce. These pin the line between the two.
+
+#[test]
+fn a_phantom_offers_nothing_to_browse() {
+    let medium = usb();
+    let full = menu::build(
+        MessageKind::MENU_ARTIST,
+        &Arguments::default(),
+        Some(&medium),
+        &[],
+    )
+    .expect("artists");
+    assert!(!full.is_empty(), "the fixture has 329 artists");
+
+    medium.go_phantom();
+    let empty = menu::build(
+        MessageKind::MENU_ARTIST,
+        &Arguments::default(),
+        Some(&medium),
+        &[],
+    )
+    .expect("still a menu");
+    // Empty, not an error and not absent. A DJ scrolling into it finds nothing
+    // -- which is true -- rather than loading a track that would play silence.
+    assert!(empty.is_empty());
+}
+
+#[test]
+fn a_phantom_empties_every_way_in() {
+    // The root and the sort options are answered without reference to a medium
+    // everywhere else, and they are also the way in: leaving them populated
+    // would offer a DJ a menu that turned out to be empty one level down, which
+    // reads as a fault rather than as a stick that has gone.
+    let medium = usb();
+    medium.go_phantom();
+    for kind in [
+        MessageKind::MENU_ROOT,
+        MessageKind::MENU_SORT,
+        MessageKind::MENU_TRACK,
+        MessageKind::MENU_ALBUM,
+        MessageKind::MENU_GENRE,
+        MessageKind::MENU_KEY,
+        MessageKind::MENU_PLAYLIST,
+        MessageKind::MENU_SEARCH,
+        MessageKind::MENU_HISTORY,
+    ] {
+        let items = menu::build(kind, &Arguments::default(), Some(&medium), &[])
+            .unwrap_or_else(|| panic!("{kind:?} should still answer"));
+        assert!(items.is_empty(), "{kind:?} should be empty on a phantom");
+    }
+}
+
+#[test]
+fn a_phantom_still_answers_about_the_track_that_is_playing() {
+    // The one thing it absolutely must keep doing. A deck polls these every
+    // couple of seconds for as long as it plays, so answering them empty would
+    // blank the display of a track that is playing perfectly well -- and quite
+    // possibly convince the deck it had lost the track altogether.
+    let medium = usb();
+    let track = *medium
+        .library()
+        .tracks
+        .keys()
+        .next()
+        .expect("the fixture has tracks");
+
+    let request = menu(MessageKind::GET_METADATA, &[track]);
+    let before = menu::build(MessageKind::GET_METADATA, &request.args, Some(&medium), &[])
+        .expect("metadata");
+    assert!(!before.is_empty());
+
+    medium.go_phantom();
+    let after = menu::build(MessageKind::GET_METADATA, &request.args, Some(&medium), &[])
+        .expect("metadata");
+    assert_eq!(before, after, "metadata must not change when a stick goes");
+}
+
+#[test]
+fn a_medium_is_not_a_phantom_until_it_is_told_it_is() {
+    let medium = usb();
+    assert!(!medium.is_phantom());
+    medium.go_phantom();
+    assert!(medium.is_phantom());
+}

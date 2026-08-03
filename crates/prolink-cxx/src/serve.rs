@@ -148,6 +148,7 @@ pub(crate) fn describe(player: &VirtualPlayer, interface: String, address: Strin
                     export_path: medium.slot().export_path().to_owned(),
                     track_count: description.track_count,
                     playlist_count: description.playlist_count,
+                    phantom: medium.is_phantom(),
                 }
             })
             .collect(),

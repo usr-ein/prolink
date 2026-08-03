@@ -110,6 +110,16 @@ impl Node {
     }
 }
 
+/// How a subtree fared when the medium under it went away.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Preserved {
+    /// Files now answered from a copy, so a consumer reading one never notices.
+    pub kept: usize,
+    /// Files dropped because no copy exists. A request for one of these fails
+    /// cleanly rather than reading as silence.
+    pub dropped: usize,
+}
+
 /// One entry in the table: its path, its node, and its handle.
 #[derive(Clone, Debug)]
 struct Entry {
@@ -228,6 +238,63 @@ impl Vfs {
             }
         }
         Ok(mounted)
+    }
+
+    /// Answer a subtree from copies, and drop whatever has none.
+    ///
+    /// This is what a medium going **phantom** does to the tree: the stick is
+    /// out, but a player is still streaming a track off it and must be able to
+    /// finish. Every file with a copy in `cache` is repointed at that copy, so
+    /// its handle, its size and its contents are all exactly what the consumer
+    /// has been reading. Everything else is removed outright.
+    ///
+    /// **Removed, not left dangling.** A `Node::Disk` whose file has vanished
+    /// reads back as *empty*, successfully — which reaches a player as silence
+    /// rather than as an error. Dropping the entry makes the same request fail
+    /// cleanly with `NFSERR_STALE`, which is what a real player answers for a
+    /// stick that has been pulled, and is what makes it let go.
+    ///
+    /// `cache` maps a path in this tree to where its copy lives. Directories
+    /// and in-memory files are untouched: the first are needed to walk to what
+    /// survives, and the second are already in RAM.
+    pub fn preserve(&mut self, prefix: &str, cache: &BTreeMap<String, PathBuf>) -> Preserved {
+        let prefix = prefix.trim_matches('/');
+        let under = format!("/{prefix}/");
+
+        let mut result = Preserved::default();
+        let mut doomed: Vec<(FileHandleKey, String)> = Vec::new();
+        for (key, entry) in &mut self.entries {
+            if !entry.path.starts_with(&under) {
+                continue;
+            }
+            match &mut entry.node {
+                Node::Directory { .. } | Node::Memory { .. } => {}
+                Node::Disk { path, .. } => {
+                    if let Some(copy) = cache.get(&entry.path) {
+                        // The size is deliberately left as it was. It is what
+                        // the consumer was told at LOOKUP time, and a copy that
+                        // disagreed would change a file's length underneath a
+                        // player mid-track.
+                        path.clone_from(copy);
+                        result.kept += 1;
+                    } else {
+                        doomed.push((*key, entry.path.clone()));
+                    }
+                }
+            }
+        }
+
+        for (key, path) in doomed {
+            self.entries.remove(&key);
+            if let Some((parent, name)) = split(&path) {
+                // The parent still lists it, and a READDIR naming an entry that
+                // LOOKUP then cannot find reads to a deck as a corrupt medium
+                // rather than an absent file.
+                self.remove_child(&parent, &name);
+            }
+            result.dropped += 1;
+        }
+        result
     }
 
     /// Remove a mounted subtree, and the mount point itself.
@@ -670,5 +737,165 @@ mod tests {
         assert_eq!(vfs.read(pdb, 5, 5).as_deref(), Some(b"bytes".as_slice()));
 
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    // -- going phantom ------------------------------------------------------
+    //
+    // The stick is out and a player is still playing off it. Every test here is
+    // about the same asymmetry: a file that keeps working costs nothing, and a
+    // file that reads back as zeros where it used to hold audio is silence in
+    // the middle of somebody's set.
+
+    /// A tree with a real file on disk, so a repoint can be checked end to end.
+    fn scratch(name: &str, contents: &[u8]) -> (PathBuf, PathBuf) {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let directory = std::env::temp_dir().join(format!(
+            "prolink-vfs-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&directory).expect("scratch");
+        let path = directory.join(name);
+        std::fs::write(&path, contents).expect("write");
+        (directory, path)
+    }
+
+    #[test]
+    fn a_preserved_file_is_answered_from_its_copy() {
+        let (_original, original) = scratch("track.mp3", b"the original bytes");
+        let (_copy, copy) = scratch("copy.mp3", b"the original bytes");
+
+        let mut vfs = Vfs::new();
+        vfs.insert(
+            "/C/Contents/track.mp3",
+            Node::Disk {
+                path: original.clone(),
+                size: 18,
+            },
+        );
+        vfs.add_child("/C/Contents", "track.mp3");
+        let handle = Vfs::handle_for("/C/Contents/track.mp3");
+
+        let mut cache = BTreeMap::new();
+        cache.insert("/C/Contents/track.mp3".to_owned(), copy);
+        let result = vfs.preserve("C", &cache);
+
+        assert_eq!(result.kept, 1);
+        assert_eq!(result.dropped, 0);
+        // The same handle, and the same bytes. A consumer mid-track notices
+        // nothing at all -- which is the entire point.
+        assert_eq!(
+            vfs.read(handle, 0, 18).expect("read"),
+            b"the original bytes".to_vec()
+        );
+        // And it works with the original gone, which is the situation itself.
+        std::fs::remove_file(&original).expect("remove");
+        assert_eq!(
+            vfs.read(handle, 0, 18).expect("read"),
+            b"the original bytes".to_vec()
+        );
+    }
+
+    #[test]
+    fn an_unpreserved_file_stops_existing_rather_than_reading_as_silence() {
+        // The one that matters most. A Node::Disk whose file has gone reads
+        // back *empty and successfully*, which reaches a player as silence
+        // rather than as an error -- so the entry has to go, not dangle.
+        let (_directory, path) = scratch("other.mp3", b"bytes");
+        let mut vfs = Vfs::new();
+        vfs.insert("/C/Contents/other.mp3", Node::Disk { path, size: 5 });
+        vfs.add_child("/C/Contents", "other.mp3");
+        let handle = Vfs::handle_for("/C/Contents/other.mp3");
+
+        let result = vfs.preserve("C", &BTreeMap::new());
+        assert_eq!(result.kept, 0);
+        assert_eq!(result.dropped, 1);
+        // None, which the NFS layer turns into NFSERR_STALE.
+        assert!(vfs.resolve(handle).is_none());
+        assert!(vfs.read(handle, 0, 5).is_none());
+    }
+
+    #[test]
+    fn a_dropped_file_leaves_no_name_in_its_parent() {
+        // A READDIR that names an entry LOOKUP then cannot find reads to a deck
+        // as a corrupt medium rather than an absent file.
+        let (_directory, path) = scratch("gone.mp3", b"bytes");
+        let mut vfs = Vfs::new();
+        vfs.ensure_parents("/C/Contents/gone.mp3");
+        vfs.insert("/C/Contents/gone.mp3", Node::Disk { path, size: 5 });
+        vfs.add_child("/C/Contents", "gone.mp3");
+
+        vfs.preserve("C", &BTreeMap::new());
+        let listing = vfs
+            .read_dir(Vfs::handle_for("/C/Contents"))
+            .expect("a directory");
+        assert!(!listing.contains(&"gone.mp3".to_owned()));
+    }
+
+    #[test]
+    fn directories_and_memory_files_are_left_alone() {
+        // The directories are how a consumer walks to what survived, and an
+        // in-memory file is already independent of the medium.
+        let mut vfs = tree();
+        let result = vfs.preserve("C", &BTreeMap::new());
+        assert_eq!(result.dropped, 0, "nothing here is disk-backed");
+        assert!(vfs.resolve(Vfs::handle_for("/C/Contents")).is_some());
+        assert_eq!(
+            vfs.read(Vfs::handle_for("/C/PIONEER/rekordbox/export.pdb"), 0, 3),
+            Some(b"pdb".to_vec())
+        );
+    }
+
+    #[test]
+    fn another_slot_is_untouched() {
+        // Only one stick was pulled. The other medium's files are still on a
+        // volume that is still mounted.
+        let (_directory, path) = scratch("track.mp3", b"bytes");
+        let mut vfs = Vfs::new();
+        vfs.insert(
+            "/B/Contents/track.mp3",
+            Node::Disk {
+                path: path.clone(),
+                size: 5,
+            },
+        );
+        vfs.add_child("/B/Contents", "track.mp3");
+
+        let result = vfs.preserve("C", &BTreeMap::new());
+        assert_eq!(result.kept, 0);
+        assert_eq!(result.dropped, 0);
+        assert!(
+            vfs.resolve(Vfs::handle_for("/B/Contents/track.mp3"))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn the_reported_size_does_not_move() {
+        // A consumer was told this file's length at LOOKUP time. Changing it
+        // underneath a player mid-track would be worse than any copy being
+        // slightly stale.
+        let (_original, original) = scratch("track.mp3", b"0123456789");
+        let (_copy, copy) = scratch("copy.mp3", b"0123456789");
+        let mut vfs = Vfs::new();
+        vfs.insert(
+            "/C/Contents/track.mp3",
+            Node::Disk {
+                path: original,
+                size: 10,
+            },
+        );
+        vfs.add_child("/C/Contents", "track.mp3");
+
+        let mut cache = BTreeMap::new();
+        cache.insert("/C/Contents/track.mp3".to_owned(), copy);
+        vfs.preserve("C", &cache);
+        assert_eq!(
+            vfs.resolve(Vfs::handle_for("/C/Contents/track.mp3"))
+                .expect("still there")
+                .size(),
+            10
+        );
     }
 }

@@ -416,6 +416,15 @@ pub mod ffi {
         track_count: u32,
         /// How many playlists.
         playlist_count: u32,
+        /// Whether the medium behind this is **gone** while a player is still
+        /// playing off it.
+        ///
+        /// It stays announced, because that is what keeps the consumer's mount
+        /// valid and its player from erroring out mid-track, and it is served
+        /// from copies made while the stick was in. It is no longer browsable:
+        /// menus answer empty, so nobody can start something we could not
+        /// finish. It leaves for real once the last consumer moves on.
+        phantom: bool,
     }
 
     /// A player that has taken a track off our media.

@@ -47,7 +47,8 @@ use crate::media::{MediaDescription, MediaSource};
 use crate::serve::dbserver::{DbServer, DbServerConfig};
 use crate::serve::medium::Medium;
 use crate::serve::nfs::{NfsConfig, NfsServer, Ports};
-use crate::serve::vfs::Vfs;
+use crate::serve::preserve::Preserve;
+use crate::serve::vfs::{Preserved, Vfs};
 use crate::virtual_cdj::{Numbering, VirtualCdj, VirtualCdjConfig};
 use crate::{Error, Result};
 
@@ -460,6 +461,87 @@ impl VirtualPlayer {
         graft(&self.vfs, &medium)?;
         self.media.insert(medium);
         Ok(())
+    }
+
+    /// Copy what a consumer is using, so it survives the medium going.
+    ///
+    /// The audio, and the analysis and artwork alongside it. Called while the
+    /// stick is still here: a CDJ streams a track rather than buffering it, so
+    /// the copy has to exist *before* the pull, not after.
+    ///
+    /// Returns how many files were newly copied, which is zero on every call
+    /// after the first for a given track.
+    pub fn preserve_track(&self, preserve: &mut Preserve, slot: Slot, track_id: u32) -> usize {
+        let Some(medium) = self.media.get(slot) else {
+            return 0;
+        };
+        let Some(root) = medium.root() else {
+            return 0;
+        };
+        let Some(track) = medium.library().tracks.get(&track_id) else {
+            return 0;
+        };
+
+        // Held in the medium's own memo rather than as files: the dbserver
+        // answers those from parsed structures, not from disk.
+        medium.warm(track_id);
+
+        let before = preserve.len();
+        let prefix = medium.slot().vfs_prefix();
+        // The audio, and both analysis files. The `.EXT` because a player asks
+        // for tags that are only in it, and rekordbox writes both extensions
+        // upper case.
+        let mut wanted = vec![track.file_path.clone(), track.analyze_path.clone()];
+        if let Some(ext) = track.analyze_ext_path() {
+            wanted.push(ext);
+        }
+        for relative in wanted {
+            let trimmed = relative.trim_start_matches('/');
+            if trimmed.is_empty() {
+                continue;
+            }
+            preserve.keep(&format!("/{prefix}/{trimmed}"), &root.join(trimmed));
+        }
+        preserve.len() - before
+    }
+
+    /// The stick is out, but a player is still playing off it.
+    ///
+    /// The medium is **not** unmounted and **not** ejected. Both would be
+    /// correct if nobody were using it and both are wrong here: an eject tells
+    /// the consumer to let go of its mount, and unmounting pulls the tree out
+    /// from under a filehandle it is about to use. Either way the track stops
+    /// mid-set, which is the whole thing this avoids.
+    ///
+    /// So the medium stays announced, exactly as it was, and only what is
+    /// behind it changes: files with a copy are answered from the copy, files
+    /// without one stop existing, and browsing it returns nothing so no DJ can
+    /// start something we could not finish.
+    ///
+    /// Returns what survived.
+    pub fn go_phantom(&self, slot: Slot, preserve: &Preserve) -> Preserved {
+        let Some(medium) = self.media.get(slot) else {
+            return Preserved::default();
+        };
+        medium.go_phantom();
+        let result = with_vfs_mut(&self.vfs, |tree| {
+            tree.preserve(medium.slot().vfs_prefix(), preserve.copies())
+        });
+        info!(
+            slot = %slot,
+            volume = medium.volume_name(),
+            kept = result.kept,
+            dropped = result.dropped,
+            "the medium is gone; serving what a player is still using from a copy",
+        );
+        result
+    }
+
+    /// Whether a slot is being served as a phantom.
+    pub fn is_phantom(&self, slot: Slot) -> bool {
+        self.media
+            .get(slot)
+            .is_some_and(|medium| medium.is_phantom())
     }
 
     /// Stop serving whatever is in a slot, having ejected it first.

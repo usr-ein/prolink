@@ -13,6 +13,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use prolink_proto::Slot;
 use prolink_rekordbox::{AnlzFile, Library};
@@ -114,6 +115,12 @@ pub struct Medium {
     /// track id → its analysis. A load asks for four tags across two files
     /// within milliseconds, and asks again when the DJ reloads the same track.
     analysis: Mutex<BTreeMap<u32, std::sync::Arc<Analysis>>>,
+    /// artwork id → the image. Memoised for the same reason the analysis is,
+    /// and for one more: these are the only copy once the medium is gone.
+    artwork: Mutex<BTreeMap<u32, std::sync::Arc<Vec<u8>>>>,
+    /// Whether the medium behind this is gone while a player is still playing
+    /// from it. See [`Self::go_phantom`].
+    phantom: AtomicBool,
 }
 
 impl Medium {
@@ -153,6 +160,8 @@ impl Medium {
             created: String::new(),
             settings,
             analysis: Mutex::new(BTreeMap::new()),
+            artwork: Mutex::new(BTreeMap::new()),
+            phantom: AtomicBool::new(false),
         })
     }
 
@@ -167,6 +176,8 @@ impl Medium {
             created: String::new(),
             settings: Vec::new(),
             analysis: Mutex::new(BTreeMap::new()),
+            artwork: Mutex::new(BTreeMap::new()),
+            phantom: AtomicBool::new(false),
         }
     }
 
@@ -223,13 +234,70 @@ impl Medium {
     /// protocol has a representation for it — a zero-length binary argument is
     /// omitted from the wire entirely, so "no artwork" and "here is the
     /// artwork" share one shape.
+    ///
+    /// Memoised, and that is not only about round trips: once the medium has
+    /// gone phantom this map is the only copy of the image there is.
     pub fn artwork(&self, artwork_id: u32) -> Vec<u8> {
+        if let Ok(cache) = self.artwork.lock()
+            && let Some(held) = cache.get(&artwork_id)
+        {
+            return held.as_ref().clone();
+        }
         let (Some(root), Some(path)) =
             (self.root.as_deref(), self.library.artwork.get(&artwork_id))
         else {
             return Vec::new();
         };
-        std::fs::read(root.join(path.trim_start_matches('/'))).unwrap_or_default()
+        let bytes = std::fs::read(root.join(path.trim_start_matches('/'))).unwrap_or_default();
+        // A read that failed is not remembered: the file may simply not have
+        // been reachable this once, and caching the emptiness would make a
+        // cover that is there stay missing for the life of the medium.
+        if !bytes.is_empty()
+            && let Ok(mut cache) = self.artwork.lock()
+        {
+            cache.insert(artwork_id, std::sync::Arc::new(bytes.clone()));
+        }
+        bytes
+    }
+
+    /// Read everything about a track that will not survive the medium going.
+    ///
+    /// Called when a player is seen to have loaded it, which is the point at
+    /// which it becomes worth holding on to — a CDJ streams the audio rather
+    /// than buffering it, so a stick pulled mid-track needs all of this to
+    /// still be answerable afterwards.
+    ///
+    /// The audio itself is not here: it is served straight out of the NFS tree
+    /// and is preserved there, by [`Vfs`](crate::serve::vfs::Vfs) repointing at
+    /// a copy. This is the metadata alongside it.
+    pub fn warm(&self, track_id: u32) {
+        let _ = self.analysis(track_id);
+        if let Some(track) = self.library.tracks.get(&track_id)
+            && track.artwork_id != 0
+        {
+            let _ = self.artwork(track.artwork_id);
+        }
+    }
+
+    /// Whether the medium behind this has gone while a player was still using
+    /// it.
+    pub fn is_phantom(&self) -> bool {
+        self.phantom.load(Ordering::Relaxed)
+    }
+
+    /// The stick is out, but a player is still playing from it.
+    ///
+    /// The medium stays **announced**, because that is what keeps the
+    /// consumer's mount valid and its player from erroring out mid-track. What
+    /// changes is that it stops being **browsable**: menus answer empty, so no
+    /// DJ can start something we could not finish. Whatever is already cached
+    /// keeps being served exactly as before, and the consumer plays out its
+    /// track without ever knowing.
+    ///
+    /// One way only. A stick that comes back is mounted afresh rather than
+    /// un-phantomed, because nothing guarantees it is the same stick.
+    pub fn go_phantom(&self) {
+        self.phantom.store(true, Ordering::Relaxed);
     }
 
     /// The parsed analysis for a track, read once and cached.

@@ -11,6 +11,7 @@ pub mod dbserver;
 pub mod medium;
 pub mod nfs;
 pub mod player;
+pub mod preserve;
 pub mod vfs;
 
 pub use medium::{Analysis, Medium, ServedSlot};

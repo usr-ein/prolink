@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use prolink::consume::NfsClient;
+use prolink::serve::preserve::Preserve;
 use prolink::{
     Discovery, Interface, Monitor, Numbering, VirtualCdj, VirtualCdjConfig, VirtualPlayer,
     VirtualPlayerConfig,
@@ -1015,11 +1016,148 @@ fn spawn_volume_watch(
         // through `serve_media` is none of its business and is left alone.
         let mut ours: std::collections::BTreeMap<prolink_proto::Slot, String> =
             std::collections::BTreeMap::new();
+        let mut keeping = Preserving::new();
         loop {
             tokio::time::sleep(VOLUME_POLL).await;
-            reconcile(&live, &served, &mut ours).await;
+            keeping.tick(&live);
+            reconcile(&live, &served, &mut ours, &mut keeping).await;
         }
     });
+}
+
+/// Where copies of files a player is using are kept.
+///
+/// tmpfs on the deck, so this costs no writes to the SD card and evaporates at
+/// reboot -- which is exactly right for a copy of somebody's stick. The same
+/// place and the same reasoning as the track cache's first tier.
+fn preserve_root() -> std::path::PathBuf {
+    let preferred = std::path::PathBuf::from("/run/trimixxx/serve");
+    if std::fs::create_dir_all(&preferred).is_ok() {
+        return preferred;
+    }
+    let fallback = std::env::temp_dir().join("trimixxx-serve");
+    let _ = std::fs::create_dir_all(&fallback);
+    fallback
+}
+
+/// How much may be held against a stick being pulled.
+///
+/// Four lossless tracks, which is more than two players can have loaded at
+/// once. Past it nothing new is kept and the log says so, rather than the
+/// machine filling its tmpfs.
+const PRESERVE_CAP: u64 = 512 * 1024 * 1024;
+
+/// Keeping a consuming player's tracks readable across an eject.
+///
+/// # The problem, stated once
+///
+/// A real CDJ does not buffer a whole track. It holds an emergency loop of what
+/// is under the needle and streams the rest off the medium — so a stick pulled
+/// while a player is playing from us is a player that stops several seconds
+/// later, mid-set, with no warning.
+///
+/// # What this does about it
+///
+/// Two things, on the same two-second poll the volume watch already runs:
+///
+///  * **While the stick is in**, copy whatever a player is seen to have loaded.
+///    The load is announced in the player's own status packets, which name the
+///    source player, the slot and the track id — so this needs no hook in the
+///    read path and cannot miss a load.
+///  * **When the stick goes and a player is still holding a track from it**,
+///    the medium goes phantom instead of being ejected: still announced, so the
+///    consumer's mount stays valid; served from the copies, so its reads are
+///    answered exactly as before; and unbrowsable, so no DJ can start something
+///    we could not finish.
+///
+/// Then, when the last consumer has moved on, the medium is ejected properly —
+/// so it disappears from their screens the way a stick does, rather than
+/// vanishing under a playing track.
+struct Preserving {
+    /// The copies, keyed by their path in the served tree.
+    files: Preserve,
+    /// Slots being served as phantoms, and whether anyone is still consuming
+    /// them.
+    phantom: std::collections::BTreeSet<prolink_proto::Slot>,
+}
+
+impl Preserving {
+    fn new() -> Self {
+        Self {
+            files: Preserve::new(preserve_root(), PRESERVE_CAP),
+            phantom: std::collections::BTreeSet::new(),
+        }
+    }
+
+    /// Copy what every consumer is currently using.
+    ///
+    /// Idempotent per file, so this is cheap on every poll but the first after
+    /// a load.
+    fn tick(&mut self, live: &Arc<RwLock<Option<Live>>>) {
+        let Some(player) = player_of(live) else {
+            return;
+        };
+        for (device, slot, track) in player.consumers() {
+            let copied = player.preserve_track(&mut self.files, slot, track);
+            if copied > 0 {
+                tracing::info!(
+                    device,
+                    %slot,
+                    track,
+                    files = copied,
+                    "a player loaded one of our tracks; holding on to it"
+                );
+            }
+        }
+    }
+
+    /// Whether any player is still using this slot.
+    fn consumed(live: &Arc<RwLock<Option<Live>>>, slot: prolink_proto::Slot) -> bool {
+        player_of(live).is_some_and(|player| {
+            player
+                .consumers()
+                .iter()
+                .any(|(_, consumed, _)| *consumed == slot)
+        })
+    }
+
+    /// The stick in `slot` has gone. Returns true if it went phantom rather
+    /// than being ejected, in which case the caller must leave it alone.
+    fn removed(&mut self, live: &Arc<RwLock<Option<Live>>>, slot: prolink_proto::Slot) -> bool {
+        if !Self::consumed(live, slot) {
+            return false;
+        }
+        let Some(player) = player_of(live) else {
+            return false;
+        };
+        player.go_phantom(slot, &self.files);
+        self.phantom.insert(slot);
+        true
+    }
+
+    /// Whether a phantom slot's last consumer has gone, so it can leave.
+    fn finished(&mut self, live: &Arc<RwLock<Option<Live>>>) -> Vec<prolink_proto::Slot> {
+        let done: Vec<_> = self
+            .phantom
+            .iter()
+            .copied()
+            .filter(|slot| !Self::consumed(live, *slot))
+            .collect();
+        for slot in &done {
+            self.phantom.remove(slot);
+        }
+        done
+    }
+
+    /// A phantom slot has been ejected for real, or a fresh stick has taken it.
+    fn release(&mut self, slot: prolink_proto::Slot) {
+        self.phantom.remove(&slot);
+        if self.phantom.is_empty() {
+            // Nothing is being fed from copies any more, so the copies are
+            // just occupying RAM.
+            self.files.clear();
+        }
+    }
 }
 
 /// The slots a local stick may be offered in, in the order they are filled.
@@ -1030,20 +1168,43 @@ async fn reconcile(
     live: &Arc<RwLock<Option<Live>>>,
     served: &Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
     ours: &mut std::collections::BTreeMap<prolink_proto::Slot, String>,
+    keeping: &mut Preserving,
 ) {
     let found: Vec<String> = prolink::rekordbox_volumes()
         .into_iter()
         .map(|volume| volume.path.display().to_string())
         .collect();
 
+    // A phantom whose last consumer has moved on. Ejected properly now, so it
+    // disappears from their screens the way a stick does rather than vanishing
+    // under a playing track.
+    for slot in keeping.finished(live) {
+        tracing::info!(%slot, "the last player let go; the medium can leave now");
+        keeping.release(slot);
+        unmount(live, served, slot).await;
+    }
+
     // Gone first, so a stick swapped between two scans frees its slot before
     // the replacement asks for one.
     for slot in LOCAL_SLOTS {
-        if let Some(path) = ours.get(&slot)
-            && !found.contains(path)
+        // Taken by value: the entry is removed below, and the path is still
+        // wanted for the log lines after that.
+        if let Some(path) = ours.get(&slot).cloned()
+            && !found.contains(&path)
         {
-            tracing::info!(%slot, path, "the medium was removed");
             ours.remove(&slot);
+            // A player still playing off it gets to finish. The medium stays
+            // announced and is served from the copies made while the stick was
+            // in; only browsing it stops working.
+            if keeping.removed(live, slot) {
+                tracing::info!(
+                    %slot,
+                    path,
+                    "the medium was removed while a player was using it; going phantom"
+                );
+                continue;
+            }
+            tracing::info!(%slot, path, "the medium was removed");
             unmount(live, served, slot).await;
         }
     }
@@ -1074,6 +1235,13 @@ async fn reconcile(
             }
         };
 
+        // A stick going into a slot a phantom still occupies. The phantom is
+        // let go first: nothing guarantees this is the same stick, so its
+        // handles and its library are not the ones a consumer was reading.
+        if keeping.phantom.contains(&slot) {
+            keeping.release(slot);
+            unmount(live, served, slot).await;
+        }
         match mount(live, served, slot, &path).await {
             Ok(()) => {
                 tracing::info!(%slot, path, offered = serving(live, slot), "serving a local medium");

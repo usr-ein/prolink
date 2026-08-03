@@ -122,6 +122,35 @@ pub(super) fn build(
     medium: Option<&Medium>,
     tags: &[u32],
 ) -> Option<Vec<MenuItem>> {
+    // A phantom medium answers about the track a player already has and about
+    // nothing else.
+    //
+    // The stick is out and only what was cached before it went can still be
+    // served, so a menu that offered anything would be offering tracks we
+    // cannot produce -- and a DJ would find out by loading one and hearing
+    // nothing. An empty list says "there is nothing here", which is true, and
+    // it is a state every deck already handles.
+    //
+    // The metadata requests are exempt because a deck polls them for the track
+    // it is *playing*, every couple of seconds, for as long as it plays. Those
+    // are the ones that must keep answering; see Medium::go_phantom.
+    if let Some(medium) = medium
+        && medium.is_phantom()
+        && !is_about_one_track(kind)
+    {
+        // The root and the sort options are emptied too. They are answered
+        // without reference to a medium everywhere else, but they are also the
+        // way *in* -- leaving them populated would offer a DJ a menu that
+        // turned out to be empty one level down, which reads as a fault rather
+        // than as a medium that has gone.
+        return (is_menu(kind)
+            || matches!(
+                kind,
+                MessageKind::MENU_ROOT | MessageKind::MENU_SORT | MessageKind::MENU_TAG_LIST
+            ))
+        .then(Vec::new);
+    }
+
     // These two are answered identically whatever the medium, and `MENU_SORT`
     // is answered identically whatever argument 2 names.
     match kind {
@@ -187,6 +216,20 @@ pub(super) fn mark(item: &MenuItem, tags: &[u32], playing: Option<u32>) -> MenuI
         item.flags |= MenuItem::TAGGED;
     }
     item
+}
+
+/// Whether a request asks about **one track the deck already has**, rather than
+/// offering a list of things it could load.
+///
+/// The distinction only matters for a phantom medium, and there it matters a
+/// great deal: a deck polls these every couple of seconds for as long as it is
+/// playing, so answering them empty would blank the display of a track that is
+/// still playing perfectly well.
+fn is_about_one_track(kind: MessageKind) -> bool {
+    matches!(
+        kind,
+        MessageKind::GET_METADATA | MessageKind::GET_GENERIC_METADATA | MessageKind::GET_TRACK_INFO
+    )
 }
 
 /// Whether `kind` is a menu request at all, used only to decide what an
