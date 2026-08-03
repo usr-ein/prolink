@@ -260,6 +260,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         last_error: Arc::clone(&session.last_error),
     };
     session.runtime.spawn(supervisor.run());
+    spawn_media_survey(&session.runtime, Arc::clone(&session.live));
     if config.share_local_media {
         spawn_volume_watch(
             &session.runtime,
@@ -982,6 +983,49 @@ fn player_of(live: &Arc<RwLock<Option<Live>>>) -> Option<Arc<VirtualPlayer>> {
     held.as_ref()?.role.player().map(Arc::clone)
 }
 
+/// How often peers are asked what is in their slots.
+///
+/// **Nothing arrives unasked.** A player publishes its volume name and its
+/// counts *only* in answer to a media query, and it answers each one once and
+/// never repeats it (F37) — so a host that does not ask never learns that the
+/// deck across the booth has a stick in at all.
+///
+/// That is exactly what happened: everything else worked against real hardware
+/// — the CDJ found us, queried our media and opened a dbserver connection — and
+/// its own stick simply never appeared in our source list, because the only
+/// thing that sends a query lived in the CLI.
+///
+/// Five seconds, and two small UDP packets per peer per round. A deck answers
+/// one in about a millisecond.
+const MEDIA_SURVEY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long to wait for the answers before reading the table. A deck-to-deck
+/// query is answered in ~1 ms; this is generous by three orders of magnitude
+/// and costs nothing, because it is a sleep inside a task of its own.
+const MEDIA_SURVEY_WAIT: std::time::Duration = std::time::Duration::from_millis(400);
+
+/// Keep asking the players what they have in their slots.
+///
+/// Repeated rather than done once per device, because media are swapped mid-set
+/// and a slot's description is not re-sent when that happens.
+fn spawn_media_survey(runtime: &Runtime, live: Arc<RwLock<Option<Live>>>) {
+    runtime.spawn(async move {
+        loop {
+            tokio::time::sleep(MEDIA_SURVEY).await;
+            let Some(player) = player_of(&live) else {
+                continue;
+            };
+            if let Err(error) = player
+                .cdj()
+                .survey_media(player.discovery(), MEDIA_SURVEY_WAIT)
+                .await
+            {
+                tracing::debug!(%error, "a media survey did not complete");
+            }
+        }
+    });
+}
+
 /// How often the local sticks are re-scanned.
 ///
 /// Two seconds, which is what the C++ this replaces used: fast enough that a
@@ -1027,13 +1071,20 @@ fn spawn_volume_watch(
 
 /// Where copies of files a player is using are kept.
 ///
-/// tmpfs on the deck, so this costs no writes to the SD card and evaporates at
-/// reboot -- which is exactly right for a copy of somebody's stick. The same
-/// place and the same reasoning as the track cache's first tier.
+/// tmpfs, so this costs no writes to the SD card and evaporates at reboot --
+/// which is exactly right for a copy of somebody's stick.
+///
+/// `/tmp` before `/run`, and that ordering is measured rather than stylistic:
+/// systemd sizes `/run` at a fraction of RAM and `/tmp` at half of it, so on
+/// the deck they are 760 MB and 1.9 GB. A cache sized for the wrong one fills
+/// the filesystem instead of reaching its cap, and a full `/run` takes systemd
+/// with it. The host picks the same way; see its `RamStore`.
 fn preserve_root() -> std::path::PathBuf {
-    let preferred = std::path::PathBuf::from("/run/trimixxx/serve");
-    if std::fs::create_dir_all(&preferred).is_ok() {
-        return preferred;
+    for candidate in ["/tmp/trimixxx/serve", "/run/trimixxx/serve"] {
+        let path = std::path::PathBuf::from(candidate);
+        if std::fs::create_dir_all(&path).is_ok() {
+            return path;
+        }
     }
     let fallback = std::env::temp_dir().join("trimixxx-serve");
     let _ = std::fs::create_dir_all(&fallback);
@@ -1042,10 +1093,11 @@ fn preserve_root() -> std::path::PathBuf {
 
 /// How much may be held against a stick being pulled.
 ///
-/// Four lossless tracks, which is more than two players can have loaded at
-/// once. Past it nothing new is kept and the log says so, rather than the
-/// machine filling its tmpfs.
-const PRESERVE_CAP: u64 = 512 * 1024 * 1024;
+/// Two lossless tracks, which is what two players can have loaded at once. Past
+/// it nothing new is kept and the log says so, rather than the machine filling
+/// its tmpfs -- and it has to share that tmpfs with the host's own track cache,
+/// which is why this is not larger.
+const PRESERVE_CAP: u64 = 192 * 1024 * 1024;
 
 /// Keeping a consuming player's tracks readable across an eject.
 ///
