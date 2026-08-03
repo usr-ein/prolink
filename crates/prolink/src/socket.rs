@@ -72,6 +72,36 @@ pub(crate) fn bind(port: u16, interface: Option<&Interface>) -> Result<UdpSocket
     bind_at(Ipv4Addr::UNSPECIFIED, port, interface)
 }
 
+/// Send one datagram, right now, from a socket that lives no longer than the
+/// call.
+///
+/// For answers that have to leave from a synchronous context: a tokio
+/// `UdpSocket` starts out with its readiness state unknown, so `try_send_to` on
+/// a freshly bound one returns `WouldBlock` and the datagram is simply never
+/// sent — which is what silently swallowed every answer to a CDJ's MASTER
+/// button. Awaiting `send_to` would fix it and would also mean holding the
+/// session lock across an await, which the guard's type forbids. A blocking
+/// socket sends immediately: there is no queue to fill with a single datagram.
+pub(crate) fn send_once(
+    interface: &Interface,
+    to: SocketAddr,
+    datagram: &[u8],
+) -> Result<()> {
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
+        .map_err(Error::io("creating a UDP socket"))?;
+    socket
+        .set_broadcast(true)
+        .map_err(Error::io("SO_BROADCAST"))?;
+    socket
+        .bind(&SocketAddr::V4(SocketAddrV4::new(interface.ip, 0)).into())
+        .map_err(Error::io("binding a UDP socket"))?;
+    pin_to_interface(&socket, interface)?;
+    socket
+        .send_to(datagram, &to.into())
+        .map_err(Error::io("sending a datagram"))?;
+    Ok(())
+}
+
 /// Bind a UDP socket at a specific local address.
 ///
 /// Used for the ephemeral sockets that carry ONC RPC, where the source address

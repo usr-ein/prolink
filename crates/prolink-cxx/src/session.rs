@@ -12,10 +12,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use prolink::consume::NfsClient;
+use prolink::playback::rounded;
 use prolink::serve::preserve::Preserve;
 use prolink::{
-    Discovery, Interface, Monitor, Numbering, VirtualCdj, VirtualCdjConfig, VirtualPlayer,
-    VirtualPlayerConfig,
+    BeatPosition, Discovery, Interface, Monitor, Numbering, Pitch, Playback, VirtualCdj,
+    VirtualCdjConfig, VirtualPlayer, VirtualPlayerConfig,
 };
 use tokio::runtime::Runtime;
 
@@ -363,7 +364,7 @@ impl Supervisor {
             .lock()
             .map(|held| held.clone())
             .unwrap_or_default();
-        match start(&self.config, &interface, &served, &self.events).await {
+        match start(&self.config, &interface, &served, &self.events, &self.live).await {
             Ok(live) => {
                 if let Ok(mut held) = self.interface.lock() {
                     *held = Some(interface);
@@ -399,6 +400,7 @@ async fn start(
     interface: &Interface,
     served: &[(prolink_proto::Slot, String)],
     events: &Arc<Mutex<Events>>,
+    live: &Arc<RwLock<Option<Live>>>,
 ) -> Result<Live, prolink::Error> {
     let role = if config.announce {
         announce_as_player(config, interface, served).await?
@@ -419,9 +421,17 @@ async fn start(
 
     let sink = Arc::clone(events);
     let mut incoming = monitor.subscribe();
+    let held = Arc::clone(live);
     // Ends when the session is dropped, because the sender goes with it.
     tokio::spawn(async move {
         while let Ok(event) = incoming.recv().await {
+            // Answered here rather than by the host, because a CDJ answers in
+            // 5 ms and a host polling on a UI timer would take ten times that.
+            // The reply is one non-blocking datagram, so it costs this task
+            // nothing to send it under the lock.
+            if let prolink::MonitorEvent::MasterRequested(requester) = event {
+                yield_master_to(&held, requester);
+            }
             if let Ok(mut queue) = sink.lock() {
                 queue.push(convert::event(&event));
             }
@@ -592,6 +602,179 @@ impl Session {
     pub fn players(&self) -> Vec<Player> {
         self.with_live(|live| live.monitor.players().iter().map(convert::player).collect())
             .unwrap_or_default()
+    }
+
+    /// Tell the network what this host is playing.
+    ///
+    /// Call it from the same timer that drains events — several times a second
+    /// while a track is loaded. The playhead is projected forward between
+    /// calls, so this rate governs how fast a *tempo change* propagates, not
+    /// how accurately beats are timed.
+    ///
+    /// `bpm` is the track's own tempo before the pitch fader and `pitch_percent`
+    /// is the fader, because that is how the wire carries them and deriving one
+    /// from the other here would lose which is which. `beat_number` counts from
+    /// 1; zero means "no grid", and then nothing is published but the fact that
+    /// a track is loaded.
+    pub fn set_playback(
+        &self,
+        bpm: f64,
+        pitch_percent: f64,
+        playing: bool,
+        beat_number: u32,
+        beat_fraction: f64,
+    ) {
+        // 655.34 BPM is the top of the field and 0xffff is the sentinel for
+        // "no tempo", so the range stops one short of it.
+        let bpm_centi = (bpm > 0.0 && bpm < 655.0)
+            .then(|| u16::try_from(rounded(bpm * 100.0, 65_534)).unwrap_or(0))
+            .filter(|&centi| centi > 0);
+        let playback = Playback {
+            bpm_centi,
+            pitch: pitch_from_percent(pitch_percent),
+            playing,
+            beat: (beat_number > 0).then_some(BeatPosition {
+                number: beat_number,
+                fraction: beat_fraction,
+            }),
+        };
+        self.with_live(|live| {
+            if let Some(cdj) = live.role.cdj() {
+                cdj.set_playback(playback);
+            }
+        });
+    }
+
+    /// Nothing is loaded here.
+    pub fn clear_playback(&self) {
+        self.with_live(|live| {
+            if let Some(cdj) = live.role.cdj() {
+                cdj.clear_playback();
+            }
+        });
+    }
+
+    /// Take tempo master, asking whoever holds it to hand over.
+    ///
+    /// Two steps, and only the first is ours to decide. If another device holds
+    /// master it is sent a `0x26` request and **we do not claim anything yet**;
+    /// the claim happens in the background once that device's own status stops
+    /// saying it is master, which is the signal every other player on the
+    /// network acts on. If nobody holds it, it is taken immediately.
+    ///
+    /// Claiming without asking would put two masters on the network and make
+    /// every follower flicker between them, so the wait is not politeness.
+    pub fn take_tempo_master(&self) {
+        let live = Arc::clone(&self.live);
+        let holder = self.with_live(|held| {
+            held.monitor
+                .players()
+                .iter()
+                .find(|player| player.is_tempo_master() == Some(true))
+                .map(|player| player.device)
+        });
+        let Some(holder) = holder else {
+            return;
+        };
+        let Some(holder) = holder else {
+            // Nobody holds it, so there is nobody to ask.
+            self.with_live(|held| {
+                if let Some(cdj) = held.role.cdj() {
+                    cdj.set_tempo_master(true);
+                }
+            });
+            return;
+        };
+        let address = self.with_live(|held| {
+            held.role
+                .discovery()
+                .devices()
+                .iter()
+                .find(|device| device.number == holder)
+                .map(|device| device.ip)
+        });
+        let Some(Some(address)) = address else {
+            tracing::warn!(%holder, "the tempo master has no address to ask");
+            return;
+        };
+        // The request itself goes out on this thread. The session lives behind
+        // a lock whose guard is not `Send`, so it cannot be held across an
+        // await inside a spawned task — and one UDP datagram is not worth
+        // restructuring the ownership of the whole session for.
+        let asked = self.with_live(|held| {
+            held.role.cdj().map(|cdj| {
+                self.runtime
+                    .block_on(async { cdj.request_tempo_master(address).await })
+            })
+        });
+        match asked {
+            Some(Some(Ok(()))) => {}
+            Some(Some(Err(error))) => {
+                tracing::warn!(%error, "could not ask for tempo master");
+                return;
+            }
+            _ => return,
+        }
+
+        // Then watch the holder's own status, because the `0x27` reply is
+        // unicast to a port the monitor holds; see
+        // `VirtualCdj::request_tempo_master`.
+        //
+        // **The grant is byte `0x9f`, not the absence of byte `0x9e`.** A deck
+        // handing over keeps claiming mastership and names its successor at
+        // `0x9f`; it drops the claim only once the successor has picked it up.
+        // Waiting for the claim to go away first is therefore a deadlock, and
+        // it is one that looks exactly like a refusal: the request goes out,
+        // the CDJ answers and sits at "yielding to 4", and Mixxx times out
+        // saying the master never yielded. It had. It was waiting for us.
+        self.runtime.spawn(async move {
+            for _ in 0..MASTER_HANDOVER_POLLS {
+                tokio::time::sleep(MASTER_HANDOVER_POLL).await;
+                let done = {
+                    let held = match live.read() {
+                        Ok(held) => held,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    let Some(session) = held.as_ref() else {
+                        return;
+                    };
+                    let ours = session.role.number();
+                    let granted = session.monitor.player(holder).is_none_or(|player| {
+                        // Either it has named us as its successor, or it has
+                        // stopped claiming mastership altogether -- which is
+                        // what a deck does when it is simply stopped rather
+                        // than handing over.
+                        player.yielding_to().is_some_and(|to| to.get() == ours)
+                            || player.is_tempo_master() != Some(true)
+                    });
+                    if let (true, Some(cdj)) = (granted, session.role.cdj()) {
+                        cdj.set_tempo_master(true);
+                        tracing::info!(%holder, "took tempo master");
+                    }
+                    granted
+                };
+                if done {
+                    return;
+                }
+            }
+            tracing::warn!(%holder, "the tempo master never yielded");
+        });
+    }
+
+    /// Give up tempo master.
+    pub fn release_tempo_master(&self) {
+        self.with_live(|live| {
+            if let Some(cdj) = live.role.cdj() {
+                cdj.set_tempo_master(false);
+            }
+        });
+    }
+
+    /// Whether we are claiming tempo master.
+    #[must_use]
+    pub fn is_tempo_master(&self) -> bool {
+        self.with_live(|live| live.role.cdj().is_some_and(VirtualCdj::is_tempo_master))
+            .unwrap_or(false)
     }
 
     /// Everything that has happened since the last call.
@@ -974,6 +1157,44 @@ async fn unmount(
     }
 }
 
+/// Hand tempo master to the deck that just asked for it.
+///
+/// Silent when we do not hold it, which is the common case: the request is
+/// addressed to the current master and we are usually not it.
+fn yield_master_to(live: &Arc<RwLock<Option<Live>>>, requester: prolink::DeviceNumber) {
+    let held = match live.read() {
+        Ok(held) => held,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let Some(session) = held.as_ref() else {
+        return;
+    };
+    let Some(cdj) = session.role.cdj() else {
+        return;
+    };
+    if !cdj.is_tempo_master() {
+        return;
+    }
+    let address = session
+        .role
+        .discovery()
+        .devices()
+        .iter()
+        .find(|device| device.number == requester)
+        .map(|device| device.ip);
+    let Some(address) = address else {
+        // We know who asked but not where from, so the answer cannot be sent.
+        // Standing down anyway is the safer half: the requester will claim
+        // mastership regardless, and two masters is the worse failure.
+        tracing::warn!(%requester, "no address to answer the master request; standing down");
+        cdj.set_tempo_master(false);
+        return;
+    };
+    if let Err(error) = cdj.yield_tempo_master(requester, address) {
+        tracing::warn!(%error, "could not answer the master request");
+    }
+}
+
 /// The running player, cloned out from under the lock.
 ///
 /// Cloned rather than borrowed because the caller then awaits, and the guard on
@@ -997,6 +1218,24 @@ fn player_of(live: &Arc<RwLock<Option<Live>>>) -> Option<Arc<VirtualPlayer>> {
 ///
 /// Five seconds, and two small UDP packets per peer per round. A deck answers
 /// one in about a millisecond.
+/// How often the old master's status is checked after asking it to hand over,
+/// and for how many rounds.
+///
+/// A deck's byte `0x9e` dropped within ~70 ms of answering in all five captured
+/// handovers, and status arrives every 200 ms — so this waits about two seconds
+/// before giving up, which is generous for a handover that normally completes
+/// in one packet.
+const MASTER_HANDOVER_POLL: std::time::Duration = std::time::Duration::from_millis(100);
+const MASTER_HANDOVER_POLLS: usize = 20;
+
+/// The pitch fader as the wire carries it: a fixed-point multiplier where
+/// `0x00100000` is unity, so 100% is 0x100000 and each percent is 0x2800.
+fn pitch_from_percent(percent: f64) -> Pitch {
+    let multiplier = (1.0 + percent / 100.0).clamp(0.0, 2.0);
+    let raw = rounded(multiplier * f64::from(Pitch::UNITY.0), u64::from(u32::MAX));
+    Pitch(u32::try_from(raw).unwrap_or(Pitch::UNITY.0))
+}
+
 const MEDIA_SURVEY: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How long to wait for the answers before reading the table. A deck-to-deck

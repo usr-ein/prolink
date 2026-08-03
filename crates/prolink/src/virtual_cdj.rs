@@ -43,14 +43,15 @@
 
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use prolink_proto::djl::{self, Body};
 use prolink_proto::status::{self, CdjStatus, MediaState};
 use prolink_proto::{
-    BrowsableDeviceNumber, DISCOVERY_PORT, DeviceKind, DeviceName, DeviceNumber, STATUS_PORT, Slot,
+    BEAT_PORT, BrowsableDeviceNumber, DISCOVERY_PORT, DeviceKind, DeviceName, DeviceNumber,
+    STATUS_PORT, Slot,
 };
 use tokio::net::UdpSocket;
 use tokio::sync::{broadcast, watch};
@@ -59,6 +60,7 @@ use tracing::{debug, info, warn};
 
 use crate::discovery::Discovery;
 use crate::media::{MediaDescription, MediaSource, NoMedia};
+use crate::playback::{BeatPosition, Playback, PlaybackCell};
 use crate::socket::{self, MAX_DATAGRAM};
 use crate::{Error, Result};
 
@@ -80,6 +82,13 @@ pub const OBSERVER_NUMBER: DeviceNumber = match DeviceNumber::new(7) {
     // Unreachable, and settled at compile time: 7 is not zero.
     None => DeviceNumber::ONE,
 };
+
+/// How often the beat emitter looks to see whether a beat is due.
+///
+/// The worst-case lateness of a beat packet, so it is a latency budget rather
+/// than a rate: at 145 BPM a beat is 414 ms apart and 5 ms is 1.2% of one, well
+/// inside what a deck's own jitter contributes.
+const BEAT_TICK: Duration = Duration::from_millis(5);
 
 /// Keep-alive byte `0x25` when this device was first onto the network.
 const FIRST_ON_NETWORK: u8 = 0x02;
@@ -389,6 +398,18 @@ pub struct VirtualCdj {
     /// stream and both would be wrong. `None` when we do not hold the port.
     status_tap: Option<broadcast::Sender<Arc<Vec<u8>>>>,
     status_counter: Arc<AtomicU32>,
+    /// What this host is playing, for the status stream and the beat emitter.
+    playback: Arc<PlaybackCell>,
+    /// Whether we claim tempo master.
+    ///
+    /// A plain flag rather than a state machine: taking mastership *from*
+    /// another device needs the `0x26`/`0x27` handshake on the beat port, and
+    /// the beat port is held by a [`crate::Monitor`] in every configuration
+    /// this library supports — one member of a `SO_REUSEPORT` group receives a
+    /// given unicast datagram, so we could not hear the reply. So the policy
+    /// this supports is the safe half: hold master while nobody else does, and
+    /// step aside the moment somebody claims it.
+    tempo_master: Arc<AtomicBool>,
     tasks: Vec<JoinHandle<()>>,
 }
 
@@ -460,6 +481,8 @@ impl VirtualCdj {
             status_socket,
             status_tap,
             status_counter: Arc::new(AtomicU32::new(0)),
+            playback: Arc::new(PlaybackCell::default()),
+            tempo_master: Arc::new(AtomicBool::new(false)),
             tasks: Vec::new(),
         };
         cdj.tasks.push(cdj.spawn_keep_alive(discovery));
@@ -467,6 +490,10 @@ impl VirtualCdj {
         if let Some(socket) = cdj.status_socket.clone() {
             cdj.tasks.push(cdj.spawn_status(discovery)?);
             cdj.tasks.push(cdj.spawn_query_responder(socket));
+            // Beats ride with status, not with the keep-alive: a device that
+            // does not publish what it is doing has no business claiming a
+            // beat, and the two are read together by everything downstream.
+            cdj.tasks.push(cdj.spawn_beats()?);
         }
         Ok(cdj)
     }
@@ -517,6 +544,108 @@ impl VirtualCdj {
     /// Watch the claim state machine.
     pub fn phase(&self) -> watch::Receiver<Phase> {
         self.phase.subscribe()
+    }
+
+    /// State what this host is playing.
+    ///
+    /// Call this several times a second while a track is loaded. The playhead
+    /// is projected between calls, so the rate governs how quickly a tempo
+    /// *change* reaches the network, not how accurately beats are timed — see
+    /// [`crate::playback`].
+    ///
+    /// It takes about [`crate::playback::STALE_AFTER`] of silence for the
+    /// network to conclude that nothing is playing here, which is deliberate:
+    /// the alternative is a stale tempo other decks stay locked to.
+    pub fn set_playback(&self, playback: Playback) {
+        self.playback.set(playback);
+    }
+
+    /// Nothing is loaded and nothing is playing.
+    pub fn clear_playback(&self) {
+        self.playback.clear();
+    }
+
+    /// What we are announcing as playing, playhead projected to now.
+    pub fn playback(&self) -> Playback {
+        self.playback.now()
+    }
+
+    /// Claim or release tempo master.
+    ///
+    /// **Only ever call this with `true` when nothing else holds it.** There is
+    /// no handshake here (see the `tempo_master` field), so claiming it while
+    /// another deck also claims it puts two masters on the network and every
+    /// follower flickers between them. [`crate::Monitor::players`] is where to
+    /// find out.
+    pub fn set_tempo_master(&self, master: bool) {
+        self.tempo_master.store(master, Ordering::Relaxed);
+    }
+
+    /// Whether we are claiming tempo master.
+    pub fn is_tempo_master(&self) -> bool {
+        self.tempo_master.load(Ordering::Relaxed)
+    }
+
+    /// Answer a `0x26` and stand down.
+    ///
+    /// **A CDJ's MASTER button always wins.** Pressing it on another deck takes
+    /// mastership from whoever has it; there is no refusing, and a device that
+    /// ignored the request would go on claiming a mastership the rest of the
+    /// network had already moved off — two masters, and every follower
+    /// flickering between them.
+    ///
+    /// Synchronous, and deliberately so: this is one datagram sent in answer to
+    /// one datagram, the reply arrives within 5 ms on real hardware, and making
+    /// it `async` would mean holding the session lock across an await at every
+    /// call site.
+    pub fn yield_tempo_master(&self, requester: DeviceNumber, address: Ipv4Addr) -> Result<()> {
+        if !self.is_tempo_master() {
+            // Not ours to give. The request was broadcast at us by mistake, or
+            // we stood down a moment ago; either way answering would claim a
+            // handover that is not happening.
+            return Ok(());
+        }
+        let response = prolink_proto::beat::MasterResponse {
+            name: self.config.name,
+            device: self.number(),
+            granted: true,
+        };
+        let to = SocketAddr::V4(SocketAddrV4::new(address, BEAT_PORT));
+        socket::send_once(&self.interface, to, &response.encode())?;
+        // Only after the answer is on the wire. A real master keeps claiming it
+        // for one or two more status packets while byte `0x9f` names the
+        // successor; dropping it first would leave a gap with no master at all.
+        self.set_tempo_master(false);
+        info!(%requester, "handed tempo master over");
+        Ok(())
+    }
+
+    /// Ask the deck at *holder* to hand mastership over.
+    ///
+    /// One `0x26` on the beat port, unicast, exactly as a deck sends when its
+    /// MASTER button is pressed. The holder answers with a `0x27` within about
+    /// 5 ms and its status byte `0x9e` drops within ~70 ms (S28).
+    ///
+    /// **This does not set our own flag.** The `0x27` comes back unicast to
+    /// port 50001, which a [`crate::Monitor`] is holding — only one socket in a
+    /// `SO_REUSEPORT` group receives a given unicast datagram, so we cannot
+    /// hear it. The handover is instead observed the way every other device on
+    /// the network observes it: the old master's *status* stops saying it is
+    /// master. That is a slower signal by a few packets and a more honest one,
+    /// because it is the state the rest of the network is acting on.
+    pub async fn request_tempo_master(&self, holder: Ipv4Addr) -> Result<()> {
+        let request = prolink_proto::beat::MasterRequest {
+            name: self.config.name,
+            device: self.number(),
+        };
+        let socket = socket::bind_at(self.interface.ip, 0, Some(&self.interface))?;
+        let to = SocketAddr::V4(SocketAddrV4::new(holder, BEAT_PORT));
+        socket
+            .send_to(&request.encode(), to)
+            .await
+            .map_err(Error::io("asking for tempo master"))?;
+        info!(%holder, "asked the tempo master to hand over");
+        Ok(())
     }
 
     /// Ask every online peer what is in both of its slots, and return the table.
@@ -612,21 +741,19 @@ impl VirtualCdj {
     }
 
     /// The status packet we are emitting, for byte-diffing against a real deck.
+    ///
+    /// Built through the same function the emitter uses, so what this shows is
+    /// what goes out rather than something assembled alongside it.
     pub fn status_packet(&self, peers: usize) -> CdjStatus {
-        let occupied = self.media.occupied_slots();
-        // Asked of the source rather than derived from `occupied_slots`, so a
-        // medium on its way out can publish the unmounting states a consumer
-        // has to see before the slot goes empty.
-        let state = |slot: Slot| self.media.slot_state(slot);
-        CdjStatus::builder()
-            .device_number(self.number())
-            .name(self.config.name)
-            .slot_state(Slot::USB, state(Slot::USB))
-            .slot_state(Slot::SD, state(Slot::SD))
-            .link_available(!occupied.is_empty() || peers > 0)
-            .firmware(&self.config.firmware)
-            .packet_counter(self.status_counter.load(Ordering::Relaxed))
-            .build()
+        status_packet(
+            &self.config,
+            &self.number,
+            self.media.as_ref(),
+            &self.status_counter,
+            peers,
+            &self.playback.now(),
+            self.is_tempo_master(),
+        )
     }
 
     /// The keep-alive we are broadcasting, for byte-diffing against a real deck.
@@ -693,19 +820,75 @@ impl VirtualCdj {
         let media = Arc::clone(&self.media);
         let counter = Arc::clone(&self.status_counter);
         let table = PeerAddresses::new(discovery);
+        let playback = Arc::clone(&self.playback);
+        let master = Arc::clone(&self.tempo_master);
 
         Ok(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(status::STATUS_INTERVAL);
             loop {
                 ticker.tick().await;
                 let peers = table.get();
-                let packet = status_packet(&config, &number, media.as_ref(), &counter, peers.len());
+                let packet = status_packet(
+                    &config,
+                    &number,
+                    media.as_ref(),
+                    &counter,
+                    peers.len(),
+                    &playback.now(),
+                    master.load(Ordering::Relaxed),
+                );
                 counter.fetch_add(1, Ordering::Relaxed);
                 for peer in peers {
                     let to = SocketAddr::V4(SocketAddrV4::new(peer, STATUS_PORT));
                     if let Err(error) = socket.send_to(packet.as_bytes(), to).await {
                         debug!(%error, %peer, "status unicast failed");
                     }
+                }
+            }
+        }))
+    }
+
+    /// Broadcast a beat packet on UDP 50001 as each beat arrives.
+    ///
+    /// **This is what makes us a tempo other devices can follow.** A status
+    /// packet says what our tempo *is*, five times a second; a beat packet says
+    /// where the beat *is*, and a follower phase-locks to the arrival time of
+    /// this datagram, not to anything inside it. So the one property that
+    /// matters is that it leaves on the beat.
+    ///
+    /// Hence the polling rather than a sleep-until-next-beat: a tempo change or
+    /// a seek arrives between beats, and a task parked on a deadline computed
+    /// before it would send the next beat in the wrong place. [`BEAT_TICK`] is
+    /// the resulting worst-case lateness, and it is well under a millisecond of
+    /// a DJ's perception at any tempo.
+    ///
+    /// Beats are **broadcast**, unlike status: they arrive on 50001 from decks
+    /// that have never been told we exist, which is the whole reason a passive
+    /// listener can see a tempo without announcing.
+    fn spawn_beats(&self) -> Result<JoinHandle<()>> {
+        let socket = socket::bind_at(self.interface.ip, 0, Some(&self.interface))?;
+        let broadcast = SocketAddr::V4(SocketAddrV4::new(self.interface.broadcast(), BEAT_PORT));
+        let name = self.config.name;
+        let number = Arc::clone(&self.number);
+        let playback = Arc::clone(&self.playback);
+
+        Ok(tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(BEAT_TICK);
+            let mut emitted: Option<u32> = None;
+            loop {
+                ticker.tick().await;
+                let now = playback.now();
+                let Some(position) = beat_to_emit(&now, &mut emitted) else {
+                    continue;
+                };
+                let Some(device) = DeviceNumber::new(number.load(Ordering::Relaxed)) else {
+                    continue;
+                };
+                let Some(packet) = now.beat_packet(device, name, position) else {
+                    continue;
+                };
+                if let Err(error) = socket.send_to(&packet.encode(), broadcast).await {
+                    debug!(%error, "beat broadcast failed");
                 }
             }
         }))
@@ -973,12 +1156,53 @@ fn observe_peer_media(peers: &PeerMedia, response: &status::MediaResponse) {
     peers.note_description(device, slot, &description);
 }
 
+/// Which beat, if any, is due to be broadcast right now.
+///
+/// `emitted` is the last beat number sent, and this is where the awkward cases
+/// live rather than in the task above:
+///
+///  * **A beat is due** when the playhead has reached a beat we have not sent.
+///    Only ever one datagram per tick, so a stall in the task cannot produce a
+///    burst of backdated beats — a follower would read that as a tempo spike.
+///  * **A seek moves the playhead backwards**, and the beat it lands on has
+///    usually been sent before. Refusing to re-send it would go silent until
+///    the track caught up to where it had been, which after a jump to the start
+///    of a five-minute track is five minutes. So a position *behind* the last
+///    one resets the count and beats resume immediately.
+///  * **Stopping** clears the count, so the first beat after pressing play is
+///    sent rather than skipped.
+fn beat_to_emit(playback: &Playback, emitted: &mut Option<u32>) -> Option<BeatPosition> {
+    let (Some(position), true) = (playback.beat, playback.playing) else {
+        *emitted = None;
+        return None;
+    };
+    match *emitted {
+        Some(last) if position.number == last => None,
+        Some(last) if position.number > last => {
+            // One at a time, and the next tick will bring the one after.
+            let next = BeatPosition {
+                number: last + 1,
+                fraction: 0.0,
+            };
+            *emitted = Some(next.number);
+            Some(next)
+        }
+        // Behind where we were, or nothing sent yet: start again from here.
+        _ => {
+            *emitted = Some(position.number);
+            Some(position)
+        }
+    }
+}
+
 fn status_packet(
     config: &VirtualCdjConfig,
     number: &AtomicU8,
     media: &dyn MediaSource,
     counter: &AtomicU32,
     peers: usize,
+    playback: &Playback,
+    tempo_master: bool,
 ) -> CdjStatus {
     let occupied = media.occupied_slots();
     let state = |slot: Slot| media.slot_state(slot);
@@ -988,11 +1212,35 @@ fn status_packet(
         .slot_state(Slot::SD, state(Slot::SD))
         .link_available(!occupied.is_empty() || peers > 0)
         .firmware(&config.firmware)
-        .packet_counter(counter.load(Ordering::Relaxed));
+        .packet_counter(counter.load(Ordering::Relaxed))
+        .tempo(playback.bpm_centi, playback.pitch)
+        .playing(playback.playing)
+        .tempo_master(tempo_master)
+        .beat(
+            playback.beat.map(|beat| beat.number),
+            playback.beat.map(BeatPosition::in_bar),
+        )
+        .play_state(play_state_for(playback).0);
     if let Some(number) = DeviceNumber::new(number.load(Ordering::Relaxed)) {
         builder = builder.device_number(number);
     }
     builder.build()
+}
+
+/// Byte `0x7b` for what we are doing.
+///
+/// Three of the twelve values a CDJ can send, because three is all a host with
+/// no platter can honestly be in: nothing loaded, playing, or paused. Reporting
+/// a cue or search state we do not have would be inventing a transport.
+fn play_state_for(playback: &Playback) -> crate::monitor::PlayState {
+    use crate::monitor::PlayState;
+    if playback.bpm_centi.is_none() {
+        PlayState::NO_TRACK
+    } else if playback.playing {
+        PlayState::PLAYING
+    } else {
+        PlayState::PAUSED
+    }
 }
 
 /// Run the claim chain and return the number we ended up holding.
@@ -1313,7 +1561,15 @@ mod tests {
 
         let number = AtomicU8::new(3);
         let counter = AtomicU32::new(0);
-        let packet = status_packet(&VirtualCdjConfig::default(), &number, &UsbOnly, &counter, 1);
+        let packet = status_packet(
+            &VirtualCdjConfig::default(),
+            &number,
+            &UsbOnly,
+            &counter,
+            1,
+            &Playback::default(),
+            false,
+        );
         assert_eq!(packet.usb_state(), MediaState::LOADED);
         assert_eq!(
             packet.sd_state(),
@@ -1321,6 +1577,165 @@ mod tests {
             "a slot we do not serve is empty"
         );
         assert!(packet.link_available());
+        assert_eq!(
+            packet.bpm_centi(),
+            None,
+            "a server with nothing playing states no tempo"
+        );
+        assert_eq!(packet.beat_in_bar(), None);
+    }
+
+    /// A deck playing 145.00 BPM, on beat 6, halfway through it.
+    fn playing() -> Playback {
+        Playback {
+            bpm_centi: Some(14_500),
+            pitch: prolink_proto::beat::Pitch::UNITY,
+            playing: true,
+            beat: Some(BeatPosition {
+                number: 6,
+                fraction: 0.5,
+            }),
+        }
+    }
+
+    #[test]
+    fn what_we_are_playing_reaches_the_status_packet() {
+        // The whole point of the tempo half: without these fields a CDJ sees a
+        // device with no tempo, has nothing to beat-match against, and draws no
+        // phase for us at all.
+        let number = AtomicU8::new(2);
+        let counter = AtomicU32::new(0);
+        let packet = status_packet(
+            &VirtualCdjConfig::default(),
+            &number,
+            &NoMedia,
+            &counter,
+            1,
+            &playing(),
+            true,
+        );
+        assert_eq!(packet.bpm_centi(), Some(14_500));
+        assert_eq!(packet.beat_number(), Some(6));
+        assert_eq!(packet.beat_in_bar(), prolink_proto::beat::BeatInBar::new(2));
+        assert_eq!(packet.is_tempo_master(), Some(true));
+        assert_eq!(
+            packet.play_state(),
+            Some(crate::monitor::PlayState::PLAYING.0)
+        );
+    }
+
+    #[test]
+    fn a_paused_deck_still_states_its_tempo() {
+        // It has a track loaded and a tempo to state; what it does not have is
+        // sound coming out. Reporting no tempo would make the deck vanish from
+        // every other player's tempo display the moment it is paused.
+        let number = AtomicU8::new(2);
+        let counter = AtomicU32::new(0);
+        let packet = status_packet(
+            &VirtualCdjConfig::default(),
+            &number,
+            &NoMedia,
+            &counter,
+            0,
+            &Playback {
+                playing: false,
+                ..playing()
+            },
+            false,
+        );
+        assert_eq!(packet.bpm_centi(), Some(14_500));
+        assert_eq!(
+            packet.play_state(),
+            Some(crate::monitor::PlayState::PAUSED.0)
+        );
+        assert_eq!(
+            packet.flags().map(status::StatusFlags::is_playing),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn beats_are_emitted_once_each_and_in_order() {
+        let mut emitted = None;
+        let mut playback = playing();
+        // The first beat seen is sent immediately -- there is nothing to be
+        // late for yet.
+        assert_eq!(
+            beat_to_emit(&playback, &mut emitted).map(|p| p.number),
+            Some(6)
+        );
+        // ...and not again while the playhead is still inside it.
+        playback.beat = Some(BeatPosition {
+            number: 6,
+            fraction: 0.9,
+        });
+        assert_eq!(beat_to_emit(&playback, &mut emitted), None);
+        // The next beat goes out on its downbeat, not at the fraction the poll
+        // happened to catch it at: a follower phase-locks to arrival time.
+        playback.beat = Some(BeatPosition {
+            number: 7,
+            fraction: 0.3,
+        });
+        let next = beat_to_emit(&playback, &mut emitted).expect("beat 7");
+        assert_eq!(next.number, 7);
+        assert!(next.fraction.abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_stalled_emitter_does_not_fire_a_burst_of_backdated_beats() {
+        // If the task misses its tick -- a busy Pi, a scheduler hiccup -- the
+        // playhead may be several beats further on. Sending all of them now
+        // would put four beats on the wire in one millisecond, which every
+        // follower reads as an enormous tempo spike.
+        let mut emitted = None;
+        let mut playback = playing();
+        beat_to_emit(&playback, &mut emitted);
+        playback.beat = Some(BeatPosition {
+            number: 11,
+            fraction: 0.0,
+        });
+        for expected in 7..=11 {
+            assert_eq!(
+                beat_to_emit(&playback, &mut emitted).map(|p| p.number),
+                Some(expected),
+                "one beat per tick, catching up in order"
+            );
+        }
+    }
+
+    #[test]
+    fn a_seek_backwards_resumes_beats_from_where_it_landed() {
+        // The bug this prevents is silence: after a jump to the start of a
+        // five-minute track, "only send beats we have not sent" means no beats
+        // for five minutes.
+        let mut emitted = None;
+        let mut playback = playing();
+        beat_to_emit(&playback, &mut emitted);
+        playback.beat = Some(BeatPosition {
+            number: 2,
+            fraction: 0.0,
+        });
+        assert_eq!(
+            beat_to_emit(&playback, &mut emitted).map(|p| p.number),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn nothing_playing_emits_nothing_and_forgets_where_it_was() {
+        let mut emitted = None;
+        let playback = playing();
+        beat_to_emit(&playback, &mut emitted);
+        let stopped = Playback {
+            playing: false,
+            ..playback
+        };
+        assert_eq!(beat_to_emit(&stopped, &mut emitted), None);
+        assert_eq!(emitted, None, "so the first beat after play is sent");
+        assert_eq!(
+            beat_to_emit(&playback, &mut emitted).map(|p| p.number),
+            Some(6)
+        );
     }
 
     #[test]
@@ -1355,6 +1770,8 @@ mod tests {
             &Ejecting,
             &counter,
             1,
+            &Playback::default(),
+            false,
         );
         assert_eq!(packet.usb_state(), MediaState::UNMOUNTING_ALT);
         assert_eq!(packet.sd_state(), MediaState::EMPTY);

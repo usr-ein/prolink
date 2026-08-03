@@ -71,6 +71,7 @@ pub mod discovery;
 pub mod interface;
 pub mod media;
 pub mod monitor;
+pub mod playback;
 pub mod serve;
 pub mod virtual_cdj;
 pub mod volumes;
@@ -84,6 +85,7 @@ pub use error::{Error, Result};
 pub use interface::Interface;
 pub use media::{MediaDescription, MediaSource};
 pub use monitor::{Monitor, MonitorEvent, PlayerState};
+pub use playback::{BeatPosition, Playback, PlaybackCell};
 /// The beat-packet types that appear in [`monitor`]'s signatures.
 pub use prolink_proto::beat::{Beat, BeatInBar, Pitch};
 pub use serve::{MediaSet, Medium, VirtualPlayer, VirtualPlayerConfig};

@@ -738,6 +738,47 @@ pub mod ffi {
         /// What every player is doing, as of now.
         fn players(self: &Session) -> Vec<Player>;
 
+        /// Tell the network what this host is playing.
+        ///
+        /// **Without this we are a device with no tempo.** Everything else
+        /// here reads the network; this is the one call that makes us
+        /// something other players can beat-match to, and until it is made no
+        /// CDJ will draw a phase for us however well the rest works.
+        ///
+        /// `bpm` is the track's own tempo before the fader and
+        /// `pitch_percent` the fader itself, as the wire carries them.
+        /// `beat_number` counts beats from 1, and `beat_fraction` is how far
+        /// through that beat the playhead is. Zero for `beat_number` means
+        /// there is no grid to publish.
+        ///
+        /// Call it from a timer several times a second. Beats between calls
+        /// are projected from the tempo, so this rate sets how fast a tempo
+        /// change propagates, not the accuracy of the beats.
+        fn set_playback(
+            self: &Session,
+            bpm: f64,
+            pitch_percent: f64,
+            playing: bool,
+            beat_number: u32,
+            beat_fraction: f64,
+        );
+
+        /// Nothing is loaded here. The network stops seeing a tempo from us.
+        fn clear_playback(self: &Session);
+
+        /// Take tempo master, asking whoever holds it to hand over first.
+        ///
+        /// Returns immediately. If another device holds master the claim only
+        /// takes effect once that device has yielded, which takes a packet or
+        /// two — watch `is_tempo_master`.
+        fn take_tempo_master(self: &Session);
+
+        /// Give up tempo master.
+        fn release_tempo_master(self: &Session);
+
+        /// Whether we are claiming tempo master.
+        fn is_tempo_master(self: &Session) -> bool;
+
         /// Everything that has happened since the last call.
         ///
         /// Empty is the normal case. Call it from a timer; nothing is ever

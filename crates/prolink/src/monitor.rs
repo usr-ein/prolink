@@ -474,6 +474,13 @@ pub enum MonitorEvent {
     Status(Box<PlayerState>),
     /// Tempo master moved, or was lost.
     TempoMaster(Option<DeviceNumber>),
+    /// A device pressed MASTER and is asking the holder to hand over.
+    ///
+    /// Addressed to whoever holds it, so receiving one means **we** hold it and
+    /// are expected to answer with a [`prolink_proto::beat::MasterResponse`]
+    /// and stand down. A deck that ignores it keeps claiming mastership the
+    /// rest of the network has already moved on from.
+    MasterRequested(DeviceNumber),
     /// A device stopped sending beats: it has stopped playing.
     Stopped(DeviceNumber),
     /// A device said nothing on either port for [`FORGET_AFTER`].
@@ -485,7 +492,9 @@ impl MonitorEvent {
     pub fn device(&self) -> Option<DeviceNumber> {
         match self {
             Self::Beat(state) | Self::Status(state) => Some(state.device),
-            Self::Stopped(device) | Self::Gone(device) => Some(*device),
+            Self::Stopped(device) | Self::Gone(device) | Self::MasterRequested(device) => {
+                Some(*device)
+            }
             Self::TempoMaster(device) => *device,
         }
     }
@@ -849,12 +858,25 @@ impl Monitor {
                         continue;
                     }
                 };
-                let beat::Packet::Beat(beat) = decoded else {
-                    // On-air and fader-start from a mixer, or a CDJ-3000's
-                    // absolute position. Nothing here models them yet, and
-                    // saying so at trace level beats a warning per packet.
-                    trace!(kind = ?decoded.kind(), "unmodelled datagram on 50001");
-                    continue;
+                let beat = match decoded {
+                    beat::Packet::Beat(beat) => beat,
+                    // Somebody pressed MASTER. Unicast at whoever holds it,
+                    // which is why it is worth an event rather than a shrug:
+                    // if that is us, we have to answer and stand down, and this
+                    // socket is the only one that can hear it — the beat port
+                    // is shared with `SO_REUSEPORT` and only one member of the
+                    // group receives a given unicast datagram.
+                    beat::Packet::MasterRequest(request) => {
+                        let _ = events.send(MonitorEvent::MasterRequested(request.device));
+                        continue;
+                    }
+                    other => {
+                        // On-air and fader-start from a mixer, or a CDJ-3000's
+                        // absolute position. Nothing here models them yet, and
+                        // saying so at trace level beats a warning per packet.
+                        trace!(kind = ?other.kind(), "unmodelled datagram on 50001");
+                        continue;
+                    }
                 };
                 let now = Instant::now();
                 let event = with_table_mut(&players, |table| table.observe_beat(&beat, now));

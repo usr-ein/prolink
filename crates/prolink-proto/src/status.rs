@@ -53,7 +53,7 @@ use std::fmt;
 use std::net::Ipv4Addr;
 use std::time::Duration;
 
-use crate::beat::Pitch;
+use crate::beat::{BeatInBar, Pitch};
 use crate::device::{DeviceName, DeviceNumber};
 use crate::status_templates as templates;
 use crate::{Error, MAGIC, Result, Slot};
@@ -476,7 +476,22 @@ impl CdjStatus {
     const OFF_BPM: usize = 0x92;
     const OFF_MASTER_MEANINGFUL: usize = 0x9e;
     const OFF_YIELDING_TO: usize = 0x9f;
+    /// Beats since the start of the track, counting from 1.
+    const OFF_BEAT_NUMBER: usize = 0xa0;
+    /// Which beat of the bar, 1–4. `0` when there is no bar to be in.
+    const OFF_BEAT_IN_BAR: usize = 0xa6;
     const OFF_PACKET_COUNTER: usize = 0xc8;
+
+    /// The pitch fader, four times over.
+    ///
+    /// A deck writes the same value to all four while it is playing, and zeroes
+    /// the second and fourth while it is cued or paused (S06). We write all
+    /// four, because nothing says which one a given follower reads and
+    /// disagreement between them is a state no deck has ever produced.
+    const OFF_PITCH_COPIES: [usize; 4] = [0x8c, 0x98, 0xc0, 0xc4];
+
+    /// Byte `0xa0`–`0xa3` when the deck has no track: `0xffffffff`, not zero.
+    const NO_BEAT_NUMBER: u32 = 0xffff_ffff;
 
     /// Parse a status packet, or fail if it is not one.
     pub fn parse(data: &[u8]) -> Result<Self> {
@@ -642,6 +657,24 @@ impl CdjStatus {
         DeviceNumber::new(target)
     }
 
+    /// Beats since the start of the track, counting the first beat as 1.
+    ///
+    /// `None` when the deck has no beat grid to count against, which it reports
+    /// as `0xffffffff` — a value that reads as four billion if it is taken at
+    /// face value.
+    pub fn beat_number(&self) -> Option<u32> {
+        be_u32_at(&self.raw, Self::OFF_BEAT_NUMBER).filter(|&raw| raw != Self::NO_BEAT_NUMBER)
+    }
+
+    /// Which beat of the bar the deck is on, 1–4.
+    ///
+    /// `None` off the grid: byte `0xa6` is then `0`, which means "no bar to be
+    /// in" rather than "beat zero" — the same convention as the beat packet's
+    /// byte `0x5c`.
+    pub fn beat_in_bar(&self) -> Option<BeatInBar> {
+        BeatInBar::new(byte_at(&self.raw, Self::OFF_BEAT_IN_BAR)?)
+    }
+
     /// The sender's monotonic packet counter.
     pub fn packet_counter(&self) -> Option<u32> {
         be_u32_at(&self.raw, Self::OFF_PACKET_COUNTER)
@@ -671,11 +704,37 @@ impl fmt::Debug for CdjStatus {
     }
 }
 
+/// Write one byte, if the buffer is long enough to hold it.
+///
+/// Free functions rather than closures over the buffer: several of these have
+/// to run between reads of the same buffer, and a closure that captured it
+/// would hold the borrow across all of them.
+fn put(raw: &mut [u8], offset: usize, value: u8) {
+    if let Some(slot) = raw.get_mut(offset) {
+        *slot = value;
+    }
+}
+
+fn put_u16(raw: &mut [u8], offset: usize, value: u16) {
+    if let Some(field) = raw.get_mut(offset..offset.saturating_add(2)) {
+        field.copy_from_slice(&value.to_be_bytes());
+    }
+}
+
+fn put_u32(raw: &mut [u8], offset: usize, value: u32) {
+    if let Some(field) = raw.get_mut(offset..offset.saturating_add(4)) {
+        field.copy_from_slice(&value.to_be_bytes());
+    }
+}
+
 /// Builds the status packet a virtual CDJ emits.
 ///
 /// Starts from a captured skeleton and substitutes only understood fields; the
 /// ~260 bytes we cannot name are reproduced exactly (F23).
 #[derive(Clone, Debug)]
+// Six of them, and each is one wire bit that a caller sets independently. A
+// struct of enums here would be six enums.
+#[allow(clippy::struct_excessive_bools)]
 pub struct CdjStatusBuilder {
     device_number: u8,
     name: DeviceName,
@@ -685,6 +744,14 @@ pub struct CdjStatusBuilder {
     play_state: u8,
     firmware: String,
     packet_counter: u32,
+    bpm_centi: Option<u16>,
+    pitch: Pitch,
+    playing: bool,
+    on_air: bool,
+    synced: bool,
+    tempo_master: bool,
+    beat_number: Option<u32>,
+    beat_in_bar: Option<BeatInBar>,
 }
 
 impl Default for CdjStatusBuilder {
@@ -698,6 +765,14 @@ impl Default for CdjStatusBuilder {
             play_state: 0x00,
             firmware: "1.44".to_owned(),
             packet_counter: 0,
+            bpm_centi: None,
+            pitch: Pitch::UNITY,
+            playing: false,
+            on_air: false,
+            synced: false,
+            tempo_master: false,
+            beat_number: None,
+            beat_in_bar: None,
         }
     }
 }
@@ -761,6 +836,65 @@ impl CdjStatusBuilder {
         self
     }
 
+    /// The tempo: the track's own, before the fader, and the fader itself.
+    ///
+    /// `None` leaves the `0xffff` a deck sends with no track loaded, which is
+    /// the only value that means "no tempo" — a zero here reads as 0.00 BPM and
+    /// is a measurement rather than an absence.
+    #[must_use]
+    pub fn tempo(mut self, bpm_centi: Option<u16>, pitch: Pitch) -> Self {
+        self.bpm_centi = bpm_centi.filter(|&centi| centi != NO_TEMPO);
+        self.pitch = pitch;
+        self
+    }
+
+    /// Whether sound is coming out, which is byte `0x89` bit 6.
+    ///
+    /// Not a restatement of [`Self::play_state`]; see
+    /// [`StatusFlags::is_playing`].
+    #[must_use]
+    pub fn playing(mut self, playing: bool) -> Self {
+        self.playing = playing;
+        self
+    }
+
+    /// Whether the mixer says this channel is audible, byte `0x89` bit 3.
+    #[must_use]
+    pub fn on_air(mut self, on_air: bool) -> Self {
+        self.on_air = on_air;
+        self
+    }
+
+    /// Whether SYNC is engaged, byte `0x89` bit 4.
+    #[must_use]
+    pub fn synced(mut self, synced: bool) -> Self {
+        self.synced = synced;
+        self
+    }
+
+    /// Whether we hold tempo master.
+    ///
+    /// Sets both byte `0x9e` and flag bit 5, which a real deck keeps in step:
+    /// they agreed in 46,011 of the 46,012 captured packets, and the one
+    /// exception is a single frame inside a handoff.
+    #[must_use]
+    pub fn tempo_master(mut self, master: bool) -> Self {
+        self.tempo_master = master;
+        self
+    }
+
+    /// Where the playhead is on the grid: beats since the start of the track,
+    /// counting from 1, and which beat of the bar that is.
+    ///
+    /// `None` for either is "off the grid", and both are written as the
+    /// sentinels a real deck uses rather than as zeros.
+    #[must_use]
+    pub fn beat(mut self, number: Option<u32>, in_bar: Option<BeatInBar>) -> Self {
+        self.beat_number = number;
+        self.beat_in_bar = in_bar;
+        self
+    }
+
     /// Produce the packet.
     pub fn build(&self) -> CdjStatus {
         let mut raw = templates::CDJ_STATUS.to_vec();
@@ -770,28 +904,64 @@ impl CdjStatusBuilder {
             self.name,
             self.device_number,
         );
-        let mut put = |offset: usize, value: u8| {
-            if let Some(slot) = raw.get_mut(offset) {
-                *slot = value;
-            }
-        };
         // The device number appears at 0x21 and again at 0x24.
-        put(CdjStatus::OFF_DEVICE_2, self.device_number);
-        put(CdjStatus::OFF_USB_STATE, self.usb_state.0);
-        put(CdjStatus::OFF_SD_STATE, self.sd_state.0);
+        put(&mut raw, CdjStatus::OFF_DEVICE_2, self.device_number);
+        put(&mut raw, CdjStatus::OFF_USB_STATE, self.usb_state.0);
+        put(&mut raw, CdjStatus::OFF_SD_STATE, self.sd_state.0);
         // 0x74 is left exactly as the real deck sent it. It takes 0 and 1 and is
         // clearly media-related, but it does not track 0x75: three of the four
         // combinations occur, so it is a separate flag we cannot yet name.
-        put(CdjStatus::OFF_LINK_AVAILABLE, u8::from(self.link_available));
-        put(CdjStatus::OFF_PLAY_STATE, self.play_state);
+        put(
+            &mut raw,
+            CdjStatus::OFF_LINK_AVAILABLE,
+            u8::from(self.link_available),
+        );
+        put(&mut raw, CdjStatus::OFF_PLAY_STATE, self.play_state);
         for (index, byte) in self.firmware.bytes().take(4).enumerate() {
-            put(CdjStatus::OFF_FIRMWARE + index, byte);
+            put(&mut raw, CdjStatus::OFF_FIRMWARE + index, byte);
         }
-        if let Some(field) =
-            raw.get_mut(CdjStatus::OFF_PACKET_COUNTER..CdjStatus::OFF_PACKET_COUNTER + 4)
-        {
-            field.copy_from_slice(&self.packet_counter.to_be_bytes());
+
+        // Bit 7 of the flags byte is set in every captured packet and has no
+        // known meaning, so it is kept from the template rather than rebuilt.
+        let mut flags = raw.get(CdjStatus::OFF_FLAGS).copied().unwrap_or(0x84);
+        for (bit, set) in [
+            (StatusFlags::PLAYING, self.playing),
+            (StatusFlags::TEMPO_MASTER, self.tempo_master),
+            (StatusFlags::SYNC, self.synced),
+            (StatusFlags::ON_AIR, self.on_air),
+        ] {
+            if set {
+                flags |= bit;
+            } else {
+                flags &= !bit;
+            }
         }
+        put(&mut raw, CdjStatus::OFF_FLAGS, flags);
+        put(
+            &mut raw,
+            CdjStatus::OFF_MASTER_MEANINGFUL,
+            u8::from(self.tempo_master),
+        );
+
+        for offset in CdjStatus::OFF_PITCH_COPIES {
+            put_u32(&mut raw, offset, self.pitch.0);
+        }
+        put_u32(
+            &mut raw,
+            CdjStatus::OFF_BEAT_NUMBER,
+            self.beat_number.unwrap_or(CdjStatus::NO_BEAT_NUMBER),
+        );
+        put_u32(&mut raw, CdjStatus::OFF_PACKET_COUNTER, self.packet_counter);
+        put_u16(
+            &mut raw,
+            CdjStatus::OFF_BPM,
+            self.bpm_centi.unwrap_or(NO_TEMPO),
+        );
+        put(
+            &mut raw,
+            CdjStatus::OFF_BEAT_IN_BAR,
+            self.beat_in_bar.map_or(0, BeatInBar::get),
+        );
         CdjStatus { raw }
     }
 }
@@ -1394,9 +1564,19 @@ mod tests {
                 CdjStatus::OFF_SD_STATE,
                 CdjStatus::OFF_LINK_AVAILABLE,
                 CdjStatus::OFF_PLAY_STATE,
+                CdjStatus::OFF_FLAGS,
+                CdjStatus::OFF_MASTER_MEANINGFUL,
+                CdjStatus::OFF_BEAT_IN_BAR,
             ])
             .chain(CdjStatus::OFF_FIRMWARE..CdjStatus::OFF_FIRMWARE + 4)
             .chain(CdjStatus::OFF_PACKET_COUNTER..CdjStatus::OFF_PACKET_COUNTER + 4)
+            .chain(CdjStatus::OFF_BPM..CdjStatus::OFF_BPM + 2)
+            .chain(CdjStatus::OFF_BEAT_NUMBER..CdjStatus::OFF_BEAT_NUMBER + 4)
+            .chain(
+                CdjStatus::OFF_PITCH_COPIES
+                    .into_iter()
+                    .flat_map(|offset| offset..offset + 4),
+            )
             .chain(OFF_BODY_LEN..OFF_BODY_LEN + 2)
             .collect();
         let unexpected: Vec<usize> = differing
@@ -1408,6 +1588,76 @@ mod tests {
             unexpected.is_empty(),
             "disturbed bytes we do not understand: {unexpected:x?}"
         );
+    }
+
+    #[test]
+    fn a_deck_with_no_track_sends_sentinels_rather_than_zeros() {
+        // Zero is a measurement here and the deck means an absence: 0.00 BPM
+        // and "beat zero" are both readings a follower would act on. The wire
+        // says 0xffff and 0xffffffff, and byte 0xa6 uses 0 for "no bar" only
+        // because it has no room for a sentinel.
+        let idle = CdjStatus::builder()
+            .device_number(device(2))
+            .tempo(None, Pitch::UNITY)
+            .beat(None, None)
+            .build();
+        assert_eq!(idle.bpm_centi(), None);
+        assert_eq!(idle.beat_number(), None);
+        assert_eq!(idle.beat_in_bar(), None);
+        assert_eq!(idle.is_tempo_master(), Some(false));
+        assert_eq!(
+            idle.flags().map(StatusFlags::is_playing),
+            Some(false),
+            "an idle deck is not playing"
+        );
+    }
+
+    #[test]
+    fn a_playing_master_round_trips_its_tempo_and_its_place_in_the_bar() {
+        let playing = CdjStatus::builder()
+            .device_number(device(1))
+            .play_state(0x03)
+            .tempo(Some(13_201), Pitch(0x000f_8312))
+            .playing(true)
+            .tempo_master(true)
+            .beat(Some(67), BeatInBar::new(3))
+            .build();
+        let parsed = CdjStatus::parse(playing.as_bytes()).expect("our own packet parses");
+        assert_eq!(parsed.bpm_centi(), Some(13_201));
+        assert_eq!(parsed.pitch(), Some(Pitch(0x000f_8312)));
+        assert_eq!(parsed.beat_number(), Some(67));
+        assert_eq!(parsed.beat_in_bar(), BeatInBar::new(3));
+        assert_eq!(parsed.is_tempo_master(), Some(true));
+        // The two places mastership is written have to agree; they did in
+        // 46,011 of the 46,012 captured packets, and the exception is a single
+        // frame mid-handoff, which we never produce.
+        let flags = parsed.flags().expect("flags");
+        assert!(flags.is_tempo_master());
+        assert!(flags.is_playing());
+        assert!(!flags.is_synced());
+        // 132.01 at −3.05% is what is actually coming out.
+        let effective = parsed.effective_bpm().expect("an effective tempo");
+        assert!(
+            (effective - 128.0).abs() < 0.5,
+            "132.01 BPM at -3.05% is about 128, not {effective}"
+        );
+    }
+
+    #[test]
+    fn the_pitch_is_written_to_every_copy_a_deck_writes() {
+        // A playing deck put the same value at 0x8c, 0x98, 0xc0 and 0xc4 in
+        // every packet of S06. Nothing says which one a follower reads, and
+        // four copies that disagree is a state no deck has ever produced.
+        let built = CdjStatus::builder()
+            .tempo(Some(14_500), Pitch(0x0010_8000))
+            .build();
+        for offset in CdjStatus::OFF_PITCH_COPIES {
+            assert_eq!(
+                be_u32_at(built.as_bytes(), offset),
+                Some(0x0010_8000),
+                "pitch copy at {offset:#x}"
+            );
+        }
     }
 
     #[test]

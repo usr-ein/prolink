@@ -156,6 +156,12 @@ pub(crate) fn event(from: &prolink::MonitorEvent) -> Event {
             master.map_or(0, prolink::DeviceNumber::get),
             0,
         ),
+        // Answered inside the library before this is queued, because a CDJ
+        // answers in five milliseconds and a host polling on a UI timer cannot.
+        // Reported anyway, so a host can say why mastership moved.
+        prolink::MonitorEvent::MasterRequested(device) => {
+            plain(EventKind::TempoMaster, device.get(), 0)
+        }
         prolink::MonitorEvent::Gone(device) => plain(EventKind::DeviceLost, device.get(), 0),
     }
 }
