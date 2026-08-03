@@ -558,6 +558,27 @@ pub mod ffi {
         track_ids: Vec<u32>,
     }
 
+    /// One history playlist: what a player played off this medium, in order.
+    ///
+    /// rekordbox writes one of these every time a player mounts the medium, so
+    /// a well-travelled stick carries a session per gig. They are the only
+    /// record of what was played that survives on the medium itself -- a deck
+    /// that mounts read-only, as TriMixxx does, never adds to them.
+    ///
+    /// There is no timestamp anywhere in the format. Order is all there is:
+    /// later row id means a later session, and later position within one means
+    /// later in that session.
+    #[derive(Debug, Clone)]
+    struct PdbHistoryPlaylist {
+        /// Its row id. Ascending with the session, which is what makes it
+        /// usable as a clock.
+        id: u32,
+        /// `HISTORY 001` and so on.
+        name: String,
+        /// The tracks, in the order they were played.
+        track_ids: Vec<u32>,
+    }
+
     /// A row of one of the lookup tables, for building a browse tree.
     #[derive(Debug, Clone)]
     struct PdbNamed {
@@ -578,6 +599,8 @@ pub mod ffi {
         tracks: Vec<PdbTrack>,
         /// Every playlist and folder.
         playlists: Vec<PdbPlaylist>,
+        /// One per player mount: what was played off this medium, in order.
+        history: Vec<PdbHistoryPlaylist>,
         /// The artist table.
         artists: Vec<PdbNamed>,
         /// The album table.

@@ -15,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ffi::{PdbContents, PdbNamed, PdbPlaylist, PdbTrack};
+use crate::ffi::{PdbContents, PdbHistoryPlaylist, PdbNamed, PdbPlaylist, PdbTrack};
 
 /// Read a rekordbox `export.pdb` off disk.
 #[must_use]
@@ -45,6 +45,7 @@ fn parse(bytes: &[u8], what: &str) -> PdbContents {
         error: String::new(),
         tracks: library.tracks.values().map(track).collect(),
         playlists: playlists(&library),
+        history: history(&library),
         artists: named(&library.artists),
         albums: named(&library.albums),
         genres: named(&library.genres),
@@ -62,6 +63,7 @@ fn failed(error: String) -> PdbContents {
         error,
         tracks: Vec::new(),
         playlists: Vec::new(),
+        history: Vec::new(),
         artists: Vec::new(),
         albums: Vec::new(),
         genres: Vec::new(),
@@ -123,6 +125,20 @@ fn track(from: &prolink_rekordbox::Track) -> PdbTrack {
         label_id: from.label_id,
         color_id: u32::from(from.color_id),
     }
+}
+
+/// The history playlists, in row-id order -- which is session order, and the
+/// nearest thing to a clock the format offers.
+fn history(library: &prolink_rekordbox::Library) -> Vec<PdbHistoryPlaylist> {
+    library
+        .history
+        .values()
+        .map(|playlist| PdbHistoryPlaylist {
+            id: playlist.id,
+            name: playlist.name.clone(),
+            track_ids: playlist.track_ids.clone(),
+        })
+        .collect()
 }
 
 fn playlists(library: &prolink_rekordbox::Library) -> Vec<PdbPlaylist> {
