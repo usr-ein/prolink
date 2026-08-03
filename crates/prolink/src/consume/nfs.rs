@@ -371,6 +371,13 @@ pub struct NfsClient {
     stats: NfsStats,
 }
 
+/// The first announced piece of the head.
+///
+/// Eight NFS reads at the 8 KB a CDJ serves, which is about as small as is
+/// worth announcing: below this the round trips dominate and above it a decoder
+/// waits on bytes it does not need yet.
+pub const LEAD: u64 = 64 * 1024;
+
 /// One range of a file, to be fetched as a unit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FetchStep {
@@ -398,6 +405,9 @@ pub struct FetchStep {
 ///
 /// Ranges never overlap and always cover the file exactly, so a caller can
 /// treat completion as "every step done" without reasoning about gaps.
+///
+/// The head's first step is capped at [`LEAD`], so that a decoder waiting to
+/// open the file waits for that rather than for the whole head.
 #[must_use]
 pub fn progressive_plan(size: u64, head_bytes: u64, tail_bytes: u64, chunk: u64) -> Vec<FetchStep> {
     if size == 0 {
@@ -409,10 +419,27 @@ pub fn progressive_plan(size: u64, head_bytes: u64, tail_bytes: u64, chunk: u64)
     let mut steps = Vec::new();
     let head = head_bytes.min(size);
     if head > 0 {
-        steps.push(FetchStep {
-            offset: 0,
-            len: head,
-        });
+        // The head is split so that its *first* piece is small.
+        //
+        // A step is only announced once all of it has landed, and a decoder
+        // opening the file blocks on the very first bytes -- so a head fetched
+        // as one megabyte makes the decoder wait for the whole megabyte before
+        // it can read the first 64 KB of it. Measured on a deck: 432 ms of a
+        // 480 ms load, spent waiting for bytes that had mostly already arrived.
+        //
+        // The runway is unchanged; only the reporting granularity is. Splitting
+        // the tail and middle the same way would buy nothing, because nothing
+        // is waiting on those.
+        let mut offset = 0;
+        while offset < head {
+            let len = if offset == 0 {
+                LEAD.min(head)
+            } else {
+                head - offset
+            };
+            steps.push(FetchStep { offset, len });
+            offset += len;
+        }
     }
 
     // The tail starts no earlier than the end of the head, so a small file whose

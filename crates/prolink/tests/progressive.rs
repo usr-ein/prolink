@@ -50,6 +50,43 @@ fn head_comes_first_because_it_is_the_runway() {
 }
 
 #[test]
+fn the_first_step_is_small_so_a_decoder_can_start_on_it() {
+    // A step is announced only once all of it has landed, and a decoder opening
+    // the file blocks on its first bytes. A head fetched as one piece therefore
+    // makes the decoder wait for the whole head to read the start of it: 432 ms
+    // of a 480 ms load, measured on a deck, waiting for bytes that had already
+    // arrived.
+    let steps = progressive_plan(8_000_000, 1024 * 1024, 256 * 1024, 1024 * 1024);
+    assert_eq!(
+        steps[0],
+        FetchStep {
+            offset: 0,
+            len: prolink::consume::nfs::LEAD
+        }
+    );
+    // ...and the rest of the runway is still down before anything else.
+    assert_eq!(
+        steps[1],
+        FetchStep {
+            offset: prolink::consume::nfs::LEAD,
+            len: 1024 * 1024 - prolink::consume::nfs::LEAD
+        }
+    );
+}
+
+#[test]
+fn a_head_smaller_than_the_lead_is_one_step() {
+    let steps = progressive_plan(10_000, 1_000, 256, 4_096);
+    assert_eq!(
+        steps[0],
+        FetchStep {
+            offset: 0,
+            len: 1_000
+        }
+    );
+}
+
+#[test]
 fn tail_comes_second_or_aac_never_opens() {
     // M4A and MP4 commonly keep the moov atom at the end, and a decoder cannot
     // open one without it. If the tail ever slips behind the middle, AAC stops
