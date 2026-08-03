@@ -1222,15 +1222,31 @@ async fn fetch_streaming(
         .set_len(size)
         .map_err(|error| format!("sizing {local}: {error}"))?;
 
-    let emit = |done: u64| {
+    // `offset`/`len` describe the range that just landed; `done` is only ever a
+    // fraction to show a user. A host must not infer one from the other -- the
+    // head and the tail together are `done` bytes but are not the first `done`
+    // bytes, and the gap between them reads back as silence rather than as an
+    // error.
+    let emit = |offset: u64, len: u64, done: u64| {
         let mut event = plain(EventKind::TransferProgress, 0, 0);
         event.transfer = id;
+        event.offset = offset;
+        event.len = len;
         event.done = done;
         event.total = size;
         if let Ok(mut queue) = events.lock() {
             queue.push(event);
         }
     };
+
+    // The size, the moment it is known and before a single byte of content.
+    //
+    // This is what a host waits for, and waiting for anything more would be
+    // waiting for nothing: a reader that blocks on absent ranges needs only to
+    // know how long the file is, and every byte after that it can simply ask
+    // for and be made to wait. So the caller is held for one open and one stat
+    // rather than for a megabyte of head.
+    emit(0, 0, 0);
 
     let write_at = |handle: &mut std::fs::File, offset: u64, bytes: &[u8]| -> Result<(), String> {
         handle
@@ -1247,11 +1263,14 @@ async fn fetch_streaming(
     // quietly not opening.
     let plan = prolink::consume::nfs::progressive_plan(size, head_bytes.min(size), TAIL, CHUNK);
 
-    // The first step is the head, so the runway is down before anyone is told
-    // they may start playing. The second is the tail. Everything after is the
-    // middle, in playhead order.
+    // The first step is the head, so the runway is down first. The second is
+    // the tail. Everything after is the middle, in playhead order.
+    //
+    // Every step is announced, including the head: a range that lands without
+    // being announced is a range a reader blocks on forever, which is the one
+    // way this can hang rather than merely stutter.
     let mut fetched = 0u64;
-    for (index, step) in plan.iter().enumerate() {
+    for step in &plan {
         let bytes = client
             .read_range(&file, step.offset, step.len)
             .await
@@ -1259,20 +1278,22 @@ async fn fetch_streaming(
         if bytes.is_empty() {
             return Err(format!("{remote} returned no bytes at {}", step.offset));
         }
+        let landed = bytes.len() as u64;
+        // Flushed before it is announced, not after the loop: the reader is
+        // another process's view of this same file, and announcing a range
+        // still sitting in this handle's buffer invites a read of bytes that
+        // are not there yet.
         write_at(&mut handle, step.offset, &bytes)?;
-        fetched += bytes.len() as u64;
-
-        // Announced only once the head AND the tail are down: a caller that
-        // starts on the first event needs both, one to play and one to open.
-        if index + 1 >= 2.min(plan.len()) {
-            emit(fetched);
-        }
+        handle
+            .flush()
+            .map_err(|error| format!("flushing {local}: {error}"))?;
+        fetched += landed;
+        emit(step.offset, landed, fetched);
     }
 
     handle
         .flush()
         .map_err(|error| format!("flushing {local}: {error}"))?;
-    emit(size);
     let _ = client.unmount(&mounted).await;
     Ok(())
 }

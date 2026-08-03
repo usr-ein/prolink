@@ -223,3 +223,96 @@ fn the_plan_is_deterministic() {
     let b = progressive_plan(12_345, 1_000, 256, 4_096);
     assert_eq!(a, b);
 }
+
+// ---------------------------------------------------------------------------
+// What a fetch announces as it goes
+//
+// The plan says which ranges to ask for; these say what a consumer may believe
+// while it is happening. That distinction is the whole safety argument for
+// streaming: the local file exists at full size from the first instant, and
+// every byte not yet written reads back as a zero -- successfully, with no
+// error anywhere. So a consumer that believes a byte has arrived when it has
+// not does not fail, it plays silence.
+// ---------------------------------------------------------------------------
+
+/// The announcements `fetch_streaming` makes, as (offset, len, running total).
+///
+/// A copy of its loop rather than a call into it, because the real one needs a
+/// player on the network. The invariants below are about the *shape* of the
+/// sequence, which is exactly what that loop is responsible for.
+fn announcements(size: u64, head: u64, tail: u64, chunk: u64) -> Vec<(u64, u64, u64)> {
+    let mut out = Vec::new();
+    let mut done = 0;
+    for step in progressive_plan(size, head.min(size), tail, chunk) {
+        done += step.len;
+        out.push((step.offset, step.len, done));
+    }
+    out
+}
+
+#[test]
+fn every_step_is_announced() {
+    // A range that lands without being announced is a range a reader blocks on
+    // until it times out -- the one way this hangs rather than merely stutters.
+    // An earlier version suppressed the first announcement to make "playable"
+    // mean head-and-tail, and silently lost the head with it.
+    let steps = progressive_plan(10_000, 1_000, 256, 4_096);
+    assert_eq!(announcements(10_000, 1_000, 256, 4_096).len(), steps.len());
+}
+
+#[test]
+fn the_announced_ranges_are_exactly_the_written_ones() {
+    let size = 100_000;
+    let mut written = vec![false; usize::try_from(size).unwrap()];
+    for (offset, len, _) in announcements(size, 8_192, 4_096, 16_384) {
+        for i in offset..offset + len {
+            let slot = &mut written[usize::try_from(i).unwrap()];
+            assert!(!*slot, "byte {i} announced twice");
+            *slot = true;
+        }
+    }
+    assert!(
+        written.iter().all(|&seen| seen),
+        "a byte was never announced"
+    );
+}
+
+#[test]
+fn the_running_total_is_not_a_contiguous_prefix() {
+    // The trap this whole scheme has to avoid, pinned so nobody re-introduces
+    // it: `done` counts the head and the tail together, and they are not next
+    // to each other. A consumer doing the obvious `mark_present(0, done)` would
+    // claim the bytes between them -- which are a hole, and play as silence.
+    let size = 100_000;
+    let announced = announcements(size, 8_192, 4_096, 16_384);
+    let (_, _, done_after_tail) = announced[1];
+    assert_eq!(done_after_tail, 8_192 + 4_096);
+
+    // Everything the fetch has actually written after two steps.
+    let head_end = 8_192;
+    let tail_start = size - 4_096;
+    assert!(
+        done_after_tail < tail_start,
+        "the gap has to be real for this to be worth testing"
+    );
+    // The byte at `done_after_tail - 1` is inside the claim but outside the
+    // head, and nothing has written it.
+    assert!(done_after_tail > head_end);
+    assert!(done_after_tail - 1 < tail_start);
+}
+
+#[test]
+fn the_head_is_announced_before_anything_else() {
+    // So a decoder can start on the container header while the rest arrives.
+    let announced = announcements(100_000, 8_192, 4_096, 16_384);
+    assert_eq!(announced[0].0, 0);
+    assert_eq!(announced[0].1, 8_192);
+}
+
+#[test]
+fn a_file_smaller_than_the_head_is_one_announcement() {
+    // The common short-file case: nothing to stream, and no second step to
+    // wait for. A consumer that assumed at least two would wait forever.
+    let announced = announcements(500, 8_192, 4_096, 16_384);
+    assert_eq!(announced, vec![(0, 500, 500)]);
+}

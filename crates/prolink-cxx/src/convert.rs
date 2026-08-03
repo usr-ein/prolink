@@ -131,6 +131,8 @@ pub(crate) fn plain(kind: EventKind, device: u8, beat_in_bar: u8) -> Event {
         transfer: 0,
         done: 0,
         total: 0,
+        offset: 0,
+        len: 0,
         ok: true,
         detail: String::new(),
         path: String::new(),

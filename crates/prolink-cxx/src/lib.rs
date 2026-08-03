@@ -639,11 +639,29 @@ pub mod ffi {
 
         /// Which transfer, for the two transfer kinds. Zero otherwise.
         transfer: u32,
-        /// Bytes transferred so far, contiguous from the start of the file —
-        /// never a running total that could exceed what is safely assembled.
+        /// Bytes transferred so far, in total. A fraction to show a user, and
+        /// **not** a statement about which bytes are on disk: a streaming fetch
+        /// takes the head, then the tail, then the middle, so after two steps
+        /// `done` counts bytes that are not contiguous with each other.
+        ///
+        /// Anything deciding whether a byte may be read must use `offset` and
+        /// `len` instead. Reading a hole is silent — it yields the zeros of a
+        /// sparse file rather than an error — so the difference matters far more
+        /// than it looks.
         done: u64,
         /// Bytes the file holds. Zero if not yet known.
+        ///
+        /// A streaming fetch announces the size on its own, in a first event
+        /// with `len` zero, as soon as the file has been opened and stat'd.
+        /// That is what lets a host size its view of the file and start
+        /// decoding without waiting for any content at all.
         total: u64,
+        /// For `TransferProgress`, where the range that just landed starts.
+        offset: u64,
+        /// For `TransferProgress`, how long that range is. Zero when the event
+        /// carries no new bytes — the size announcement above, and the final
+        /// summary — and such an event must not be taken as data arriving.
+        len: u64,
         /// For `TransferDone`, whether it succeeded.
         ok: bool,
         /// For a failed `TransferDone`, why. Empty otherwise.
@@ -730,9 +748,23 @@ pub mod ffi {
         /// look plausible and then yields a library missing its last few
         /// hundred tracks.
         /// Fetch a track head-first so it can be played before it has fully
-        /// arrived. The local file is created at its full size immediately;
-        /// the first TransferProgress event means `head_bytes` are there and
-        /// playback may start, and TransferDone means the whole file is local.
+        /// arrived.
+        ///
+        /// The local file is created at its full size immediately, sparse, so a
+        /// decoder reading it sees the right duration from the start. Then:
+        ///
+        ///  * the **first** `TransferProgress` carries `total` and nothing else
+        ///    — the size, as soon as the file has been opened and stat'd, which
+        ///    is everything a caller needs to start;
+        ///  * each one after it carries the `offset` and `len` of a range that
+        ///    has landed and been flushed, head first, then tail, then the
+        ///    middle in playhead order;
+        ///  * `TransferDone` means the whole file is local.
+        ///
+        /// **The gaps are real.** Until a range has been announced, that part
+        /// of the file is a sparse hole and reads back as zeros, successfully.
+        /// A caller that decodes ahead of the announcements gets silence, not
+        /// an error, so it must block on anything it has not been told about.
         fn fetch_file_streaming(
             self: &Session,
             device_number: u8,
