@@ -472,6 +472,21 @@ impl CdjStatus {
     const OFF_FIRMWARE: usize = 0x7c;
     const OFF_BROWSE_LIST_SIZE: usize = 0x46;
     const OFF_FLAGS: usize = 0x89;
+    /// A second play-state byte, and **not** a copy of `0x7b`.
+    ///
+    /// `0xfa` while the deck is producing sound and `0xfe` otherwise, across
+    /// every one of the 25,000 status packets in this corpus bar 120 caught
+    /// mid-transition. A deck that leaves this at the idle value while claiming
+    /// to play is describing something no hardware has ever sent.
+    const OFF_PLAY_STATE_3: usize = 0x8b;
+    /// `0x8000` when the deck has a tempo, `0x7fff` when it does not.
+    ///
+    /// Perfectly correlated with the BPM field being something other than the
+    /// `0xffff` sentinel — 16,192 captured packets with no tempo all carry
+    /// `0x7fff` and every packet with one carries `0x8000`. It reads like the
+    /// "is my tempo meaningful" flag a follower checks before locking to a
+    /// master, which is what makes it worth writing rather than inheriting.
+    const OFF_TEMPO_VALID: usize = 0x90;
     const OFF_PITCH: usize = 0x8c;
     const OFF_BPM: usize = 0x92;
     const OFF_MASTER_MEANINGFUL: usize = 0x9e;
@@ -917,6 +932,25 @@ impl CdjStatusBuilder {
             u8::from(self.link_available),
         );
         put(&mut raw, CdjStatus::OFF_PLAY_STATE, self.play_state);
+        // The other two bytes that say the same thing in different words. A
+        // real deck keeps all three in step and a follower reads more than one
+        // of them: leaving these at the skeleton's idle values while byte 0x7b
+        // said "playing" is what made a CDJ draw our phase and refuse to
+        // follow our tempo.
+        put(
+            &mut raw,
+            CdjStatus::OFF_PLAY_STATE_3,
+            if self.playing { 0xfa } else { 0xfe },
+        );
+        put_u16(
+            &mut raw,
+            CdjStatus::OFF_TEMPO_VALID,
+            if self.bpm_centi.is_some() {
+                0x8000
+            } else {
+                0x7fff
+            },
+        );
         for (index, byte) in self.firmware.bytes().take(4).enumerate() {
             put(&mut raw, CdjStatus::OFF_FIRMWARE + index, byte);
         }
@@ -1567,10 +1601,12 @@ mod tests {
                 CdjStatus::OFF_FLAGS,
                 CdjStatus::OFF_MASTER_MEANINGFUL,
                 CdjStatus::OFF_BEAT_IN_BAR,
+                CdjStatus::OFF_PLAY_STATE_3,
             ])
             .chain(CdjStatus::OFF_FIRMWARE..CdjStatus::OFF_FIRMWARE + 4)
             .chain(CdjStatus::OFF_PACKET_COUNTER..CdjStatus::OFF_PACKET_COUNTER + 4)
             .chain(CdjStatus::OFF_BPM..CdjStatus::OFF_BPM + 2)
+            .chain(CdjStatus::OFF_TEMPO_VALID..CdjStatus::OFF_TEMPO_VALID + 2)
             .chain(CdjStatus::OFF_BEAT_NUMBER..CdjStatus::OFF_BEAT_NUMBER + 4)
             .chain(
                 CdjStatus::OFF_PITCH_COPIES
@@ -1588,6 +1624,34 @@ mod tests {
             unexpected.is_empty(),
             "disturbed bytes we do not understand: {unexpected:x?}"
         );
+    }
+
+    #[test]
+    fn the_three_play_state_bytes_agree_with_each_other() {
+        // A follower reads more than one of them. Byte 0x7b saying "playing"
+        // while 0x8b and 0x90 still hold the skeleton's idle values describes a
+        // deck no hardware has ever been, and a CDJ that saw it drew our phase
+        // and would not lock to our tempo.
+        let playing = CdjStatus::builder()
+            .play_state(0x03)
+            .playing(true)
+            .tempo(Some(14_110), Pitch::UNITY)
+            .build();
+        assert_eq!(byte_at(playing.as_bytes(), 0x8b), Some(0xfa));
+        assert_eq!(be_u16_at(playing.as_bytes(), 0x90), Some(0x8000));
+
+        let idle = CdjStatus::builder().build();
+        assert_eq!(byte_at(idle.as_bytes(), 0x8b), Some(0xfe));
+        assert_eq!(be_u16_at(idle.as_bytes(), 0x90), Some(0x7fff));
+
+        // Loaded but stopped: it has a tempo to state and is making no sound,
+        // and the two bytes say those two different things.
+        let paused = CdjStatus::builder()
+            .play_state(0x05)
+            .tempo(Some(14_110), Pitch::UNITY)
+            .build();
+        assert_eq!(byte_at(paused.as_bytes(), 0x8b), Some(0xfe));
+        assert_eq!(be_u16_at(paused.as_bytes(), 0x90), Some(0x8000));
     }
 
     #[test]

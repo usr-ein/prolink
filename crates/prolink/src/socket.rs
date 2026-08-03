@@ -82,11 +82,7 @@ pub(crate) fn bind(port: u16, interface: Option<&Interface>) -> Result<UdpSocket
 /// button. Awaiting `send_to` would fix it and would also mean holding the
 /// session lock across an await, which the guard's type forbids. A blocking
 /// socket sends immediately: there is no queue to fill with a single datagram.
-pub(crate) fn send_once(
-    interface: &Interface,
-    to: SocketAddr,
-    datagram: &[u8],
-) -> Result<()> {
+pub(crate) fn send_once(interface: &Interface, to: SocketAddr, datagram: &[u8]) -> Result<()> {
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
         .map_err(Error::io("creating a UDP socket"))?;
     socket
