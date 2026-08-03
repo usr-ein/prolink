@@ -400,6 +400,12 @@ pub struct VirtualCdj {
     status_counter: Arc<AtomicU32>,
     /// What this host is playing, for the status stream and the beat emitter.
     playback: Arc<PlaybackCell>,
+    /// What this host has loaded, for the status stream.
+    ///
+    /// Separate from `playback` because it changes once per load rather than
+    /// thirty times a second, and because it must **not** go stale: a tempo
+    /// with no track beside it is a state no deck has ever published.
+    playing_track: Arc<Mutex<Option<status::LoadedTrack>>>,
     /// Whether we claim tempo master.
     ///
     /// A plain flag rather than a state machine: taking mastership *from*
@@ -410,6 +416,13 @@ pub struct VirtualCdj {
     /// this supports is the safe half: hold master while nobody else does, and
     /// step aside the moment somebody claims it.
     tempo_master: Arc<AtomicBool>,
+    /// Whether SYNC is engaged here, for flag bit 4.
+    ///
+    /// Published so the rest of the network can see that this deck is
+    /// following rather than flying its own tempo -- which is what a CDJ shows
+    /// on its SYNC button and what decides whether it is part of the tempo
+    /// group at all.
+    synced: Arc<AtomicBool>,
     tasks: Vec<JoinHandle<()>>,
 }
 
@@ -482,7 +495,9 @@ impl VirtualCdj {
             status_tap,
             status_counter: Arc::new(AtomicU32::new(0)),
             playback: Arc::new(PlaybackCell::default()),
+            playing_track: Arc::new(Mutex::new(None)),
             tempo_master: Arc::new(AtomicBool::new(false)),
+            synced: Arc::new(AtomicBool::new(false)),
             tasks: Vec::new(),
         };
         cdj.tasks.push(cdj.spawn_keep_alive(discovery));
@@ -560,9 +575,37 @@ impl VirtualCdj {
         self.playback.set(playback);
     }
 
-    /// Nothing is loaded and nothing is playing.
+    /// Nothing is playing here.
+    ///
+    /// Deliberately does **not** clear the loaded track. The two are set by
+    /// different things at different moments: the browser says what it loaded
+    /// the instant it loads it, and the tempo poll says what is playing thirty
+    /// times a second -- so a poll that happened to land in the gap before the
+    /// engine had the track was wiping the announcement that had just been
+    /// made, and the track never reached the wire at all.
     pub fn clear_playback(&self) {
         self.playback.clear();
+    }
+
+    /// State what is loaded, and whose medium it came from.
+    ///
+    /// **Required alongside a tempo, not optional beside it.** A deck that
+    /// publishes a tempo always publishes this too, and a CDJ asked to follow a
+    /// master with no track simply does not.
+    pub fn set_loaded_track(&self, track: Option<status::LoadedTrack>) {
+        match self.playing_track.lock() {
+            Ok(mut held) => *held = track,
+            Err(poisoned) => *poisoned.into_inner() = track,
+        }
+    }
+
+    /// What we are announcing as loaded.
+    #[must_use]
+    pub fn loaded_track(&self) -> Option<status::LoadedTrack> {
+        match self.playing_track.lock() {
+            Ok(held) => *held,
+            Err(poisoned) => *poisoned.into_inner(),
+        }
     }
 
     /// What we are announcing as playing, playhead projected to now.
@@ -579,6 +622,11 @@ impl VirtualCdj {
     /// find out.
     pub fn set_tempo_master(&self, master: bool) {
         self.tempo_master.store(master, Ordering::Relaxed);
+    }
+
+    /// Whether SYNC is engaged here.
+    pub fn set_synced(&self, synced: bool) {
+        self.synced.store(synced, Ordering::Relaxed);
     }
 
     /// Whether we are claiming tempo master.
@@ -751,8 +799,12 @@ impl VirtualCdj {
             self.media.as_ref(),
             &self.status_counter,
             peers,
-            &self.playback.now(),
-            self.is_tempo_master(),
+            Transport {
+                playback: &self.playback.now(),
+                loaded: self.loaded_track(),
+                tempo_master: self.is_tempo_master(),
+                synced: self.synced.load(Ordering::Relaxed),
+            },
         )
     }
 
@@ -821,7 +873,9 @@ impl VirtualCdj {
         let counter = Arc::clone(&self.status_counter);
         let table = PeerAddresses::new(discovery);
         let playback = Arc::clone(&self.playback);
+        let playing_track = Arc::clone(&self.playing_track);
         let master = Arc::clone(&self.tempo_master);
+        let synced = Arc::clone(&self.synced);
 
         Ok(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(status::STATUS_INTERVAL);
@@ -834,8 +888,12 @@ impl VirtualCdj {
                     media.as_ref(),
                     &counter,
                     peers.len(),
-                    &playback.now(),
-                    master.load(Ordering::Relaxed),
+                    Transport {
+                        playback: &playback.now(),
+                        loaded: playing_track.lock().ok().and_then(|held| *held),
+                        tempo_master: master.load(Ordering::Relaxed),
+                        synced: synced.load(Ordering::Relaxed),
+                    },
                 );
                 counter.fetch_add(1, Ordering::Relaxed);
                 for peer in peers {
@@ -1195,15 +1253,36 @@ fn beat_to_emit(playback: &Playback, emitted: &mut Option<u32>) -> Option<BeatPo
     }
 }
 
+/// Everything the status packet says about what this deck is *doing*, as
+/// against what media it has.
+///
+/// One struct because they travel together and are read together: a follower
+/// checks several of them against each other, and a packet where the tempo,
+/// the loaded track and the play state disagree describes a deck that has
+/// never existed. Passing them as loose arguments made that easy to get wrong
+/// and easy to leave out.
+#[derive(Clone, Copy, Debug)]
+struct Transport<'a> {
+    playback: &'a Playback,
+    loaded: Option<status::LoadedTrack>,
+    tempo_master: bool,
+    synced: bool,
+}
+
 fn status_packet(
     config: &VirtualCdjConfig,
     number: &AtomicU8,
     media: &dyn MediaSource,
     counter: &AtomicU32,
     peers: usize,
-    playback: &Playback,
-    tempo_master: bool,
+    transport: Transport<'_>,
 ) -> CdjStatus {
+    let Transport {
+        playback,
+        loaded,
+        tempo_master,
+        synced,
+    } = transport;
     let occupied = media.occupied_slots();
     let state = |slot: Slot| media.slot_state(slot);
     let mut builder = CdjStatus::builder()
@@ -1214,8 +1293,10 @@ fn status_packet(
         .firmware(&config.firmware)
         .packet_counter(counter.load(Ordering::Relaxed))
         .tempo(playback.bpm_centi, playback.pitch)
+        .loaded_track(loaded)
         .playing(playback.playing)
         .tempo_master(tempo_master)
+        .synced(synced)
         .beat(
             playback.beat.map(|beat| beat.number),
             playback.beat.map(BeatPosition::in_bar),
@@ -1567,8 +1648,12 @@ mod tests {
             &UsbOnly,
             &counter,
             1,
-            &Playback::default(),
-            false,
+            Transport {
+                playback: &Playback::default(),
+                loaded: None,
+                tempo_master: false,
+                synced: false,
+            },
         );
         assert_eq!(packet.usb_state(), MediaState::LOADED);
         assert_eq!(
@@ -1583,6 +1668,15 @@ mod tests {
             "a server with nothing playing states no tempo"
         );
         assert_eq!(packet.beat_in_bar(), None);
+    }
+
+    /// Track 42 off player 2's USB, which is where `playing()` came from.
+    fn playing_track() -> status::LoadedTrack {
+        status::LoadedTrack {
+            source_player: DeviceNumber::new(2).expect("device 2"),
+            slot: Slot::USB,
+            id: 42,
+        }
     }
 
     /// A deck playing 145.00 BPM, on beat 6, halfway through it.
@@ -1611,13 +1705,23 @@ mod tests {
             &NoMedia,
             &counter,
             1,
-            &playing(),
-            true,
+            Transport {
+                playback: &playing(),
+                loaded: Some(playing_track()),
+                tempo_master: true,
+                synced: false,
+            },
         );
         assert_eq!(packet.bpm_centi(), Some(14_500));
         assert_eq!(packet.beat_number(), Some(6));
         assert_eq!(packet.beat_in_bar(), prolink_proto::beat::BeatInBar::new(2));
         assert_eq!(packet.is_tempo_master(), Some(true));
+        // The track the tempo belongs to. A master that states one without the
+        // other is a state no deck has ever published, and a CDJ will not
+        // follow it -- which is how this was found.
+        assert_eq!(packet.track_id(), 42);
+        assert_eq!(packet.source_slot(), Slot::USB);
+        assert_eq!(packet.track_type(), 1);
         assert_eq!(
             packet.play_state(),
             Some(crate::monitor::PlayState::PLAYING.0)
@@ -1637,11 +1741,15 @@ mod tests {
             &NoMedia,
             &counter,
             0,
-            &Playback {
-                playing: false,
-                ..playing()
+            Transport {
+                playback: &Playback {
+                    playing: false,
+                    ..playing()
+                },
+                loaded: Some(playing_track()),
+                tempo_master: false,
+                synced: false,
             },
-            false,
         );
         assert_eq!(packet.bpm_centi(), Some(14_500));
         assert_eq!(
@@ -1770,8 +1878,12 @@ mod tests {
             &Ejecting,
             &counter,
             1,
-            &Playback::default(),
-            false,
+            Transport {
+                playback: &Playback::default(),
+                loaded: None,
+                tempo_master: false,
+                synced: false,
+            },
         );
         assert_eq!(packet.usb_state(), MediaState::UNMOUNTING_ALT);
         assert_eq!(packet.sd_state(), MediaState::EMPTY);

@@ -479,6 +479,18 @@ impl CdjStatus {
     /// mid-transition. A deck that leaves this at the idle value while claiming
     /// to play is describing something no hardware has ever sent.
     const OFF_PLAY_STATE_3: usize = 0x8b;
+    /// A third statement of what the deck is doing, as a small bit field.
+    ///
+    /// `0x00` with no track, `0x01` with one loaded, `0x09` while playing —
+    /// across all 25,766 status packets in this corpus, which reads as bit 0
+    /// "a track is loaded" and bit 3 "sound is coming out". Four packets carry
+    /// `0x0d`, a fifth bit we cannot name and do not set.
+    const OFF_LOADED_AND_PLAYING: usize = 0x9d;
+    /// Bit 0 of `0x9d`.
+    const LOADED_BIT: u8 = 0x01;
+    /// Bit 3 of `0x9d`.
+    const PLAYING_BIT: u8 = 0x08;
+
     /// `0x8000` when the deck has a tempo, `0x7fff` when it does not.
     ///
     /// Perfectly correlated with the BPM field being something other than the
@@ -767,6 +779,25 @@ pub struct CdjStatusBuilder {
     tempo_master: bool,
     beat_number: Option<u32>,
     beat_in_bar: Option<BeatInBar>,
+    loaded_track: Option<LoadedTrack>,
+}
+
+/// What a deck is playing, and whose medium it came from.
+///
+/// **A deck that states a tempo always states this too.** Across 25,766
+/// captured status packets, bytes `0x28`-`0x2f` are zero only while byte `0x92`
+/// holds the no-tempo sentinel, and non-zero in every packet that carries a
+/// real tempo. Announcing a tempo with no track is a combination no hardware
+/// has ever sent, and a deck asked to follow such a master ignores it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LoadedTrack {
+    /// Whose medium it came from — the deck's own number when it is playing
+    /// off its own stick, and another player's when playing over the link.
+    pub source_player: DeviceNumber,
+    /// Which of that player's slots.
+    pub slot: Slot,
+    /// The rekordbox row id.
+    pub id: u32,
 }
 
 impl Default for CdjStatusBuilder {
@@ -788,6 +819,7 @@ impl Default for CdjStatusBuilder {
             tempo_master: false,
             beat_number: None,
             beat_in_bar: None,
+            loaded_track: None,
         }
     }
 }
@@ -898,6 +930,17 @@ impl CdjStatusBuilder {
         self
     }
 
+    /// What is loaded, and whose medium it came from.
+    ///
+    /// `None` is "nothing loaded", and it is the only state in which a tempo
+    /// may be absent — the two go together on real hardware and a follower
+    /// treats a master with no track as having nothing to follow.
+    #[must_use]
+    pub fn loaded_track(mut self, track: Option<LoadedTrack>) -> Self {
+        self.loaded_track = track;
+        self
+    }
+
     /// Where the playhead is on the grid: beats since the start of the track,
     /// counting from 1, and which beat of the bar that is.
     ///
@@ -908,6 +951,107 @@ impl CdjStatusBuilder {
         self.beat_number = number;
         self.beat_in_bar = in_bar;
         self
+    }
+
+    /// Everything that says what the deck is doing: the play-state bytes, the
+    /// tempo, the flags, the grid position and the loaded track.
+    ///
+    /// Split out from `build` because they are a *set* -- a deck keeps them
+    /// consistent and a follower reads several of them, so leaving any one at
+    /// the skeleton's idle value describes a deck that has never existed.
+    fn write_transport(&self, raw: &mut [u8]) {
+        put(raw, CdjStatus::OFF_PLAY_STATE, self.play_state);
+        // The other two bytes that say the same thing in different words. A
+        // real deck keeps all three in step and a follower reads more than one
+        // of them: leaving these at the skeleton's idle values while byte 0x7b
+        // said "playing" is what made a CDJ draw our phase and refuse to
+        // follow our tempo.
+        put(
+            raw,
+            CdjStatus::OFF_PLAY_STATE_3,
+            if self.playing { 0xfa } else { 0xfe },
+        );
+        put_u16(
+            raw,
+            CdjStatus::OFF_TEMPO_VALID,
+            if self.bpm_centi.is_some() {
+                0x8000
+            } else {
+                0x7fff
+            },
+        );
+
+        // Bit 7 of the flags byte is set in every captured packet and has no
+        // known meaning, so it is kept from the template rather than rebuilt.
+        let mut flags = raw.get(CdjStatus::OFF_FLAGS).copied().unwrap_or(0x84);
+        for (bit, set) in [
+            (StatusFlags::PLAYING, self.playing),
+            (StatusFlags::TEMPO_MASTER, self.tempo_master),
+            (StatusFlags::SYNC, self.synced),
+            (StatusFlags::ON_AIR, self.on_air),
+        ] {
+            if set {
+                flags |= bit;
+            } else {
+                flags &= !bit;
+            }
+        }
+        put(raw, CdjStatus::OFF_FLAGS, flags);
+        put(
+            raw,
+            CdjStatus::OFF_MASTER_MEANINGFUL,
+            u8::from(self.tempo_master),
+        );
+
+        for offset in CdjStatus::OFF_PITCH_COPIES {
+            put_u32(raw, offset, self.pitch.0);
+        }
+        put_u32(
+            raw,
+            CdjStatus::OFF_BEAT_NUMBER,
+            self.beat_number.unwrap_or(CdjStatus::NO_BEAT_NUMBER),
+        );
+        put_u16(raw, CdjStatus::OFF_BPM, self.bpm_centi.unwrap_or(NO_TEMPO));
+        put(
+            raw,
+            CdjStatus::OFF_BEAT_IN_BAR,
+            self.beat_in_bar.map_or(0, BeatInBar::get),
+        );
+
+        // What is loaded. Zeroed rather than left as the skeleton's when
+        // nothing is, because the skeleton came from a deck with a track in it.
+        put(
+            raw,
+            CdjStatus::OFF_SOURCE_PLAYER,
+            self.loaded_track
+                .map_or(0, |track| track.source_player.get()),
+        );
+        put(
+            raw,
+            CdjStatus::OFF_SOURCE_SLOT,
+            self.loaded_track.map_or(0, |track| track.slot.0),
+        );
+        // `1` is a rekordbox track. Everything this library serves or plays is
+        // one; `2`, an unanalysed file, would be a claim we cannot support.
+        put(
+            raw,
+            CdjStatus::OFF_TRACK_TYPE,
+            u8::from(self.loaded_track.is_some()),
+        );
+        put_u32(
+            raw,
+            CdjStatus::OFF_TRACK_ID,
+            self.loaded_track.map_or(0, |track| track.id),
+        );
+
+        let mut loaded_and_playing = 0u8;
+        if self.loaded_track.is_some() || self.bpm_centi.is_some() {
+            loaded_and_playing |= CdjStatus::LOADED_BIT;
+        }
+        if self.playing {
+            loaded_and_playing |= CdjStatus::PLAYING_BIT;
+        }
+        put(raw, CdjStatus::OFF_LOADED_AND_PLAYING, loaded_and_playing);
     }
 
     /// Produce the packet.
@@ -931,71 +1075,11 @@ impl CdjStatusBuilder {
             CdjStatus::OFF_LINK_AVAILABLE,
             u8::from(self.link_available),
         );
-        put(&mut raw, CdjStatus::OFF_PLAY_STATE, self.play_state);
-        // The other two bytes that say the same thing in different words. A
-        // real deck keeps all three in step and a follower reads more than one
-        // of them: leaving these at the skeleton's idle values while byte 0x7b
-        // said "playing" is what made a CDJ draw our phase and refuse to
-        // follow our tempo.
-        put(
-            &mut raw,
-            CdjStatus::OFF_PLAY_STATE_3,
-            if self.playing { 0xfa } else { 0xfe },
-        );
-        put_u16(
-            &mut raw,
-            CdjStatus::OFF_TEMPO_VALID,
-            if self.bpm_centi.is_some() {
-                0x8000
-            } else {
-                0x7fff
-            },
-        );
         for (index, byte) in self.firmware.bytes().take(4).enumerate() {
             put(&mut raw, CdjStatus::OFF_FIRMWARE + index, byte);
         }
-
-        // Bit 7 of the flags byte is set in every captured packet and has no
-        // known meaning, so it is kept from the template rather than rebuilt.
-        let mut flags = raw.get(CdjStatus::OFF_FLAGS).copied().unwrap_or(0x84);
-        for (bit, set) in [
-            (StatusFlags::PLAYING, self.playing),
-            (StatusFlags::TEMPO_MASTER, self.tempo_master),
-            (StatusFlags::SYNC, self.synced),
-            (StatusFlags::ON_AIR, self.on_air),
-        ] {
-            if set {
-                flags |= bit;
-            } else {
-                flags &= !bit;
-            }
-        }
-        put(&mut raw, CdjStatus::OFF_FLAGS, flags);
-        put(
-            &mut raw,
-            CdjStatus::OFF_MASTER_MEANINGFUL,
-            u8::from(self.tempo_master),
-        );
-
-        for offset in CdjStatus::OFF_PITCH_COPIES {
-            put_u32(&mut raw, offset, self.pitch.0);
-        }
-        put_u32(
-            &mut raw,
-            CdjStatus::OFF_BEAT_NUMBER,
-            self.beat_number.unwrap_or(CdjStatus::NO_BEAT_NUMBER),
-        );
         put_u32(&mut raw, CdjStatus::OFF_PACKET_COUNTER, self.packet_counter);
-        put_u16(
-            &mut raw,
-            CdjStatus::OFF_BPM,
-            self.bpm_centi.unwrap_or(NO_TEMPO),
-        );
-        put(
-            &mut raw,
-            CdjStatus::OFF_BEAT_IN_BAR,
-            self.beat_in_bar.map_or(0, BeatInBar::get),
-        );
+        self.write_transport(&mut raw);
         CdjStatus { raw }
     }
 }
@@ -1602,12 +1686,17 @@ mod tests {
                 CdjStatus::OFF_MASTER_MEANINGFUL,
                 CdjStatus::OFF_BEAT_IN_BAR,
                 CdjStatus::OFF_PLAY_STATE_3,
+                CdjStatus::OFF_LOADED_AND_PLAYING,
+                CdjStatus::OFF_SOURCE_PLAYER,
+                CdjStatus::OFF_SOURCE_SLOT,
+                CdjStatus::OFF_TRACK_TYPE,
             ])
             .chain(CdjStatus::OFF_FIRMWARE..CdjStatus::OFF_FIRMWARE + 4)
             .chain(CdjStatus::OFF_PACKET_COUNTER..CdjStatus::OFF_PACKET_COUNTER + 4)
             .chain(CdjStatus::OFF_BPM..CdjStatus::OFF_BPM + 2)
             .chain(CdjStatus::OFF_TEMPO_VALID..CdjStatus::OFF_TEMPO_VALID + 2)
             .chain(CdjStatus::OFF_BEAT_NUMBER..CdjStatus::OFF_BEAT_NUMBER + 4)
+            .chain(CdjStatus::OFF_TRACK_ID..CdjStatus::OFF_TRACK_ID + 4)
             .chain(
                 CdjStatus::OFF_PITCH_COPIES
                     .into_iter()
@@ -1652,6 +1741,50 @@ mod tests {
             .build();
         assert_eq!(byte_at(paused.as_bytes(), 0x8b), Some(0xfe));
         assert_eq!(be_u16_at(paused.as_bytes(), 0x90), Some(0x8000));
+    }
+
+    #[test]
+    fn a_tempo_always_comes_with_a_track_it_belongs_to() {
+        // Bytes 0x28-0x2f are zero *only* while byte 0x92 holds the no-tempo
+        // sentinel, in all 25,766 captured packets. A master announcing a tempo
+        // and no track is a combination no deck has ever sent, and a CDJ asked
+        // to follow one ignores it -- which is exactly what it did.
+        let playing = CdjStatus::builder()
+            .device_number(device(4))
+            .tempo(Some(14_110), Pitch::UNITY)
+            .playing(true)
+            .loaded_track(Some(LoadedTrack {
+                source_player: device(2),
+                slot: Slot::USB,
+                id: 1234,
+            }))
+            .build();
+        let parsed = CdjStatus::parse(playing.as_bytes()).expect("our own packet");
+        assert_eq!(parsed.source_player(), Some(device(2)));
+        assert_eq!(parsed.source_slot(), Slot::USB);
+        assert_eq!(parsed.track_type(), 1, "a rekordbox track");
+        assert_eq!(parsed.track_id(), 1234);
+        // ...and the third byte that says the same thing a third way.
+        assert_eq!(byte_at(parsed.as_bytes(), 0x9d), Some(0x09));
+
+        let idle = CdjStatus::builder().device_number(device(4)).build();
+        assert_eq!(idle.source_player(), None);
+        assert_eq!(idle.track_id(), 0);
+        assert_eq!(idle.track_type(), 0);
+        assert_eq!(byte_at(idle.as_bytes(), 0x9d), Some(0x00));
+
+        // Loaded but stopped: bit 0 without bit 3.
+        let paused = CdjStatus::builder()
+            .device_number(device(4))
+            .tempo(Some(14_110), Pitch::UNITY)
+            .loaded_track(Some(LoadedTrack {
+                source_player: device(4),
+                slot: Slot::SD,
+                id: 7,
+            }))
+            .build();
+        assert_eq!(byte_at(paused.as_bytes(), 0x9d), Some(0x01));
+        assert_eq!(paused.source_slot(), Slot::SD);
     }
 
     #[test]

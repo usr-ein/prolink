@@ -763,6 +763,15 @@ pub mod ffi {
             beat_fraction: f64,
         );
 
+        /// State what this host has loaded, and whose medium it came from.
+        ///
+        /// **A tempo without this is ignored.** A deck publishes both or
+        /// neither; a CDJ asked to follow a master that claims a tempo and no
+        /// track does not follow it. `source_player` is the player whose
+        /// medium the track came from — our own number when playing off our
+        /// own stick — and `track_id` is the rekordbox row id.
+        fn set_loaded_track(self: &Session, source_player: u8, slot: Slot, track_id: u32);
+
         /// Nothing is loaded here. The network stops seeing a tempo from us.
         fn clear_playback(self: &Session);
 
@@ -772,6 +781,13 @@ pub mod ffi {
         /// takes effect once that device has yielded, which takes a packet or
         /// two — watch `is_tempo_master`.
         fn take_tempo_master(self: &Session);
+
+        /// Whether SYNC is engaged here.
+        ///
+        /// Published as flag bit 4, which is what a CDJ lights its own SYNC
+        /// button from and what says this deck is following rather than flying
+        /// its own tempo.
+        fn set_synced(self: &Session, synced: bool);
 
         /// Give up tempo master.
         fn release_tempo_master(self: &Session);

@@ -645,6 +645,28 @@ impl Session {
         });
     }
 
+    /// State what this host has loaded, and whose medium it came from.
+    ///
+    /// **A tempo without this is ignored.** A deck publishes both or neither,
+    /// and a CDJ asked to follow a master that claims a tempo and no track does
+    /// not follow it. `source_player` is the player whose medium the track came
+    /// from — our own number when playing off our own stick — and `track_id` is
+    /// the rekordbox row id.
+    pub fn set_loaded_track(&self, source_player: u8, slot: Slot, track_id: u32) {
+        let track = prolink::DeviceNumber::new(source_player).map(|source_player| {
+            prolink_proto::status::LoadedTrack {
+                source_player,
+                slot: convert::slot_back(slot),
+                id: track_id,
+            }
+        });
+        self.with_live(|live| {
+            if let Some(cdj) = live.role.cdj() {
+                cdj.set_loaded_track(track);
+            }
+        });
+    }
+
     /// Nothing is loaded here.
     pub fn clear_playback(&self) {
         self.with_live(|live| {
@@ -758,6 +780,15 @@ impl Session {
                 }
             }
             tracing::warn!(%holder, "the tempo master never yielded");
+        });
+    }
+
+    /// Whether SYNC is engaged here, published as flag bit 4.
+    pub fn set_synced(&self, synced: bool) {
+        self.with_live(|live| {
+            if let Some(cdj) = live.role.cdj() {
+                cdj.set_synced(synced);
+            }
         });
     }
 
