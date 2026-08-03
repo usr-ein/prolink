@@ -371,6 +371,70 @@ pub struct NfsClient {
     stats: NfsStats,
 }
 
+/// One range of a file, to be fetched as a unit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FetchStep {
+    /// Offset into the file.
+    pub offset: u64,
+    /// How many bytes. Never zero, and never past the end.
+    pub len: u64,
+}
+
+/// Order the ranges of a progressive fetch: **head, then tail, then middle**.
+///
+/// A track that has to be downloaded before it can be played takes as long to
+/// load as it takes to download. Fetching it in this order lets playback start
+/// once the head is down, with the rest arriving behind the playhead.
+///
+/// The order is not arbitrary and neither part of it is optional:
+///
+/// * **Head first** because that is the runway. Nothing can start without it.
+/// * **Tail second** because of the containers that keep their index at the
+///   end. MP3 decodes happily from the front, but M4A and MP4 commonly put the
+///   `moov` atom last, and a decoder cannot open one *at all* without it — so
+///   deferring the tail to its natural position would mean AAC never plays.
+/// * **Middle last**, in order, because that is the direction the playhead
+///   travels.
+///
+/// Ranges never overlap and always cover the file exactly, so a caller can
+/// treat completion as "every step done" without reasoning about gaps.
+#[must_use]
+pub fn progressive_plan(size: u64, head_bytes: u64, tail_bytes: u64, chunk: u64) -> Vec<FetchStep> {
+    if size == 0 {
+        return Vec::new();
+    }
+    // A zero chunk would loop forever; treat it as "the rest in one go".
+    let chunk = if chunk == 0 { u64::MAX } else { chunk };
+
+    let mut steps = Vec::new();
+    let head = head_bytes.min(size);
+    if head > 0 {
+        steps.push(FetchStep {
+            offset: 0,
+            len: head,
+        });
+    }
+
+    // The tail starts no earlier than the end of the head, so a small file whose
+    // head and tail would overlap yields one range rather than two that repeat
+    // the same bytes.
+    let tail_start = size.saturating_sub(tail_bytes).max(head);
+    if tail_start < size {
+        steps.push(FetchStep {
+            offset: tail_start,
+            len: size - tail_start,
+        });
+    }
+
+    let mut offset = head;
+    while offset < tail_start {
+        let len = chunk.min(tail_start - offset);
+        steps.push(FetchStep { offset, len });
+        offset += len;
+    }
+    steps
+}
+
 impl NfsClient {
     /// Discover `peer`'s RPC ports and be ready to mount.
     ///

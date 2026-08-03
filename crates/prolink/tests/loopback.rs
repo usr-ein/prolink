@@ -651,3 +651,170 @@ async fn a_handle_whose_tail_a_cdj_rewrote_still_resolves() {
 
     std::fs::remove_dir_all(&root).ok();
 }
+
+// ---------------------------------------------------------------------------
+// Partial fetching, against the real server.
+//
+// `progressive.rs` pins the ORDER without a network. These pin the READS: that
+// a range asked for is the range that comes back, and that executing a plan
+// reconstructs the file byte for byte. Between them, the thing that makes a
+// track playable before it has arrived is covered on both sides.
+// ---------------------------------------------------------------------------
+
+/// The 40 KB pattern `fake_medium` writes, so a test can say what it expects.
+fn track_bytes() -> Vec<u8> {
+    (0..40_960u32).map(|byte| byte as u8).collect()
+}
+
+async fn open_track(root: &Path, portmap: u16) -> (NfsClient, prolink::consume::nfs::RemoteFile) {
+    let mut client = NfsClient::connect_with(
+        LOOPBACK,
+        None,
+        prolink::consume::NfsConfig {
+            portmap_port: portmap,
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("portmap discovery");
+    let _ = root;
+    let mounted = client.mount_slot(Slot::USB).await.expect("mounting");
+    let file = client
+        .open(&mounted, "/Contents/GESAFFELSTEIN/track.mp3")
+        .await
+        .expect("walking to the track");
+    (client, file)
+}
+
+#[tokio::test]
+async fn a_range_read_returns_exactly_that_range() {
+    let root = fake_medium("range-exact");
+    let (_server, portmap) = serve_files(&root).await;
+    let (mut client, file) = open_track(&root, portmap).await;
+    let expected = track_bytes();
+
+    // Including offsets that are not multiples of the read size, because a
+    // playhead does not land on one.
+    for (offset, len) in [
+        (0u64, 1u64),
+        (0, 8192),
+        (1, 8191),
+        (8191, 2),
+        (12_345, 1_000),
+    ] {
+        let got = client
+            .read_range(&file, offset, len)
+            .await
+            .expect("a range read");
+        let want =
+            &expected[usize::try_from(offset).unwrap()..usize::try_from(offset + len).unwrap()];
+        assert_eq!(
+            got,
+            want,
+            "range {offset}..{} came back wrong",
+            offset + len
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_range_read_past_the_end_is_clamped_rather_than_failing() {
+    // The tail of a plan is computed from a size the deck reported; if that is
+    // stale by a byte the fetch must not fall over.
+    let root = fake_medium("range-clamp");
+    let (_server, portmap) = serve_files(&root).await;
+    let (mut client, file) = open_track(&root, portmap).await;
+
+    let got = client
+        .read_range(&file, 40_000, 10_000)
+        .await
+        .expect("a read that overruns the end");
+    assert_eq!(got.len(), 960, "clamped to what is actually there");
+    assert_eq!(got, &track_bytes()[40_000..]);
+}
+
+#[tokio::test]
+async fn a_range_read_entirely_past_the_end_is_empty() {
+    let root = fake_medium("range-past");
+    let (_server, portmap) = serve_files(&root).await;
+    let (mut client, file) = open_track(&root, portmap).await;
+
+    let got = client
+        .read_range(&file, 40_960, 1_000)
+        .await
+        .expect("a read starting at the end");
+    assert!(got.is_empty());
+}
+
+#[tokio::test]
+async fn the_tail_is_readable_before_the_middle_has_been_touched() {
+    // The AAC case, made concrete: fetch the head and then jump straight to the
+    // last bytes, exactly as a plan does, and check the end of the file is
+    // right without anything between them having been read.
+    let root = fake_medium("range-tail-first");
+    let (_server, portmap) = serve_files(&root).await;
+    let (mut client, file) = open_track(&root, portmap).await;
+    let expected = track_bytes();
+
+    let head = client.read_range(&file, 0, 4_096).await.expect("the head");
+    assert_eq!(head, &expected[..4_096]);
+
+    let tail = client
+        .read_range(&file, 40_960 - 256, 256)
+        .await
+        .expect("the tail, out of order");
+    assert_eq!(tail, &expected[40_960 - 256..]);
+}
+
+#[tokio::test]
+async fn executing_a_plan_reconstructs_the_file_byte_for_byte() {
+    // The whole thing, end to end: plan the ranges, fetch them in the order the
+    // plan gives, write each at its own offset, and compare with the source.
+    // This is what a track being playable before it has arrived actually means.
+    let root = fake_medium("range-plan");
+    let (_server, portmap) = serve_files(&root).await;
+    let (mut client, file) = open_track(&root, portmap).await;
+    let expected = track_bytes();
+
+    let plan = prolink::consume::nfs::progressive_plan(file.size(), 4_096, 256, 8_192);
+    assert!(plan.len() > 3, "a 40 KB file should take several steps");
+
+    let mut assembled = vec![0u8; usize::try_from(file.size()).unwrap()];
+    for step in &plan {
+        let bytes = client
+            .read_range(&file, step.offset, step.len)
+            .await
+            .unwrap_or_else(|error| panic!("fetching {step:?}: {error}"));
+        assert_eq!(
+            bytes.len() as u64,
+            step.len,
+            "{step:?} came back short, which would leave a hole"
+        );
+        let start = usize::try_from(step.offset).unwrap();
+        assembled[start..start + bytes.len()].copy_from_slice(&bytes);
+    }
+    assert_eq!(assembled, expected);
+}
+
+#[tokio::test]
+async fn a_plan_over_a_tiny_file_still_reconstructs_it() {
+    // The degenerate end: a file smaller than the head, where the plan collapses
+    // to a single read and the tail must not double back into it.
+    let root = fake_medium("range-tiny");
+    std::fs::write(root.join("Contents/GESAFFELSTEIN/track.mp3"), b"short").expect("a tiny track");
+    let (_server, portmap) = serve_files(&root).await;
+    let (mut client, file) = open_track(&root, portmap).await;
+
+    assert_eq!(file.size(), 5);
+    let plan = prolink::consume::nfs::progressive_plan(file.size(), 4_096, 256, 8_192);
+    let mut assembled = Vec::new();
+    for step in &plan {
+        assembled.extend(
+            client
+                .read_range(&file, step.offset, step.len)
+                .await
+                .expect("a step"),
+        );
+    }
+    assert_eq!(assembled, b"short");
+}

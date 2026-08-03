@@ -1241,43 +1241,32 @@ async fn fetch_streaming(
             .map_err(|error| format!("writing {local}: {error}"))
     };
 
-    // 1. The head, so there is a runway to start playing on.
-    let head = head_bytes.min(size);
-    if head > 0 {
-        let bytes = client
-            .read_range(&file, 0, head)
-            .await
-            .map_err(|error| format!("reading the head of {remote}: {error}"))?;
-        write_at(&mut handle, 0, &bytes)?;
-    }
+    // The order lives in prolink::consume::nfs and is tested there, exhaustively
+    // and without a network. Duplicating it here would mean the tested plan and
+    // the shipped one could drift, and the way that failure shows up is AAC
+    // quietly not opening.
+    let plan = prolink::consume::nfs::progressive_plan(size, head_bytes.min(size), TAIL, CHUNK);
 
-    // 2. The tail, for the containers that keep their index there.
-    let tail_start = size.saturating_sub(TAIL).max(head);
-    if tail_start < size {
+    // The first step is the head, so the runway is down before anyone is told
+    // they may start playing. The second is the tail. Everything after is the
+    // middle, in playhead order.
+    let mut fetched = 0u64;
+    for (index, step) in plan.iter().enumerate() {
         let bytes = client
-            .read_range(&file, tail_start, size - tail_start)
+            .read_range(&file, step.offset, step.len)
             .await
-            .map_err(|error| format!("reading the tail of {remote}: {error}"))?;
-        write_at(&mut handle, tail_start, &bytes)?;
-    }
-
-    // Only now: the caller may start playing.
-    emit(head);
-
-    // 3. The middle, in order, behind the playhead.
-    let mut offset = head;
-    while offset < tail_start {
-        let len = CHUNK.min(tail_start - offset);
-        let bytes = client
-            .read_range(&file, offset, len)
-            .await
-            .map_err(|error| format!("reading {remote} at {offset}: {error}"))?;
+            .map_err(|error| format!("reading {remote} at {}: {error}", step.offset))?;
         if bytes.is_empty() {
-            return Err(format!("{remote} returned no bytes at {offset}"));
+            return Err(format!("{remote} returned no bytes at {}", step.offset));
         }
-        write_at(&mut handle, offset, &bytes)?;
-        offset += bytes.len() as u64;
-        emit(offset);
+        write_at(&mut handle, step.offset, &bytes)?;
+        fetched += bytes.len() as u64;
+
+        // Announced only once the head AND the tail are down: a caller that
+        // starts on the first event needs both, one to play and one to open.
+        if index + 1 >= 2.min(plan.len()) {
+            emit(fetched);
+        }
     }
 
     handle
