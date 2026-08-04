@@ -351,12 +351,18 @@ impl ColorDetailColumn {
         u8::try_from(self.0 >> 13 & 0x7).unwrap_or(0)
     }
 
-    /// Bits 12–10. Rendered as green.
+    /// Bits 12–10. Rendered as **blue**.
+    ///
+    /// The band order and the colour order are not the same order, and these
+    /// three doc lines used to say they were — treble was written down as green
+    /// and mid as blue, because the colours were attached in the order the
+    /// fields are declared rather than the order they are drawn. A renderer
+    /// that believed them swapped two thirds of the picture.
     pub fn treble(self) -> u8 {
         u8::try_from(self.0 >> 10 & 0x7).unwrap_or(0)
     }
 
-    /// Bits 9–7. Rendered as blue.
+    /// Bits 9–7. Rendered as green.
     pub fn mid(self) -> u8 {
         u8::try_from(self.0 >> 7 & 0x7).unwrap_or(0)
     }

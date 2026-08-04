@@ -53,6 +53,7 @@
 //! }
 //! ```
 
+mod anlz;
 mod browse;
 mod convert;
 mod logging;
@@ -588,6 +589,111 @@ pub mod ffi {
         track_ids: Vec<u32>,
     }
 
+    /// One beat of a `PQTZ` grid.
+    ///
+    /// `time_ms` is the beat's position and `tempo` is what rekordbox analysed
+    /// it at. Both are given because they disagree, and which one a host should
+    /// believe depends on the track: rekordbox writes beat times as **whole
+    /// milliseconds**, so at 144 BPM the stored gaps alternate 417, 417, 416 and
+    /// a grid built from them has a tempo that swings by up to 0.45 BPM
+    /// depending on which pair of beats is measured. `tempo` is centi-BPM and
+    /// exact. A host that finds one distinct tempo across the grid should use
+    /// it and anchor at the first beat; one that finds several has a genuinely
+    /// variable-tempo track and nothing but the positions.
+    #[derive(Debug, Clone)]
+    struct AnlzBeat {
+        /// Which beat of the bar, 1-4. The first beat numbered 1 is the only
+        /// record of the grid's phase.
+        beat_number: u16,
+        /// Centi-BPM at this beat.
+        tempo: u16,
+        /// Milliseconds from the start of the track.
+        time_ms: u32,
+    }
+
+    /// One cue or loop, from either cue tag.
+    ///
+    /// Flat rather than two types, because a host applies both in one pass and
+    /// the older tag is simply the newer one without the comment and the
+    /// colours. `extended` says which tag it came from, so a host can tell an
+    /// absent comment from an empty one.
+    #[derive(Debug, Clone)]
+    struct AnlzCue {
+        /// True when this came from `PCO2`, and so when the comment and colour
+        /// fields below mean anything.
+        extended: bool,
+        /// True for the hot-cue list, false for the memory-cue list. **A file
+        /// carries one list of each**, so a reader that takes the first tag
+        /// gets half the cues and no error.
+        hot_list: bool,
+        /// 0 for a memory cue, 1 for hot cue A, 2 for B, and so on.
+        hot_cue: u32,
+        /// True when this is a loop and `loop_time_ms` means something.
+        is_loop: bool,
+        /// Where it sits, in milliseconds at normal pitch.
+        time_ms: u32,
+        /// Where a loop jumps back from, in milliseconds. Zero unless `is_loop`.
+        loop_time_ms: u32,
+        /// The DJ's comment, already out of the file's UTF-16BE. Empty unless
+        /// `extended`.
+        comment: String,
+        /// Row id in rekordbox's colour table, for a memory cue given one.
+        color_id: u32,
+        /// Red component of the colour a player lights the pad with. Zero
+        /// unless `extended`.
+        color_red: u8,
+        /// Green component.
+        color_green: u8,
+        /// Blue component.
+        color_blue: u8,
+    }
+
+    /// One column of the `PWV5` colour scrolling waveform.
+    ///
+    /// **The three bands are a hue and `height` is the amplitude**, which is
+    /// what makes this a colour waveform rather than three waveforms. The bands
+    /// sit near saturation whatever the track is doing and correlate with the
+    /// height at only 0.0-0.4, while the height correlates with the monochrome
+    /// `PWV3` waveform of the same track at 0.99. A renderer that derives its
+    /// height from the bands draws the spectral balance instead of the
+    /// envelope, quantised to the eight levels three bits allow.
+    #[derive(Debug, Clone)]
+    struct AnlzColourColumn {
+        /// Bits 15-13. The loudest and slowest-varying band, drawn red.
+        bass: u8,
+        /// Bits 9-7. Drawn green.
+        mid: u8,
+        /// Bits 12-10. The quietest and spikiest band, drawn blue.
+        treble: u8,
+        /// Bits 6-2. The envelope, 0-31.
+        height: u8,
+    }
+
+    /// Everything read out of one `ANLZ####.DAT` or `.EXT`.
+    ///
+    /// Whichever of these a file has: a `.DAT` carries the grid and the plain
+    /// cues, a `.EXT` the extended cues and the colour waveforms. An absent tag
+    /// is an empty vector and not an error — which tags a file has depends on
+    /// the rekordbox version that wrote it.
+    #[derive(Debug, Clone)]
+    struct AnlzContents {
+        /// Whether the file parsed. On false the rest is empty and `error` says
+        /// why. A tag that does not parse costs that tag, not the file, and
+        /// leaves `ok` true.
+        ok: bool,
+        /// Why it did not parse. Empty when `ok`.
+        error: String,
+        /// `PQTZ`, the beat grid.
+        beats: Vec<AnlzBeat>,
+        /// `PCOB` and `PCO2`, both lists of each, in file order.
+        cues: Vec<AnlzCue>,
+        /// `PWV5`, the colour scrolling waveform, at 150 columns per second.
+        colour_detail: Vec<AnlzColourColumn>,
+        /// `PWAV`, the preview waveform: 400 packed bytes, height in the low
+        /// five bits and shade in the top three.
+        preview: Vec<u8>,
+    }
+
     /// A row of one of the lookup tables, for building a browse tree.
     #[derive(Debug, Clone)]
     struct PdbNamed {
@@ -725,6 +831,17 @@ pub mod ffi {
         /// fetched the database itself wants, so that reading the file and
         /// parsing it stay separate failures with separate messages.
         fn read_pdb_bytes(bytes: &[u8]) -> PdbContents;
+
+        /// Read one `ANLZ####.DAT` or `.EXT` off disk.
+        ///
+        /// Never throws, like `read_pdb`: a file that does not parse comes
+        /// back with `ok` false and `error` set. A missing file is the same
+        /// answer — analysis is an enhancement, and a track with no grid
+        /// still plays.
+        ///
+        /// A free function and not a `Session` method, so it is safe to call
+        /// from a worker thread with no session running at all.
+        fn read_anlz(path: &str) -> AnlzContents;
 
         /// Start a session. Throws on failure, with the reason.
         fn open(config: &Config) -> Result<Box<Session>>;
@@ -1063,5 +1180,6 @@ pub fn empty_player_for_test() -> Player {
 pub fn row_for_test(item: &prolink_proto::dbserver::MenuItem) -> Row {
     convert::row(item)
 }
+pub use anlz::read_anlz;
 pub use pdb::{read_pdb, read_pdb_bytes};
 pub use session::{default_config, interfaces, open};
