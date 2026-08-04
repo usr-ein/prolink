@@ -694,6 +694,49 @@ pub mod ffi {
         preview: Vec<u8>,
     }
 
+    /// One column of the `PWV4` colour preview waveform.
+    ///
+    /// **The band names are not the colour names**, and which byte is which was
+    /// measured rather than taken from the field order: across three tracks off
+    /// a real stick the envelope byte correlates with the `PWAV` preview of the
+    /// same track at 0.78-0.87, the three bands fall in mean level (100, 56,
+    /// 29) and rise in roughness (0.05, 0.40, 0.56) exactly as `PWV5`'s do, and
+    /// the byte before them correlates *negatively* — so it is not an energy at
+    /// all and is left out.
+    #[derive(Debug, Clone)]
+    struct AnlzPreviewColumn {
+        /// Bottom third. Drawn red.
+        bass: u8,
+        /// Middle third. Drawn green.
+        mid: u8,
+        /// Top third. Drawn blue.
+        treble: u8,
+        /// Energy of the bottom half, which is the best proxy for the column's
+        /// height: it is what tracks the monochrome preview.
+        envelope: u8,
+    }
+
+    /// The preview waveforms of one analysis file, and nothing else from it.
+    ///
+    /// Separate from `read_anlz` because of what it does *not* do. A `.EXT` is
+    /// around 157 kB, of which the two full-resolution detail waveforms are
+    /// nearly all — some fifty thousand entries each — and a caller that wants
+    /// the 1200-column preview should not decode those to reach it. This walks
+    /// the tag headers and seeks past everything it was not asked for.
+    #[derive(Debug, Clone)]
+    struct AnlzPreview {
+        /// Whether the file could be read and its container parsed.
+        ok: bool,
+        /// Why not. Empty when `ok`.
+        error: String,
+        /// `PWAV`: 400 packed bytes, height in the low five bits and shade in
+        /// the top three. Empty when the file has none — a `.EXT` never does.
+        mono: Vec<u8>,
+        /// `PWV4`: 1200 colour columns. Empty when the file has none, which is
+        /// every `.DAT` and any `.EXT` written before the NXS2.
+        colour: Vec<AnlzPreviewColumn>,
+    }
+
     /// A row of one of the lookup tables, for building a browse tree.
     #[derive(Debug, Clone)]
     struct PdbNamed {
@@ -842,6 +885,16 @@ pub mod ffi {
         /// A free function and not a `Session` method, so it is safe to call
         /// from a worker thread with no session running at all.
         fn read_anlz(path: &str) -> AnlzContents;
+
+        /// Read only the preview waveforms out of one analysis file.
+        ///
+        /// Seeks past every tag it was not asked for, so reaching the 1200
+        /// colour columns of a 157 kB `.EXT` costs about 10 kB of reads and no
+        /// decoding of the fifty-thousand-entry detail waveforms beside them.
+        ///
+        /// Same never-throws contract as `read_anlz`, and a free function for
+        /// the same reason.
+        fn read_anlz_preview(path: &str) -> AnlzPreview;
 
         /// Start a session. Throws on failure, with the reason.
         fn open(config: &Config) -> Result<Box<Session>>;
@@ -1180,6 +1233,6 @@ pub fn empty_player_for_test() -> Player {
 pub fn row_for_test(item: &prolink_proto::dbserver::MenuItem) -> Row {
     convert::row(item)
 }
-pub use anlz::read_anlz;
+pub use anlz::{read_anlz, read_anlz_preview};
 pub use pdb::{read_pdb, read_pdb_bytes};
 pub use session::{default_config, interfaces, open};

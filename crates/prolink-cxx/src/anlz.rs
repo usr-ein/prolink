@@ -25,7 +25,9 @@
 use prolink_rekordbox::AnlzFile;
 use prolink_rekordbox::anlz::{Content, CueListType, CueType, FourCc};
 
-use crate::ffi::{AnlzBeat, AnlzColourColumn, AnlzContents, AnlzCue};
+use std::io::{Read, Seek, SeekFrom};
+
+use crate::ffi::{AnlzBeat, AnlzColourColumn, AnlzContents, AnlzCue, AnlzPreview, AnlzPreviewColumn};
 
 /// Read one analysis file off disk.
 #[must_use]
@@ -146,6 +148,149 @@ fn colour_detail(file: &AnlzFile) -> Vec<AnlzColourColumn> {
 /// decides what to do with the shade.
 fn preview(file: &AnlzFile) -> Vec<u8> {
     file.payload(FourCc::PWAV).unwrap_or_default().to_vec()
+}
+
+/// Bytes of the fixed part of the container header and of every tag header.
+const TAG_HEADER: usize = 12;
+
+/// Columns in a `PWV4`, and bytes per column.
+const COLOUR_ENTRY: usize = 6;
+
+/// Read only the preview waveforms, seeking past everything else.
+///
+/// # Why this is not `read_anlz(path).preview`
+///
+/// It is the same 400 bytes, but not the same cost. A `.EXT` is around 157 kB
+/// and almost all of it is `PWV3` and `PWV5`, two waveforms of some fifty
+/// thousand entries each; parsing the file to reach the 1200-column `PWV4`
+/// decodes both and throws them away. This reads each tag's 12-byte header and
+/// seeks over any tag it does not want, so the colour preview costs about 10 kB
+/// of reads.
+///
+/// That matters because this runs once per row a DJ pauses on, off a USB stick
+/// that may be busy copying the track they are about to play.
+#[must_use]
+pub fn read_anlz_preview(path: &str) -> AnlzPreview {
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) => return preview_failed(format!("reading {path}: {error}")),
+    };
+
+    // The container header: `PMAI`, its own length, the file length.
+    let mut header = [0u8; TAG_HEADER];
+    if let Err(error) = file.read_exact(&mut header) {
+        return preview_failed(format!("reading {path}: {error}"));
+    }
+    if &header[..4] != b"PMAI" {
+        return preview_failed(format!("{path} is not an ANLZ file"));
+    }
+    let len_header = u32::from_be_bytes([header[4], header[5], header[6], header[7]]);
+    let mut offset = u64::from(len_header);
+
+    let mut out = AnlzPreview {
+        ok: true,
+        error: String::new(),
+        mono: Vec::new(),
+        colour: Vec::new(),
+    };
+
+    loop {
+        if file.seek(SeekFrom::Start(offset)).is_err() {
+            break;
+        }
+        let mut tag = [0u8; TAG_HEADER];
+        if file.read_exact(&mut tag).is_err() {
+            break; // The end of the file, which is how the tag list ends.
+        }
+        let len_tag = u32::from_be_bytes([tag[8], tag[9], tag[10], tag[11]]);
+        // A zero-length tag would loop here forever, and a file that claims one
+        // is a file we cannot walk any further.
+        if len_tag < TAG_HEADER as u32 {
+            break;
+        }
+
+        match &tag[..4] {
+            b"PWAV" => out.mono = mono_columns(&mut file, len_tag),
+            b"PWV4" => out.colour = colour_columns(&mut file, len_tag),
+            // Everything else is skipped without being read at all. This is the
+            // whole point of the function.
+            _ => {}
+        }
+
+        offset += u64::from(len_tag);
+        if !out.mono.is_empty() && !out.colour.is_empty() {
+            break; // Both in hand; the rest of the file cannot add anything.
+        }
+    }
+    out
+}
+
+/// The `PWAV` payload, positioned just past the tag's common header.
+///
+/// The tag declares a 20-byte header: the twelve common bytes, a length and an
+/// unknown word. So the columns start eight bytes further on.
+fn mono_columns(file: &mut std::fs::File, len_tag: u32) -> Vec<u8> {
+    let Some(body_len) = (len_tag as usize).checked_sub(TAG_HEADER) else {
+        return Vec::new();
+    };
+    let mut body = vec![0u8; body_len];
+    if file.read_exact(&mut body).is_err() || body.len() < 8 {
+        return Vec::new();
+    }
+    let len_data = u32::from_be_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    let columns = &body[8..];
+    if len_data == 0 || len_data > columns.len() {
+        return Vec::new();
+    }
+    columns[..len_data].to_vec()
+}
+
+/// The `PWV4` columns, decoded to the four bytes a renderer needs.
+///
+/// The tag's header carries the entry width, the entry count and an unknown
+/// word before the entries themselves.
+fn colour_columns(file: &mut std::fs::File, len_tag: u32) -> Vec<AnlzPreviewColumn> {
+    let Some(body_len) = (len_tag as usize).checked_sub(TAG_HEADER) else {
+        return Vec::new();
+    };
+    let mut body = vec![0u8; body_len];
+    if file.read_exact(&mut body).is_err() || body.len() < 12 {
+        return Vec::new();
+    }
+    let width = u32::from_be_bytes([body[0], body[1], body[2], body[3]]) as usize;
+    let count = u32::from_be_bytes([body[4], body[5], body[6], body[7]]) as usize;
+    // Six is what the format says and what every file has. Anything else is a
+    // variant we cannot read, and guessing at it would draw a plausible but
+    // wrong waveform -- worse than falling back to the monochrome one.
+    if width != COLOUR_ENTRY {
+        return Vec::new();
+    }
+    let entries = &body[12..];
+    let usable = count.min(entries.len() / COLOUR_ENTRY);
+    (0..usable)
+        .map(|index| {
+            let entry = &entries[index * COLOUR_ENTRY..];
+            AnlzPreviewColumn {
+                // Bytes 0 and 1 are deliberately not read: byte 1 correlates
+                // *negatively* with the envelope across every track measured,
+                // so whatever it is, it is not an energy.
+                envelope: entry[2],
+                bass: entry[3],
+                mid: entry[4],
+                treble: entry[5],
+            }
+        })
+        .collect()
+}
+
+/// A preview file that could not be read at all.
+fn preview_failed(error: String) -> AnlzPreview {
+    AnlzPreview {
+        ok: false,
+        error,
+        mono: Vec::new(),
+        colour: Vec::new(),
+    }
 }
 
 /// A file that could not be read at all.
@@ -313,6 +458,79 @@ mod tests {
         assert_eq!(column.treble, 2, "bits 12-10 are treble, drawn blue");
         assert_eq!(column.mid, 3, "bits 9-7 are mid, drawn green");
         assert_eq!(column.height, 20);
+    }
+
+    #[test]
+    fn the_seeking_reader_finds_both_previews() {
+        // A PWAV, then a big tag it must seek over, then a PWV4. The middle
+        // tag is what the function exists to not read.
+        let mut pwav_body = 400u32.to_be_bytes().to_vec();
+        pwav_body.extend_from_slice(&0x0010_0000u32.to_be_bytes());
+        pwav_body.extend_from_slice(&[0b1010_0110; 400]);
+
+        let mut pwv5_body = 2u32.to_be_bytes().to_vec();
+        pwv5_body.extend_from_slice(&20_000u32.to_be_bytes());
+        pwv5_body.extend_from_slice(&0u32.to_be_bytes());
+        pwv5_body.extend_from_slice(&vec![0xab; 40_000]);
+
+        let mut pwv4_body = 6u32.to_be_bytes().to_vec();
+        pwv4_body.extend_from_slice(&2u32.to_be_bytes());
+        pwv4_body.extend_from_slice(&0u32.to_be_bytes());
+        // Two columns: unknown, unknown, envelope, bass, mid, treble.
+        pwv4_body.extend_from_slice(&[0x11, 0x22, 90, 100, 50, 20]);
+        pwv4_body.extend_from_slice(&[0x11, 0x22, 30, 40, 60, 70]);
+
+        let bytes = file(&[
+            tag(b"PWAV", 20, &pwav_body),
+            tag(b"PWV5", 24, &pwv5_body),
+            tag(b"PWV4", 24, &pwv4_body),
+        ]);
+        let dir = std::env::temp_dir().join("prolink-cxx-preview-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ANLZ0000.EXT");
+        std::fs::write(&path, &bytes).unwrap();
+
+        let preview = read_anlz_preview(path.to_str().unwrap());
+        assert!(preview.ok, "{}", preview.error);
+        assert_eq!(preview.mono.len(), 400);
+        assert_eq!(preview.mono[0] & 0x1f, 6, "height in the low five bits");
+        assert_eq!(preview.colour.len(), 2);
+        assert_eq!(preview.colour[0].envelope, 90);
+        assert_eq!(preview.colour[0].bass, 100, "byte 3 is the bottom third");
+        assert_eq!(preview.colour[0].mid, 50);
+        assert_eq!(preview.colour[0].treble, 20, "byte 5 is the top third");
+        assert_eq!(preview.colour[1].bass, 40);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_colour_preview_of_the_wrong_width_is_refused() {
+        // Six bytes per entry is what the format says. A variant we cannot read
+        // would draw a plausible but wrong waveform, which is worse than
+        // falling back to the monochrome one.
+        let mut body = 8u32.to_be_bytes().to_vec();
+        body.extend_from_slice(&1u32.to_be_bytes());
+        body.extend_from_slice(&0u32.to_be_bytes());
+        body.extend_from_slice(&[0; 8]);
+
+        let dir = std::env::temp_dir().join("prolink-cxx-preview-test-width");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ANLZ0000.EXT");
+        std::fs::write(&path, file(&[tag(b"PWV4", 24, &body)])).unwrap();
+
+        let preview = read_anlz_preview(path.to_str().unwrap());
+        assert!(preview.ok);
+        assert!(preview.colour.is_empty());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_missing_preview_file_is_a_value_and_not_a_panic() {
+        let preview = read_anlz_preview("/nowhere/ANLZ0000.EXT");
+        assert!(!preview.ok);
+        assert!(preview.mono.is_empty());
+        assert!(preview.colour.is_empty());
     }
 
     #[test]
