@@ -19,6 +19,7 @@ use prolink::{
     VirtualCdjConfig, VirtualPlayer, VirtualPlayerConfig,
 };
 use tokio::runtime::Runtime;
+use tokio::sync::broadcast;
 
 use crate::convert::{self, plain};
 use crate::ffi::{Config, Device, Event, EventKind, NetworkInterface, Player, ServeStatus, Slot};
@@ -424,7 +425,29 @@ async fn start(
     let held = Arc::clone(live);
     // Ends when the session is dropped, because the sender goes with it.
     tokio::spawn(async move {
-        while let Ok(event) = incoming.recv().await {
+        loop {
+            let event = match incoming.recv().await {
+                Ok(event) => event,
+                // **Recoverable, and it has to be recovered from here.** A
+                // `while let Ok(..)` reads as "until the channel closes" and is
+                // not: it also ends on `Lagged`, which is this subscriber
+                // having fallen behind and lost a few events, not the channel
+                // going away.
+                //
+                // Ending on it would kill the only thing that answers master
+                // requests and the only thing that fills the host's queue — so
+                // mastership could never be handed back for the rest of the
+                // session and no transfer would ever report finishing, with
+                // nothing logged and nothing to notice. Silent, permanent, and
+                // clearable only by a restart.
+                Err(broadcast::error::RecvError::Lagged(missed)) => {
+                    tracing::warn!(missed, "fell behind the monitor; events were dropped");
+                    continue;
+                }
+                // The monitor is gone, which is what dropping the session does.
+                // The one error worth ending on.
+                Err(broadcast::error::RecvError::Closed) => return,
+            };
             // Answered here rather than by the host, because a CDJ answers in
             // 5 ms and a host polling on a UI timer would take ten times that.
             // The reply is one non-blocking datagram, so it costs this task
@@ -1223,7 +1246,65 @@ fn yield_master_to(live: &Arc<RwLock<Option<Live>>>, requester: prolink::DeviceN
     };
     if let Err(error) = cdj.yield_tempo_master(requester, address) {
         tracing::warn!(%error, "could not answer the master request");
+        return;
     }
+    // The answer is on the wire and our status now names the requester as our
+    // successor while still claiming mastership, which is what it is waiting to
+    // see. Watch for it to pick mastership up, and only then let go.
+    //
+    // **Nothing was watching before, and nothing let go correctly.** The yield
+    // dropped the claim on the spot, which the requester reads as a refusal
+    // rather than a grant, so neither deck ended up master -- and this deck
+    // then took its own claim back the next time anything set it.
+    drop(held);
+    let live = Arc::clone(live);
+    tokio::spawn(async move {
+        for _ in 0..MASTER_HANDOVER_POLLS {
+            tokio::time::sleep(MASTER_HANDOVER_POLL).await;
+            let done = {
+                let held = match live.read() {
+                    Ok(held) => held,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                let Some(session) = held.as_ref() else {
+                    return;
+                };
+                let Some(cdj) = session.role.cdj() else {
+                    return;
+                };
+                // Somebody else set the claim meanwhile -- taking it back, or
+                // dropping it outright -- and that ended this handover.
+                if cdj.yielding_to() != Some(requester) {
+                    return;
+                }
+                let taken = session
+                    .monitor
+                    .player(requester)
+                    .is_some_and(|player| player.is_tempo_master() == Some(true));
+                if taken {
+                    cdj.finish_yield();
+                    tracing::info!(%requester, "handed tempo master over");
+                }
+                taken
+            };
+            if done {
+                return;
+            }
+        }
+        // It never picked it up. Holding a mastership the network is not acting
+        // on is the worse of the two states -- it is what a CDJ that cannot
+        // take master back looks like -- so let go anyway and say so.
+        let held = match live.read() {
+            Ok(held) => held,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
+            && cdj.yielding_to() == Some(requester)
+        {
+            cdj.finish_yield();
+            tracing::warn!(%requester, "never picked tempo master up; standing down anyway");
+        }
+    });
 }
 
 /// The running player, cloned out from under the lock.

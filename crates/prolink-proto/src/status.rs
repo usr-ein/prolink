@@ -777,6 +777,7 @@ pub struct CdjStatusBuilder {
     on_air: bool,
     synced: bool,
     tempo_master: bool,
+    yielding_to: Option<DeviceNumber>,
     beat_number: Option<u32>,
     beat_in_bar: Option<BeatInBar>,
     loaded_track: Option<LoadedTrack>,
@@ -817,6 +818,7 @@ impl Default for CdjStatusBuilder {
             on_air: false,
             synced: false,
             tempo_master: false,
+            yielding_to: None,
             beat_number: None,
             beat_in_bar: None,
             loaded_track: None,
@@ -930,6 +932,24 @@ impl CdjStatusBuilder {
         self
     }
 
+    /// The device this master is handing mastership to, byte `0x9f`.
+    ///
+    /// **This is the grant.** A deck asking for mastership watches for its own
+    /// number to appear here; the holder's claim going away is not a grant and
+    /// a real CDJ does not act on one. A handover that only drops byte `0x9e`
+    /// therefore looks to the requester exactly like a refusal — it asked, the
+    /// holder went quiet, and nobody ended up master.
+    ///
+    /// So it is set *with* `tempo_master(true)` for the packets between the
+    /// answer and the requester picking mastership up, and cleared with the
+    /// claim afterwards. `None` writes the `0xff` that means no handoff, which
+    /// is what 46,003 of the 46,012 captured packets carry.
+    #[must_use]
+    pub fn yielding_to(mut self, successor: Option<DeviceNumber>) -> Self {
+        self.yielding_to = successor;
+        self
+    }
+
     /// What is loaded, and whose medium it came from.
     ///
     /// `None` is "nothing loaded", and it is the only state in which a tempo
@@ -1001,6 +1021,15 @@ impl CdjStatusBuilder {
             raw,
             CdjStatus::OFF_MASTER_MEANINGFUL,
             u8::from(self.tempo_master),
+        );
+        // Written every packet rather than left to the skeleton, for the same
+        // reason as the transport bytes above: the skeleton is one frame from
+        // one deck, and a field only ever written when it is interesting is a
+        // field that keeps whatever the last interesting packet left in it.
+        put(
+            raw,
+            CdjStatus::OFF_YIELDING_TO,
+            self.yielding_to.map_or(NO_YIELD, DeviceNumber::get),
         );
 
         for offset in CdjStatus::OFF_PITCH_COPIES {

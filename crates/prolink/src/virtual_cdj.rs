@@ -416,6 +416,11 @@ pub struct VirtualCdj {
     /// this supports is the safe half: hold master while nobody else does, and
     /// step aside the moment somebody claims it.
     tempo_master: Arc<AtomicBool>,
+    /// The device we are handing mastership to, as byte `0x9f` of our status,
+    /// or zero for no handover. Held beside `tempo_master` because the two are
+    /// published together and only mean anything together: naming a successor
+    /// while not claiming mastership describes a deck that has never existed.
+    yielding_to: Arc<AtomicU8>,
     /// Whether SYNC is engaged here, for flag bit 4.
     ///
     /// Published so the rest of the network can see that this deck is
@@ -497,6 +502,7 @@ impl VirtualCdj {
             playback: Arc::new(PlaybackCell::default()),
             playing_track: Arc::new(Mutex::new(None)),
             tempo_master: Arc::new(AtomicBool::new(false)),
+            yielding_to: Arc::new(AtomicU8::new(0)),
             synced: Arc::new(AtomicBool::new(false)),
             tasks: Vec::new(),
         };
@@ -621,6 +627,10 @@ impl VirtualCdj {
     /// follower flickers between them. [`crate::Monitor::players`] is where to
     /// find out.
     pub fn set_tempo_master(&self, master: bool) {
+        // Any handover in flight ends here, whichever way this goes: naming a
+        // successor is only meaningful while the claim it is handing over still
+        // stands, and this sets that claim outright.
+        self.yielding_to.store(0, Ordering::Relaxed);
         self.tempo_master.store(master, Ordering::Relaxed);
     }
 
@@ -660,12 +670,34 @@ impl VirtualCdj {
         };
         let to = SocketAddr::V4(SocketAddrV4::new(address, BEAT_PORT));
         socket::send_once(&self.interface, to, &response.encode())?;
-        // Only after the answer is on the wire. A real master keeps claiming it
-        // for one or two more status packets while byte `0x9f` names the
-        // successor; dropping it first would leave a gap with no master at all.
-        self.set_tempo_master(false);
-        info!(%requester, "handed tempo master over");
+        // **The claim is kept, and the successor is named.** This is the half
+        // that was missing, and without it the handover never completed: a real
+        // deck watches byte `0x9f` for its own number, because the grant is
+        // that byte and not the absence of byte `0x9e`. We answered the `0x26`
+        // and then simply stopped claiming mastership, which from the
+        // requester's side is indistinguishable from a refusal -- it asked, we
+        // went quiet, and nobody ended up master at all.
+        //
+        // `finish_yield` drops both, once the requester has picked it up.
+        self.yielding_to.store(requester.get(), Ordering::Relaxed);
+        info!(%requester, "granted tempo master; naming it as successor");
         Ok(())
+    }
+
+    /// The device we are handing mastership to, if a handover is in flight.
+    pub fn yielding_to(&self) -> Option<DeviceNumber> {
+        DeviceNumber::new(self.yielding_to.load(Ordering::Relaxed))
+    }
+
+    /// Complete a handover: stop claiming mastership and stop naming a
+    /// successor.
+    ///
+    /// Called once the requester is claiming it, which is what the yield was
+    /// waiting for — or once waiting has gone on long enough that holding a
+    /// mastership the network is not acting on is the worse of the two states.
+    pub fn finish_yield(&self) {
+        self.yielding_to.store(0, Ordering::Relaxed);
+        self.set_tempo_master(false);
     }
 
     /// Ask the deck at *holder* to hand mastership over.
@@ -803,6 +835,7 @@ impl VirtualCdj {
                 playback: &self.playback.now(),
                 loaded: self.loaded_track(),
                 tempo_master: self.is_tempo_master(),
+                yielding_to: self.yielding_to(),
                 synced: self.synced.load(Ordering::Relaxed),
             },
         )
@@ -875,6 +908,7 @@ impl VirtualCdj {
         let playback = Arc::clone(&self.playback);
         let playing_track = Arc::clone(&self.playing_track);
         let master = Arc::clone(&self.tempo_master);
+        let yielding = Arc::clone(&self.yielding_to);
         let synced = Arc::clone(&self.synced);
 
         Ok(tokio::spawn(async move {
@@ -892,6 +926,7 @@ impl VirtualCdj {
                         playback: &playback.now(),
                         loaded: playing_track.lock().ok().and_then(|held| *held),
                         tempo_master: master.load(Ordering::Relaxed),
+                        yielding_to: DeviceNumber::new(yielding.load(Ordering::Relaxed)),
                         synced: synced.load(Ordering::Relaxed),
                     },
                 );
@@ -1266,6 +1301,8 @@ struct Transport<'a> {
     playback: &'a Playback,
     loaded: Option<status::LoadedTrack>,
     tempo_master: bool,
+    /// Byte `0x9f`: who we are handing mastership to, mid-handover.
+    yielding_to: Option<DeviceNumber>,
     synced: bool,
 }
 
@@ -1281,6 +1318,7 @@ fn status_packet(
         playback,
         loaded,
         tempo_master,
+        yielding_to,
         synced,
     } = transport;
     let occupied = media.occupied_slots();
@@ -1296,6 +1334,7 @@ fn status_packet(
         .loaded_track(loaded)
         .playing(playback.playing)
         .tempo_master(tempo_master)
+        .yielding_to(yielding_to)
         .synced(synced)
         .beat(
             playback.beat.map(|beat| beat.number),
@@ -1652,6 +1691,7 @@ mod tests {
                 playback: &Playback::default(),
                 loaded: None,
                 tempo_master: false,
+                yielding_to: None,
                 synced: false,
             },
         );
@@ -1709,6 +1749,7 @@ mod tests {
                 playback: &playing(),
                 loaded: Some(playing_track()),
                 tempo_master: true,
+                yielding_to: None,
                 synced: false,
             },
         );
@@ -1726,6 +1767,63 @@ mod tests {
             packet.play_state(),
             Some(crate::monitor::PlayState::PLAYING.0)
         );
+    }
+
+    #[test]
+    fn a_handover_names_its_successor_and_keeps_the_claim() {
+        // **The grant is byte `0x9f`, not the absence of byte `0x9e`.** A deck
+        // asking for mastership watches for its own number to appear at 0x9f
+        // and acts on nothing else; the holder's claim simply going away is
+        // what a refusal looks like from the requester's side.
+        //
+        // So a handover in flight publishes BOTH: still master, and naming who
+        // it is handing to. Publishing only the second would be a deck that has
+        // never existed, and publishing only the first is the bug this test
+        // exists for -- a CDJ that pressed MASTER and never got it, with both
+        // decks believing the handover had happened.
+        let number = AtomicU8::new(2);
+        let counter = AtomicU32::new(0);
+        let successor = DeviceNumber::new(3).expect("a device number");
+        let packet = status_packet(
+            &VirtualCdjConfig::default(),
+            &number,
+            &NoMedia,
+            &counter,
+            1,
+            Transport {
+                playback: &playing(),
+                loaded: Some(playing_track()),
+                tempo_master: true,
+                yielding_to: Some(successor),
+                synced: false,
+            },
+        );
+        assert_eq!(packet.is_tempo_master(), Some(true));
+        assert_eq!(packet.yielding_to(), Some(successor));
+    }
+
+    #[test]
+    fn no_handover_leaves_the_successor_byte_empty() {
+        // 0xff, not zero, and written every packet rather than left to the
+        // captured skeleton: a field only written when it is interesting keeps
+        // whatever the last interesting packet put there.
+        let number = AtomicU8::new(2);
+        let counter = AtomicU32::new(0);
+        let packet = status_packet(
+            &VirtualCdjConfig::default(),
+            &number,
+            &NoMedia,
+            &counter,
+            1,
+            Transport {
+                playback: &playing(),
+                loaded: Some(playing_track()),
+                tempo_master: true,
+                yielding_to: None,
+                synced: false,
+            },
+        );
+        assert_eq!(packet.yielding_to(), None);
     }
 
     #[test]
@@ -1748,6 +1846,7 @@ mod tests {
                 },
                 loaded: Some(playing_track()),
                 tempo_master: false,
+                yielding_to: None,
                 synced: false,
             },
         );
@@ -1882,6 +1981,7 @@ mod tests {
                 playback: &Playback::default(),
                 loaded: None,
                 tempo_master: false,
+                yielding_to: None,
                 synced: false,
             },
         );
