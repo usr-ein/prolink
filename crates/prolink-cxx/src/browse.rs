@@ -167,6 +167,78 @@ impl Session {
         Ok(id)
     }
 
+    /// Ask a player for a track's preview waveform, without blocking.
+    ///
+    /// Over dbserver, sharing the connection artwork uses. Not over NFS: that
+    /// runs one transfer at a time and a streaming audio fetch holds its turn
+    /// for a whole track, so a preview queued behind one would arrive minutes
+    /// after the row it belongs to -- and asking NFS for small files by the
+    /// hundred churns the player's filehandle table until it answers
+    /// NFSERR_STALE to everything, including the track a DJ is loading (F49).
+    ///
+    /// The reply is 900 bytes: `PWAV` unpacked into (height, shade) pairs with
+    /// the tiny `PWV2` appended. It is stashed on the session and collected
+    /// with `take_waveform_preview` once the `TransferDone` event is drained.
+    ///
+    /// # Errors
+    ///
+    /// When the player is not on the network, or no browsable device number is
+    /// free. Everything after that is asynchronous.
+    pub fn fetch_waveform_preview(
+        &self,
+        device_number: u8,
+        slot: Slot,
+        track_id: u32,
+    ) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error::new(format!("no device {device_number} on the network")))?;
+        let number = self.browsable_number().ok_or_else(|| {
+            Error::new("a preview needs a device number in 1-4 and every one is taken".to_owned())
+        })?;
+
+        let id = self.next_transfer_id();
+        let events = self.events_handle();
+        let queue = self.artwork_queue();
+        let stash = self.preview_stash();
+        let slot = convert::slot_back(slot);
+
+        self.runtime_handle().spawn(async move {
+            let mut held = queue.lock().await;
+            let client = match held.as_mut() {
+                Some(client) => client,
+                None => match DbClient::connect(peer, number).await {
+                    Ok(opened) => held.insert(opened),
+                    Err(error) => {
+                        finish(&events, id, "", Err(format!("connecting: {error}")));
+                        return;
+                    }
+                },
+            };
+
+            let outcome = match client
+                .analysis(slot, track_id, prolink::consume::Analysis::WaveformPreview)
+                .await
+            {
+                Ok(bytes) => {
+                    if let Ok(mut held) = stash.lock() {
+                        held.insert(id, bytes);
+                    }
+                    Ok(())
+                }
+                Err(error) => {
+                    // The connection may be mid-message, and the protocol has
+                    // no resynchronisation point; drop it so the next request
+                    // reconnects rather than reading the wrong reply (F16).
+                    *held = None;
+                    Err(format!("fetching preview for track {track_id}: {error}"))
+                }
+            };
+            finish(&events, id, "", outcome);
+        });
+        Ok(id)
+    }
+
     /// Run one menu request and turn the rows into the shared shape.
     fn browse<F>(&mut self, device_number: u8, slot: Slot, request: F) -> Result<Vec<Row>, Error>
     where

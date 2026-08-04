@@ -79,6 +79,14 @@ pub struct Session {
     /// one connection would interleave a cover reply into the middle of a menu
     /// the user is scrolling.
     artwork: Arc<tokio::sync::Mutex<Option<prolink::consume::DbClient>>>,
+    /// Preview waveforms that have arrived and not yet been collected.
+    ///
+    /// The bytes are 900 of them and the host wants them in RAM, not in a file,
+    /// so they are stashed here by transfer id and taken by
+    /// `take_waveform_preview` when the `TransferDone` event is drained. That
+    /// keeps the shared `Event` struct free of a payload field that every beat
+    /// packet would otherwise carry.
+    previews: Arc<std::sync::Mutex<std::collections::HashMap<u32, Vec<u8>>>>,
     /// The last thing that went wrong, for a host's status line.
     last_error: Arc<Mutex<String>>,
     /// Transfers waiting their turn. See `fetch_file`.
@@ -245,6 +253,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         next_transfer: AtomicU32::new(1),
         connections: crate::browse::Connections::default(),
         artwork: Arc::new(tokio::sync::Mutex::new(None)),
+        previews: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         last_error: Arc::new(Mutex::new(String::new())),
         // One at a time. Two NFS pulls from the same deck contend for the same
         // reply socket and the same filehandle table, and a deck answers
@@ -1120,6 +1129,26 @@ impl Session {
         &self,
     ) -> Arc<tokio::sync::Mutex<Option<prolink::consume::DbClient>>> {
         Arc::clone(&self.artwork)
+    }
+
+    /// Where a finished preview fetch leaves its bytes.
+    pub(crate) fn preview_stash(
+        &self,
+    ) -> Arc<std::sync::Mutex<std::collections::HashMap<u32, Vec<u8>>>> {
+        Arc::clone(&self.previews)
+    }
+
+    /// Take the bytes of a finished preview fetch, by transfer id.
+    ///
+    /// Empty if the fetch failed, or if they have already been taken -- so a
+    /// host that drains the same event twice gets nothing the second time
+    /// rather than a stale picture.
+    pub fn take_waveform_preview(&self, transfer: u32) -> Vec<u8> {
+        self.previews
+            .lock()
+            .ok()
+            .and_then(|mut held| held.remove(&transfer))
+            .unwrap_or_default()
     }
 
     /// The runtime, for spawning work that outlives the call.

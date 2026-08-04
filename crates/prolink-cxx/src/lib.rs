@@ -1117,6 +1117,24 @@ pub mod ffi {
             track_id: u32,
         ) -> Result<Metadata>;
 
+        /// Ask a player for a track's preview waveform.
+        ///
+        /// Returns a transfer id. The bytes arrive as a `TransferDone` with
+        /// that id and are collected with `take_waveform_preview`; nothing is
+        /// written to a filesystem at either end.
+        fn fetch_waveform_preview(
+            self: &Session,
+            device_number: u8,
+            slot: Slot,
+            track_id: u32,
+        ) -> Result<u32>;
+
+        /// Take the bytes of a finished preview fetch, by transfer id.
+        ///
+        /// Empty if it failed or has already been taken. 900 bytes on success:
+        /// `PWAV` as (height, shade) pairs, then the tiny `PWV2`.
+        fn take_waveform_preview(self: &Session, transfer: u32) -> Vec<u8>;
+
         /// Fetch a track's artwork into `local_path`.
         ///
         /// Returns a transfer id and does **not** block: the answer arrives as
