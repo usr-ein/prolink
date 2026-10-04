@@ -822,6 +822,7 @@ pub mod ffi {
         ///
         /// Non-zero means state was missed, and the host should re-read
         /// `devices()` and `players()` rather than trust its running picture.
+        /// Never a `TransferDone` or a `MediaInfo`, which nothing repeats.
         dropped: u32,
 
         /// Which transfer, for the two transfer kinds. Zero otherwise.
