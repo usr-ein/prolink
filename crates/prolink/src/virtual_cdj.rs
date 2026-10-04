@@ -689,6 +689,26 @@ impl VirtualCdj {
         DeviceNumber::new(self.yielding_to.load(Ordering::Relaxed))
     }
 
+    /// Name *successor* at byte `0x9f` while keeping our claim: hand
+    /// mastership over without having been asked.
+    ///
+    /// What a CDJ master does when it stops while a synced deck plays on: the
+    /// successor picks it up, and [`Self::finish_yield`] then lets go. False,
+    /// and nothing changed, when we do not hold mastership.
+    pub fn offer_tempo_master(&self, successor: DeviceNumber) -> bool {
+        if !self.is_tempo_master() {
+            return false;
+        }
+        self.yielding_to.store(successor.get(), Ordering::Relaxed);
+        info!(%successor, "offering tempo master");
+        true
+    }
+
+    /// Withdraw an offer nobody took up, keeping our claim.
+    pub fn withdraw_offer(&self) {
+        self.yielding_to.store(0, Ordering::Relaxed);
+    }
+
     /// Complete a handover: stop claiming mastership and stop naming a
     /// successor.
     ///

@@ -878,6 +878,63 @@ impl Session {
         });
     }
 
+    /// Take a mastership another deck is handing us unasked.
+    ///
+    /// A CDJ master that stops while a synced deck plays on names that deck at
+    /// byte `0x9f` without anyone pressing MASTER, and waits for it to claim.
+    /// Only `take_tempo_master`'s own watcher used to look for that byte, so a
+    /// handover we had not asked for was never picked up: the CDJ sat "handing
+    /// over" with nobody taking it. True when a deck we can still hear is
+    /// naming us and we now claim it.
+    pub fn accept_tempo_master(&self) -> bool {
+        self.with_live(|held| {
+            let Role::Player(_) = &held.role else {
+                return false;
+            };
+            let Some(cdj) = held.role.cdj() else {
+                return false;
+            };
+            if cdj.is_tempo_master() {
+                return false;
+            }
+            let ours = held.role.number();
+            let offered = held.monitor.players().iter().any(|player| {
+                player.is_tempo_master() == Some(true)
+                    && status_is_fresh(player)
+                    && player.yielding_to().is_some_and(|to| to.get() == ours)
+            });
+            if offered {
+                self.master_generation.fetch_add(1, Ordering::SeqCst);
+                cdj.set_tempo_master(true);
+                tracing::info!("took the tempo master another deck handed us");
+            }
+            offered
+        })
+        .unwrap_or(false)
+    }
+
+    /// Hand tempo master to *device* without having been asked: name it at
+    /// byte `0x9f`, keep claiming until it picks up, and keep the mastership
+    /// if it never does. What a CDJ master does when it stops while a synced
+    /// deck plays on. False when we do not hold master or *device* is not a
+    /// device number.
+    pub fn offer_tempo_master(&self, device: u8) -> bool {
+        let Some(successor) = prolink::DeviceNumber::new(device) else {
+            return false;
+        };
+        let offered = self
+            .with_live(|held| held.role.cdj().is_some_and(|cdj| cdj.offer_tempo_master(successor)))
+            .unwrap_or(false);
+        if offered {
+            self.runtime.spawn(watch_handover(
+                Arc::clone(&self.live),
+                successor,
+                UnclaimedHandover::KeepIt,
+            ));
+        }
+        offered
+    }
+
     /// Give up tempo master, and abandon any take still waiting for a grant.
     pub fn release_tempo_master(&self) {
         self.master_generation.fetch_add(1, Ordering::SeqCst);
@@ -1341,54 +1398,77 @@ fn yield_master_to(live: &Arc<RwLock<Option<Live>>>, requester: prolink::DeviceN
     // rather than a grant, so neither deck ended up master -- and this deck
     // then took its own claim back the next time anything set it.
     drop(held);
-    let live = Arc::clone(live);
-    tokio::spawn(async move {
-        for _ in 0..MASTER_HANDOVER_POLLS {
-            tokio::time::sleep(MASTER_HANDOVER_POLL).await;
-            let done = {
-                let held = match live.read() {
-                    Ok(held) => held,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
-                let Some(session) = held.as_ref() else {
-                    return;
-                };
-                let Some(cdj) = session.role.cdj() else {
-                    return;
-                };
-                // Somebody else set the claim meanwhile -- taking it back, or
-                // dropping it outright -- and that ended this handover.
-                if cdj.yielding_to() != Some(requester) {
-                    return;
-                }
-                let taken = session
-                    .monitor
-                    .player(requester)
-                    .is_some_and(|player| player.is_tempo_master() == Some(true));
-                if taken {
-                    cdj.finish_yield();
-                    tracing::info!(%requester, "handed tempo master over");
-                }
-                taken
+    tokio::spawn(watch_handover(Arc::clone(live), requester, UnclaimedHandover::StandDown));
+}
+
+/// What to do about a handover the successor never picked up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnclaimedHandover {
+    /// It asked: let go anyway. Holding a mastership the network is not
+    /// acting on is what a CDJ that cannot take master back looks like.
+    StandDown,
+    /// We offered unasked: keep it, and stop naming a successor. Nobody took
+    /// it, and dropping it would leave the network with no master at all.
+    KeepIt,
+}
+
+/// Watch for *successor* to pick up the mastership we are naming it for, and
+/// let go once it has.
+async fn watch_handover(
+    live: Arc<RwLock<Option<Live>>>,
+    successor: prolink::DeviceNumber,
+    unclaimed: UnclaimedHandover,
+) {
+    for _ in 0..MASTER_HANDOVER_POLLS {
+        tokio::time::sleep(MASTER_HANDOVER_POLL).await;
+        let done = {
+            let held = match live.read() {
+                Ok(held) => held,
+                Err(poisoned) => poisoned.into_inner(),
             };
-            if done {
+            let Some(session) = held.as_ref() else {
+                return;
+            };
+            let Some(cdj) = session.role.cdj() else {
+                return;
+            };
+            // Somebody else set the claim meanwhile -- taking it back, or
+            // dropping it outright -- and that ended this handover.
+            if cdj.yielding_to() != Some(successor) {
                 return;
             }
-        }
-        // It never picked it up. Holding a mastership the network is not acting
-        // on is the worse of the two states -- it is what a CDJ that cannot
-        // take master back looks like -- so let go anyway and say so.
-        let held = match live.read() {
-            Ok(held) => held,
-            Err(poisoned) => poisoned.into_inner(),
+            let taken = session
+                .monitor
+                .player(successor)
+                .is_some_and(|player| player.is_tempo_master() == Some(true));
+            if taken {
+                cdj.finish_yield();
+                tracing::info!(%successor, "handed tempo master over");
+            }
+            taken
         };
-        if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
-            && cdj.yielding_to() == Some(requester)
-        {
-            cdj.finish_yield();
-            tracing::warn!(%requester, "never picked tempo master up; standing down anyway");
+        if done {
+            return;
         }
-    });
+    }
+    let held = match live.read() {
+        Ok(held) => held,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
+        && cdj.yielding_to() == Some(successor)
+    {
+        match unclaimed {
+            UnclaimedHandover::StandDown => {
+                cdj.finish_yield();
+                tracing::warn!(%successor, "never picked tempo master up; standing down anyway");
+            }
+            UnclaimedHandover::KeepIt => {
+                cdj.withdraw_offer();
+                tracing::info!(%successor, "did not take the tempo master offered; keeping it");
+            }
+        }
+    }
 }
 
 /// The running player, cloned out from under the lock.

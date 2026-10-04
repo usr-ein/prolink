@@ -991,6 +991,14 @@ pub mod ffi {
         /// Give up tempo master.
         fn release_tempo_master(self: &Session);
 
+        /// Take a mastership another deck is handing us unasked, naming us at
+        /// byte `0x9f`. True when one was, and we now claim it.
+        fn accept_tempo_master(self: &Session) -> bool;
+
+        /// Hand tempo master to `device` unasked, as a CDJ master that stops
+        /// does for a synced deck playing on; kept if it never picks up.
+        fn offer_tempo_master(self: &Session, device: u8) -> bool;
+
         /// Whether we are claiming tempo master.
         fn is_tempo_master(self: &Session) -> bool;
 
