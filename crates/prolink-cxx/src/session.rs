@@ -765,7 +765,7 @@ impl Session {
             });
             return;
         };
-        if !self.ask_for_tempo_master(holder) {
+        if !request_master(&self.live, holder) {
             return;
         }
 
@@ -773,7 +773,6 @@ impl Session {
         // unicast to a port the monitor holds; see
         // `VirtualCdj::request_tempo_master`.
         let master_generation = Arc::clone(&self.master_generation);
-        let resend = self.resend_handle();
         self.runtime.spawn(async move {
             for poll in 0..MASTER_HANDOVER_POLLS {
                 tokio::time::sleep(MASTER_HANDOVER_POLL).await;
@@ -782,10 +781,7 @@ impl Session {
                     return;
                 }
                 let outcome = {
-                    let held = match live.read() {
-                        Ok(held) => held,
-                        Err(poisoned) => poisoned.into_inner(),
-                    };
+                    let held = read_live(&live);
                     let Some(session) = held.as_ref() else {
                         return;
                     };
@@ -795,80 +791,30 @@ impl Session {
                     if cdj.is_tempo_master() {
                         return;
                     }
-                    take_outcome(&session.monitor.players(), holder, session.role.number())
+                    let outcome =
+                        take_outcome(&session.monitor.players(), holder, session.role.number());
+                    if matches!(outcome, TakeOutcome::Granted | TakeOutcome::Vacant) {
+                        cdj.set_tempo_master(true);
+                        tracing::info!(%holder, ?outcome, "took tempo master");
+                    }
+                    outcome
                 };
                 match outcome {
-                    TakeOutcome::Granted | TakeOutcome::Vacant => {
-                        let held = match live.read() {
-                            Ok(held) => held,
-                            Err(poisoned) => poisoned.into_inner(),
-                        };
-                        if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
-                            && master_generation.load(Ordering::SeqCst) == generation
-                        {
-                            cdj.set_tempo_master(true);
-                            tracing::info!(%holder, ?outcome, "took tempo master");
-                        }
-                        return;
-                    }
+                    TakeOutcome::Granted | TakeOutcome::Vacant => return,
                     TakeOutcome::TakenByAnother(other) => {
                         tracing::info!(%holder, %other, "tempo master went to another deck");
                         return;
                     }
-                    TakeOutcome::Waiting => {
-                        // A request lost on the wire is never answered; one
-                        // more, a few status packets in, costs nothing.
-                        if poll == MASTER_REQUEST_RESEND_AFTER {
-                            resend(holder);
-                        }
+                    // A request lost on the wire is never answered; one more,
+                    // a few status packets in, costs nothing.
+                    TakeOutcome::Waiting if poll == MASTER_REQUEST_RESEND_AFTER => {
+                        request_master(&live, holder);
                     }
+                    TakeOutcome::Waiting => {}
                 }
             }
             tracing::warn!(%holder, "the tempo master never yielded");
         });
-    }
-
-    /// Send the `0x26` to *holder*. False when it could not be sent.
-    fn ask_for_tempo_master(&self, holder: prolink::DeviceNumber) -> bool {
-        self.resend_handle()(holder)
-    }
-
-    /// A callable that sends the `0x26` to a holder, for the take's watcher,
-    /// which runs after this call has returned.
-    fn resend_handle(&self) -> impl Fn(prolink::DeviceNumber) -> bool + Send + 'static {
-        let live = Arc::clone(&self.live);
-        move |holder| {
-            let held = match live.read() {
-                Ok(held) => held,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            let Some(session) = held.as_ref() else {
-                return false;
-            };
-            let address = session
-                .role
-                .discovery()
-                .devices()
-                .iter()
-                .find(|device| device.number == holder)
-                .map(|device| device.ip);
-            let Some(address) = address else {
-                tracing::warn!(%holder, "the tempo master has no address to ask");
-                return false;
-            };
-            match session
-                .role
-                .cdj()
-                .map(|cdj| cdj.request_tempo_master(address))
-            {
-                Some(Ok(())) => true,
-                Some(Err(error)) => {
-                    tracing::warn!(%error, "could not ask for tempo master");
-                    false
-                }
-                None => false,
-            }
-        }
     }
 
     /// Whether SYNC is engaged here, published as flag bit 4.
@@ -1363,10 +1309,7 @@ async fn unmount(
 /// Silent when we do not hold it, which is the common case: the request is
 /// addressed to the current master and we are usually not it.
 fn yield_master_to(live: &Arc<RwLock<Option<Live>>>, requester: prolink::DeviceNumber) {
-    let held = match live.read() {
-        Ok(held) => held,
-        Err(poisoned) => poisoned.into_inner(),
-    };
+    let held = read_live(live);
     let Some(session) = held.as_ref() else {
         return;
     };
@@ -1432,10 +1375,7 @@ async fn watch_handover(
     for _ in 0..MASTER_HANDOVER_POLLS {
         tokio::time::sleep(MASTER_HANDOVER_POLL).await;
         let done = {
-            let held = match live.read() {
-                Ok(held) => held,
-                Err(poisoned) => poisoned.into_inner(),
-            };
+            let held = read_live(&live);
             let Some(session) = held.as_ref() else {
                 return;
             };
@@ -1461,10 +1401,7 @@ async fn watch_handover(
             return;
         }
     }
-    let held = match live.read() {
-        Ok(held) => held,
-        Err(poisoned) => poisoned.into_inner(),
-    };
+    let held = read_live(&live);
     if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
         && cdj.yielding_to() == Some(successor)
     {
@@ -1478,6 +1415,46 @@ async fn watch_handover(
                 tracing::info!(%successor, "did not take the tempo master offered; keeping it");
             }
         }
+    }
+}
+
+/// The live session, read even when a writer panicked while holding the lock:
+/// what it holds was whole when the panic happened, and refusing it would stop
+/// mastership being handed over for the rest of the session.
+fn read_live(live: &RwLock<Option<Live>>) -> std::sync::RwLockReadGuard<'_, Option<Live>> {
+    live.read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Send a `0x26` to *holder*, asking it to hand tempo master over. False when
+/// it could not be sent.
+fn request_master(live: &RwLock<Option<Live>>, holder: prolink::DeviceNumber) -> bool {
+    let held = read_live(live);
+    let Some(session) = held.as_ref() else {
+        return false;
+    };
+    let address = session
+        .role
+        .discovery()
+        .devices()
+        .iter()
+        .find(|device| device.number == holder)
+        .map(|device| device.ip);
+    let Some(address) = address else {
+        tracing::warn!(%holder, "the tempo master has no address to ask");
+        return false;
+    };
+    match session
+        .role
+        .cdj()
+        .map(|cdj| cdj.request_tempo_master(address))
+    {
+        Some(Ok(())) => true,
+        Some(Err(error)) => {
+            tracing::warn!(%error, "could not ask for tempo master");
+            false
+        }
+        None => false,
     }
 }
 
