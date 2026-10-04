@@ -284,6 +284,14 @@ pub mod ffi {
         /// Position within the four-beat bar, `0.0` on the downbeat. Negative
         /// when unknown.
         bar_phase: f64,
+        /// Where in the bar the deck's status packet puts the playhead, `0.0`
+        /// on the downbeat, **to the nearest beat below**. Negative when
+        /// unknown.
+        ///
+        /// For a deck that is not playing, which `bar_phase` has nothing to say
+        /// about: beats stop with the platter, status does not, and this
+        /// follows the jog wheel a beat at a time.
+        bar_position: f64,
         /// Which beat of the bar, 1–4. Zero when the player has no bar to be
         /// in, which is what an unanalysed track reports.
         beat_in_bar: u8,

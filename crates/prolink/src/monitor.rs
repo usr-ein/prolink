@@ -304,9 +304,60 @@ pub struct PlayerStatus {
     /// [`prolink_proto::beat::MasterResponse`] and the old master dropping its
     /// claim — the window in which **both** decks report `is_tempo_master`.
     pub yielding_to: Option<DeviceNumber>,
+    /// The beat the playhead is in, counting the track's first beat as 1, from
+    /// bytes `0xa0`–`0xa3`. `0` is the lead-in before it; `None` off the grid.
+    ///
+    /// **Kept current while the deck is paused**, which is what makes it worth
+    /// having when beat packets already say where a playing deck is: they stop
+    /// with the platter, and this goes on counting as the jog wheel moves the
+    /// playhead. A paused deck in S10i, its playhead wound back, reports 225,
+    /// 224, 223, 222 in consecutive packets.
+    pub beat: Option<u32>,
+    /// Which beat of the bar that is, 1–4, from byte `0xa6`.
+    ///
+    /// `None` off the grid, and also while searching, when a deck reports `0`
+    /// here while [`Self::beat`] runs on.
+    pub beat_in_bar: Option<BeatInBar>,
 }
 
 impl PlayerStatus {
+    /// Where in the four-beat bar this status puts the playhead, `0.0` on the
+    /// downbeat — **to the nearest beat below**. A status packet names the beat
+    /// the playhead is in, not how far through it, so this is the start of
+    /// that beat.
+    ///
+    /// What there is to draw for a deck that is not playing; see [`Self::beat`]
+    /// for why it follows the jog wheel. While searching, byte `0xa6` is `0` and
+    /// the bar is counted from the beat number instead, by the convention the
+    /// beat grid itself uses: beat 1 is a downbeat. `None` off the grid.
+    pub fn bar_position(&self) -> Option<f64> {
+        let per_bar = BeatInBar::PER_BAR;
+        let index = if let Some(in_bar) = self.beat_in_bar {
+            in_bar.index()
+        } else {
+            let beat = self.beat?;
+            let per_bar = u32::from(per_bar);
+            // Beat 1 is index 0, and beat 0 -- the lead-in -- is the last beat
+            // of the bar before it.
+            u8::try_from((beat % per_bar + per_bar - 1) % per_bar).ok()?
+        };
+        Some(f64::from(index) / f64::from(per_bar))
+    }
+
+    /// This status with the playhead's position left out.
+    ///
+    /// What counts as a change worth an event. The position moves with every
+    /// beat a playing deck plays, and an event per beat would bury the changes
+    /// a subscriber is actually waiting for; it is read off the snapshot
+    /// instead.
+    fn without_position(self) -> Self {
+        Self {
+            beat: None,
+            beat_in_bar: None,
+            ..self
+        }
+    }
+
     /// The tempo actually playing: the track's tempo with the fader applied.
     ///
     /// `None` when either half is missing. Unlike
@@ -416,6 +467,16 @@ impl PlayerState {
     /// Where in the bar, `0.0`–`1.0`. `None` when stale or off the grid.
     pub fn bar_phase(&self) -> Option<f64> {
         self.beat.and_then(BeatObservation::bar_phase)
+    }
+
+    /// Where in the bar the last status packet put the playhead, to the beat.
+    ///
+    /// The answer for a deck that is not playing, which [`Self::bar_phase`]
+    /// has none for; see [`PlayerStatus::bar_position`]. `None` without status
+    /// or off the grid.
+    pub fn bar_position(&self) -> Option<f64> {
+        self.status
+            .and_then(|observed| observed.status.bar_position())
     }
 
     /// Which beat of the bar the last packet announced, 1–4.
@@ -571,9 +632,14 @@ impl PlayerTable {
             is_synced: flags.is_some_and(StatusFlags::is_synced),
             is_playing: flags.is_some_and(StatusFlags::is_playing),
             yielding_to: packet.yielding_to(),
+            beat: packet.beat_number(),
+            beat_in_bar: packet.beat_in_bar(),
         };
         let entry = self.entry(device, packet.name());
-        let changed = entry.status.map(|(previous, _)| previous) != Some(status);
+        let changed = entry
+            .status
+            .map(|(previous, _)| previous.without_position())
+            != Some(status.without_position());
         entry.status = Some((status, now));
 
         let mut events = Vec::new();
@@ -1169,6 +1235,67 @@ mod tests {
         let state = table.state(device(2), now).expect("a player");
         assert!(state.beat_phase().is_some(), "the beat is still placed");
         assert!(state.bar_phase().is_none(), "but the bar is not");
+    }
+
+    /// A status packet whose playhead is on *beat*, with *in_bar* at byte
+    /// `0xa6` -- `0` there is what a deck sends while searching.
+    fn status_on_beat(number: u8, play: u8, beat: Option<u32>, in_bar: u8) -> CdjStatus {
+        let mut raw = status_from(number, play, false, 182).into_bytes();
+        raw[0xa0..0xa4].copy_from_slice(&beat.unwrap_or(0xffff_ffff).to_be_bytes());
+        raw[0xa6] = in_bar;
+        CdjStatus::parse(&raw).expect("a status packet")
+    }
+
+    #[test]
+    fn a_paused_deck_is_placed_on_its_beat_and_follows_the_playhead() {
+        // S10i: a paused deck, its playhead wound back a beat a packet.
+        let mut table = PlayerTable::default();
+        let start = Instant::now();
+        for (step, (beat, in_bar, expected)) in
+            [(225, 1, 0.0), (224, 4, 0.75), (223, 3, 0.5), (222, 2, 0.25)]
+                .into_iter()
+                .enumerate()
+        {
+            let now = start + Duration::from_millis(200 * u64::try_from(step).unwrap_or(0));
+            let packet = status_on_beat(2, PlayState::PAUSED.0, Some(beat), in_bar);
+            table.observe_status(&packet, now);
+            let state = table.state(device(2), now).expect("a player");
+            assert_eq!(state.bar_position(), Some(expected), "beat {beat}");
+            assert!(state.bar_phase().is_none(), "no beats, so no phase");
+        }
+    }
+
+    #[test]
+    fn while_searching_the_bar_is_counted_from_the_beat() {
+        // Byte 0xa6 is 0 while searching; beat 1 is a downbeat, and beat 0 is
+        // the lead-in, the last beat of the bar before it.
+        let mut table = PlayerTable::default();
+        let now = Instant::now();
+        for (beat, expected) in [(245, Some(0.0)), (6, Some(0.25)), (0, Some(0.75))] {
+            let packet = status_on_beat(2, PlayState::SEARCHING.0, Some(beat), 0);
+            table.observe_status(&packet, now);
+            let state = table.state(device(2), now).expect("a player");
+            assert_eq!(state.bar_position(), expected, "beat {beat}");
+        }
+        let off_the_grid = status_on_beat(2, PlayState::PAUSED.0, None, 0);
+        table.observe_status(&off_the_grid, now);
+        let state = table.state(device(2), now).expect("a player");
+        assert_eq!(state.bar_position(), None);
+    }
+
+    #[test]
+    fn a_moving_playhead_is_not_a_status_change() {
+        // A playing deck's beat moves twice a second; that is in the snapshot,
+        // not an event apiece.
+        let mut table = PlayerTable::default();
+        let now = Instant::now();
+        let first = status_on_beat(3, PlayState::PLAYING.0, Some(10), 2);
+        let next = status_on_beat(3, PlayState::PLAYING.0, Some(11), 3);
+        assert_eq!(table.observe_status(&first, now).len(), 1);
+        let later = now + Duration::from_millis(200);
+        assert!(table.observe_status(&next, later).is_empty());
+        let state = table.state(device(3), later).expect("a player");
+        assert_eq!(state.bar_position(), Some(0.5));
     }
 
     #[test]
