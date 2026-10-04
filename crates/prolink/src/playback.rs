@@ -120,6 +120,9 @@ pub struct Playback {
     pub playing: bool,
     /// Where the playhead is, or `None` off the grid.
     pub beat: Option<BeatPosition>,
+    /// The platter is being held or dragged by hand. The playhead goes where
+    /// the hand takes it, so no beat is projected from it or sent for it.
+    pub scratching: bool,
 }
 
 impl Default for Playback {
@@ -129,6 +132,7 @@ impl Default for Playback {
             pitch: Pitch::UNITY,
             playing: false,
             beat: None,
+            scratching: false,
         }
     }
 }
@@ -305,6 +309,7 @@ mod tests {
             pitch: Pitch::UNITY,
             playing: true,
             beat: Some(position),
+            scratching: false,
         }
     }
 

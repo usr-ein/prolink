@@ -658,6 +658,7 @@ impl Session {
         bpm: f64,
         pitch_percent: f64,
         playing: bool,
+        scratching: bool,
         beat_number: u32,
         beat_fraction: f64,
     ) {
@@ -674,6 +675,7 @@ impl Session {
                 number: beat_number,
                 fraction: beat_fraction,
             }),
+            scratching,
         };
         self.with_live(|live| {
             if let Some(cdj) = live.role.cdj() {

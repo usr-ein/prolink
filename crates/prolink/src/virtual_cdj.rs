@@ -1289,6 +1289,13 @@ fn observe_peer_media(peers: &PeerMedia, response: &status::MediaResponse) {
 ///    bars on. Followers acted on both.
 ///  * **Stopping** clears the count.
 fn beat_to_emit(playback: &Playback, emitted: &mut Option<u32>) -> Option<BeatPosition> {
+    // A scratched platter's playhead is the hand's, not the music's: its
+    // position comes in thirty times a second and jumps both ways, and every
+    // beat crossing it made used to go out as a beat at the nominal tempo.
+    if playback.scratching {
+        *emitted = None;
+        return None;
+    }
     let (Some(position), true) = (playback.beat, playback.playing) else {
         *emitted = None;
         return None;
@@ -1753,6 +1760,7 @@ mod tests {
                 number: 6,
                 fraction: 0.5,
             }),
+            scratching: false,
         }
     }
 
@@ -1952,6 +1960,23 @@ mod tests {
         assert_eq!(
             beat_to_emit(&at(17, 0.0), &mut emitted).map(|p| p.number),
             Some(17)
+        );
+    }
+
+    #[test]
+    fn a_scratched_platter_sends_no_beats() {
+        let mut emitted = None;
+        beat_to_emit(&at(6, 0.9), &mut emitted);
+        let scratched = Playback {
+            scratching: true,
+            ..at(7, 0.0)
+        };
+        assert_eq!(beat_to_emit(&scratched, &mut emitted), None);
+        // Let go mid-beat: the next downbeat sends.
+        assert_eq!(beat_to_emit(&at(7, 0.5), &mut emitted), None);
+        assert_eq!(
+            beat_to_emit(&at(8, 0.0), &mut emitted).map(|p| p.number),
+            Some(8)
         );
     }
 

@@ -948,7 +948,8 @@ pub mod ffi {
         /// `pitch_percent` the fader itself, as the wire carries them.
         /// `beat_number` counts beats from 1, and `beat_fraction` is how far
         /// through that beat the playhead is. Zero for `beat_number` means
-        /// there is no grid to publish.
+        /// there is no grid to publish. `scratching` is the platter held or
+        /// dragged by hand: no beats are sent for it.
         ///
         /// Call it from a timer several times a second. Beats between calls
         /// are projected from the tempo, so this rate sets how fast a tempo
@@ -958,6 +959,7 @@ pub mod ffi {
             bpm: f64,
             pitch_percent: f64,
             playing: bool,
+            scratching: bool,
             beat_number: u32,
             beat_fraction: f64,
         );
