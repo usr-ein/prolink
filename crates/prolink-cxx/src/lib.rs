@@ -331,6 +331,11 @@ pub mod ffi {
         track_source_player: u8,
         /// Which of that player's slots.
         track_source_slot: Slot,
+        /// Whether the loaded track is a rekordbox-analysed one, the only kind
+        /// whose `track_id` is a row in that medium's export.pdb. An
+        /// unanalysed file's id is the player's own numbering, and looking it
+        /// up there finds an unrelated track.
+        track_is_rekordbox: bool,
     }
 
     /// A row in a browse menu: a track, an artist, an album, a category.

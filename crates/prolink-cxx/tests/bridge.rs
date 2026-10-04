@@ -218,6 +218,7 @@ fn a_player_with_no_status_reports_absent_rather_than_zero() {
     // Nothing has arrived, which is not "arrived just now".
     assert!(player.beat_age_ms < 0.0);
     assert!(player.status_age_ms < 0.0);
+    assert!(!player.track_is_rekordbox);
 }
 
 #[test]

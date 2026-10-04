@@ -116,6 +116,8 @@ pub(crate) fn player(from: &prolink::PlayerState) -> Player {
         track_id: track.map_or(0, |track| track.id),
         track_source_player: track.map_or(0, |track| track.source_player.get()),
         track_source_slot: track.map_or(Slot::None, |track| slot(track.slot)),
+        track_is_rekordbox: track
+            .is_some_and(|track| track.kind == prolink::monitor::TrackKind::REKORDBOX),
     }
 }
 
