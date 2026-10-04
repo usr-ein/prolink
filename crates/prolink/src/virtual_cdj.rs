@@ -1272,41 +1272,44 @@ fn observe_peer_media(peers: &PeerMedia, response: &status::MediaResponse) {
 
 /// Which beat, if any, is due to be broadcast right now.
 ///
-/// `emitted` is the last beat number sent, and this is where the awkward cases
-/// live rather than in the task above:
+/// A follower phase-locks to the *arrival* of each beat packet, so a packet
+/// may only leave on a beat. `emitted` is the last beat number this playhead
+/// was seen in, and:
 ///
-///  * **A beat is due** when the playhead has reached a beat we have not sent.
-///    Only ever one datagram per tick, so a stall in the task cannot produce a
-///    burst of backdated beats — a follower would read that as a tempo spike.
-///  * **A seek moves the playhead backwards**, and the beat it lands on has
-///    usually been sent before. Refusing to re-send it would go silent until
-///    the track caught up to where it had been, which after a jump to the start
-///    of a five-minute track is five minutes. So a position *behind* the last
-///    one resets the count and beats resume immediately.
-///  * **Stopping** clears the count, so the first beat after pressing play is
-///    sent rather than skipped.
+///  * **The playhead entering a beat it was not in** sends that beat, as its
+///    downbeat -- if it is still at the start of it. Crossing into the next
+///    beat in play is the ordinary case; a jump landing on a downbeat is the
+///    same thing.
+///  * **Anywhere else is a silent re-sync**: a crossing the task noticed late
+///    (a stall), a hot cue or beat jump forwards, a seek or a loop wrapping
+///    backwards, the first beat seen after play. The count moves to where the
+///    playhead is, and the next crossing sends. Sending the landing beat at
+///    once put it on the wire mid-beat; catching up beat by beat put
+///    sixty-four packets on it in a third of a second for a hot cue sixteen
+///    bars on. Followers acted on both.
+///  * **Stopping** clears the count.
 fn beat_to_emit(playback: &Playback, emitted: &mut Option<u32>) -> Option<BeatPosition> {
     let (Some(position), true) = (playback.beat, playback.playing) else {
         *emitted = None;
         return None;
     };
-    match *emitted {
-        Some(last) if position.number == last => None,
-        Some(last) if position.number > last => {
-            // One at a time, and the next tick will bring the one after.
-            let next = BeatPosition {
-                number: last + 1,
-                fraction: 0.0,
-            };
-            *emitted = Some(next.number);
-            Some(next)
-        }
-        // Behind where we were, or nothing sent yet: start again from here.
-        _ => {
-            *emitted = Some(position.number);
-            Some(position)
-        }
+    let previous = emitted.replace(position.number);
+    if previous == Some(position.number) {
+        return None;
     }
+    // How far past the downbeat the playhead is: within a couple of ticks of
+    // it is "on the beat", and anything more is too late to be one.
+    let late = playback
+        .beat_interval()
+        .map(|interval| interval.mul_f64(position.fraction.clamp(0.0, 1.0)));
+    // A crossing and a jump are told apart by nothing else: either way the
+    // playhead is in a beat it was not in, and it is sent only if it is at
+    // that beat's start.
+    late.is_some_and(|late| late <= 2 * BEAT_TICK)
+        .then_some(BeatPosition {
+            number: position.number,
+            fraction: 0.0,
+        })
 }
 
 /// Everything the status packet says about what this deck is *doing*, as
@@ -1882,86 +1885,89 @@ mod tests {
         );
     }
 
-    #[test]
-    fn beats_are_emitted_once_each_and_in_order() {
-        let mut emitted = None;
-        let mut playback = playing();
-        // The first beat seen is sent immediately -- there is nothing to be
-        // late for yet.
-        assert_eq!(
-            beat_to_emit(&playback, &mut emitted).map(|p| p.number),
-            Some(6)
-        );
-        // ...and not again while the playhead is still inside it.
-        playback.beat = Some(BeatPosition {
-            number: 6,
-            fraction: 0.9,
-        });
-        assert_eq!(beat_to_emit(&playback, &mut emitted), None);
-        // The next beat goes out on its downbeat, not at the fraction the poll
-        // happened to catch it at: a follower phase-locks to arrival time.
-        playback.beat = Some(BeatPosition {
-            number: 7,
-            fraction: 0.3,
-        });
-        let next = beat_to_emit(&playback, &mut emitted).expect("beat 7");
-        assert_eq!(next.number, 7);
-        assert!(next.fraction.abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn a_stalled_emitter_does_not_fire_a_burst_of_backdated_beats() {
-        // If the task misses its tick -- a busy Pi, a scheduler hiccup -- the
-        // playhead may be several beats further on. Sending all of them now
-        // would put four beats on the wire in one millisecond, which every
-        // follower reads as an enormous tempo spike.
-        let mut emitted = None;
-        let mut playback = playing();
-        beat_to_emit(&playback, &mut emitted);
-        playback.beat = Some(BeatPosition {
-            number: 11,
-            fraction: 0.0,
-        });
-        for expected in 7..=11 {
-            assert_eq!(
-                beat_to_emit(&playback, &mut emitted).map(|p| p.number),
-                Some(expected),
-                "one beat per tick, catching up in order"
-            );
+    /// At 145 BPM a beat is 414 ms: a tick (5 ms) is about 0.012 of one.
+    fn at(number: u32, fraction: f64) -> Playback {
+        Playback {
+            beat: Some(BeatPosition { number, fraction }),
+            ..playing()
         }
     }
 
     #[test]
-    fn a_seek_backwards_resumes_beats_from_where_it_landed() {
-        // The bug this prevents is silence: after a jump to the start of a
-        // five-minute track, "only send beats we have not sent" means no beats
-        // for five minutes.
+    fn a_beat_goes_out_once_on_its_downbeat() {
         let mut emitted = None;
-        let mut playback = playing();
-        beat_to_emit(&playback, &mut emitted);
-        playback.beat = Some(BeatPosition {
-            number: 2,
-            fraction: 0.0,
-        });
+        // Seen mid-beat: nothing to send, only somewhere to count from.
+        assert_eq!(beat_to_emit(&at(6, 0.5), &mut emitted), None);
+        assert_eq!(beat_to_emit(&at(6, 0.9), &mut emitted), None);
+        // Crossing into the next beat sends it, as its downbeat.
+        let next = beat_to_emit(&at(7, 0.005), &mut emitted).expect("beat 7");
+        assert_eq!(next.number, 7);
+        assert!(next.fraction.abs() < f64::EPSILON);
+        assert_eq!(beat_to_emit(&at(7, 0.02), &mut emitted), None);
+    }
+
+    #[test]
+    fn a_crossing_noticed_late_is_skipped_not_sent_late() {
+        let mut emitted = None;
+        beat_to_emit(&at(6, 0.9), &mut emitted);
+        // The task stalled: by the time it looks, beat 7 is a third gone.
+        assert_eq!(beat_to_emit(&at(7, 0.3), &mut emitted), None);
         assert_eq!(
-            beat_to_emit(&playback, &mut emitted).map(|p| p.number),
-            Some(2)
+            beat_to_emit(&at(8, 0.0), &mut emitted).map(|p| p.number),
+            Some(8)
+        );
+    }
+
+    #[test]
+    fn a_jump_forwards_sends_no_burst() {
+        // A hot cue sixteen bars on used to send all sixty-four beats in
+        // between, one per tick: a third of a second of tempo spike.
+        let mut emitted = None;
+        beat_to_emit(&at(6, 0.9), &mut emitted);
+        assert_eq!(beat_to_emit(&at(70, 0.4), &mut emitted), None);
+        assert_eq!(beat_to_emit(&at(70, 0.6), &mut emitted), None);
+        assert_eq!(
+            beat_to_emit(&at(71, 0.0), &mut emitted).map(|p| p.number),
+            Some(71)
+        );
+    }
+
+    #[test]
+    fn a_jump_backwards_resumes_at_the_next_beat() {
+        // Not silence until the track catches up -- and not the landing beat
+        // sent mid-beat either.
+        let mut emitted = None;
+        beat_to_emit(&at(40, 0.5), &mut emitted);
+        assert_eq!(beat_to_emit(&at(2, 0.5), &mut emitted), None);
+        assert_eq!(
+            beat_to_emit(&at(3, 0.004), &mut emitted).map(|p| p.number),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn a_jump_that_lands_on_a_downbeat_sends_it() {
+        let mut emitted = None;
+        beat_to_emit(&at(40, 0.5), &mut emitted);
+        assert_eq!(
+            beat_to_emit(&at(17, 0.0), &mut emitted).map(|p| p.number),
+            Some(17)
         );
     }
 
     #[test]
     fn nothing_playing_emits_nothing_and_forgets_where_it_was() {
         let mut emitted = None;
-        let playback = playing();
-        beat_to_emit(&playback, &mut emitted);
+        beat_to_emit(&at(6, 0.5), &mut emitted);
         let stopped = Playback {
             playing: false,
-            ..playback
+            ..at(6, 0.5)
         };
         assert_eq!(beat_to_emit(&stopped, &mut emitted), None);
-        assert_eq!(emitted, None, "so the first beat after play is sent");
+        assert_eq!(emitted, None);
+        // Play from a cue on the beat: that beat is sent.
         assert_eq!(
-            beat_to_emit(&playback, &mut emitted).map(|p| p.number),
+            beat_to_emit(&at(6, 0.0), &mut emitted).map(|p| p.number),
             Some(6)
         );
     }

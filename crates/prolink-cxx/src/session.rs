@@ -923,7 +923,11 @@ impl Session {
             return false;
         };
         let offered = self
-            .with_live(|held| held.role.cdj().is_some_and(|cdj| cdj.offer_tempo_master(successor)))
+            .with_live(|held| {
+                held.role
+                    .cdj()
+                    .is_some_and(|cdj| cdj.offer_tempo_master(successor))
+            })
             .unwrap_or(false);
         if offered {
             self.runtime.spawn(watch_handover(
@@ -1398,7 +1402,11 @@ fn yield_master_to(live: &Arc<RwLock<Option<Live>>>, requester: prolink::DeviceN
     // rather than a grant, so neither deck ended up master -- and this deck
     // then took its own claim back the next time anything set it.
     drop(held);
-    tokio::spawn(watch_handover(Arc::clone(live), requester, UnclaimedHandover::StandDown));
+    tokio::spawn(watch_handover(
+        Arc::clone(live),
+        requester,
+        UnclaimedHandover::StandDown,
+    ));
 }
 
 /// What to do about a handover the successor never picked up.
