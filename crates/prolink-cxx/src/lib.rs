@@ -295,6 +295,22 @@ pub mod ffi {
         /// Which beat of the bar, 1–4. Zero when the player has no bar to be
         /// in, which is what an unanalysed track reports.
         beat_in_bar: u8,
+        /// How long ago its last beat packet arrived, in milliseconds.
+        /// Negative when none has.
+        ///
+        /// `beat_phase` and `bar_phase` stop at the end of the beat when the
+        /// next packet is late rather than run on, so a host comparing its
+        /// own phase against them needs this to tell "on the beat" from "the
+        /// next beat has not arrived yet".
+        beat_age_ms: f64,
+        /// How long ago its last status packet arrived, in milliseconds.
+        /// Negative when none has.
+        ///
+        /// A deck that has gone (cable pulled, powered off) keeps its last
+        /// status, mastership included, until it is forgotten some 30 s later.
+        /// A deck sends status every ~200 ms, so an age well past that means
+        /// the fields above describe a deck that is no longer there.
+        status_age_ms: f64,
 
         /// Whether this player holds tempo master.
         is_master: bool,

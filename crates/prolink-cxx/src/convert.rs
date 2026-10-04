@@ -101,6 +101,12 @@ pub(crate) fn player(from: &prolink::PlayerState) -> Player {
         bar_phase: from.bar_phase().unwrap_or(ABSENT),
         bar_position: from.bar_position().unwrap_or(ABSENT),
         beat_in_bar: from.beat_in_bar().map_or(0, prolink::BeatInBar::get),
+        beat_age_ms: from
+            .beat
+            .map_or(ABSENT, |observed| observed.age.as_secs_f64() * 1000.0),
+        status_age_ms: from
+            .status
+            .map_or(ABSENT, |observed| observed.age.as_secs_f64() * 1000.0),
 
         is_master: from.is_tempo_master().unwrap_or(false),
         is_synced: from.is_synced().unwrap_or(false),

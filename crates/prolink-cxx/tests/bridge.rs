@@ -215,6 +215,9 @@ fn a_player_with_no_status_reports_absent_rather_than_zero() {
     assert!(player.bar_phase < 0.0);
     assert_eq!(player.beat_in_bar, 0);
     assert_eq!(player.track_id, 0);
+    // Nothing has arrived, which is not "arrived just now".
+    assert!(player.beat_age_ms < 0.0);
+    assert!(player.status_age_ms < 0.0);
 }
 
 #[test]
