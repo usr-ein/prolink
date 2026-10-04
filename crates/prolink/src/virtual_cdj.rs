@@ -713,17 +713,18 @@ impl VirtualCdj {
     /// the network observes it: the old master's *status* stops saying it is
     /// master. That is a slower signal by a few packets and a more honest one,
     /// because it is the state the rest of the network is acting on.
-    pub async fn request_tempo_master(&self, holder: Ipv4Addr) -> Result<()> {
+    ///
+    /// Synchronous, like the `0x27` [`Self::yield_tempo_master`] answers with:
+    /// one datagram, sent from whatever thread asks, so no caller has to hold
+    /// a lock across an await -- or, worse, block a UI thread on a runtime
+    /// whose I/O driver a lock-waiting worker might be the only one to turn.
+    pub fn request_tempo_master(&self, holder: Ipv4Addr) -> Result<()> {
         let request = prolink_proto::beat::MasterRequest {
             name: self.config.name,
             device: self.number(),
         };
-        let socket = socket::bind_at(self.interface.ip, 0, Some(&self.interface))?;
         let to = SocketAddr::V4(SocketAddrV4::new(holder, BEAT_PORT));
-        socket
-            .send_to(&request.encode(), to)
-            .await
-            .map_err(Error::io("asking for tempo master"))?;
+        socket::send_once(&self.interface, to, &request.encode())?;
         info!(%holder, "asked the tempo master to hand over");
         Ok(())
     }

@@ -8,7 +8,7 @@
 
 use std::collections::VecDeque;
 use std::net::Ipv4Addr;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use prolink::consume::NfsClient;
@@ -91,6 +91,10 @@ pub struct Session {
     last_error: Arc<Mutex<String>>,
     /// Transfers waiting their turn. See `fetch_file`.
     transfers: Arc<tokio::sync::Semaphore>,
+    /// Bumped by every take and every release of tempo master, so a takeover
+    /// still waiting for its grant can tell it has been overtaken: by a second
+    /// press, or by the host letting go. See `take_tempo_master`.
+    master_generation: Arc<AtomicU64>,
 }
 
 impl std::fmt::Debug for Session {
@@ -260,6 +264,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         // NFSERR_STALE to everything once that table churns (F28) -- so this
         // serialises them the way the C++ this replaces did with a queue.
         transfers: Arc::new(tokio::sync::Semaphore::new(1)),
+        master_generation: Arc::new(AtomicU64::new(0)),
     };
 
     let supervisor = Supervisor {
@@ -712,22 +717,41 @@ impl Session {
     ///
     /// Two steps, and only the first is ours to decide. If another device holds
     /// master it is sent a `0x26` request and **we do not claim anything yet**;
-    /// the claim happens in the background once that device's own status stops
-    /// saying it is master, which is the signal every other player on the
-    /// network acts on. If nobody holds it, it is taken immediately.
+    /// the claim happens in the background once that device names us its
+    /// successor at byte `0x9f`. If nobody holds it, it is taken immediately.
     ///
-    /// Claiming without asking would put two masters on the network and make
-    /// every follower flicker between them, so the wait is not politeness.
+    /// **The grant is byte `0x9f`, and only that.** The holder merely dropping
+    /// its claim is not a grant: with a third deck pressing MASTER at the same
+    /// moment, the holder names *that* deck and drops its claim once it picks
+    /// up -- and counting the drop as ours put two masters on the network.
+    /// When the holder drops its claim without naming us, whoever claims next
+    /// is the master; only if nobody does is the empty mastership taken.
+    ///
+    /// One take at a time: a second press, or a release, overtakes a take
+    /// still waiting. An observer -- no player number of its own -- cannot
+    /// take master at all: it publishes no status, so nobody would see it.
     pub fn take_tempo_master(&self) {
+        let generation = self.master_generation.fetch_add(1, Ordering::SeqCst) + 1;
         let live = Arc::clone(&self.live);
-        let holder = self.with_live(|held| {
-            held.monitor
+        let found = self.with_live(|held| {
+            let Role::Player(_) = &held.role else {
+                tracing::warn!("an observer cannot take tempo master");
+                return None;
+            };
+            let ours = held.role.number();
+            let holder = held
+                .monitor
                 .players()
                 .iter()
-                .find(|player| player.is_tempo_master() == Some(true))
-                .map(|player| player.device)
+                .find(|player| {
+                    player.device.get() != ours
+                        && player.is_tempo_master() == Some(true)
+                        && status_is_fresh(player)
+                })
+                .map(|player| player.device);
+            Some(holder)
         });
-        let Some(holder) = holder else {
+        let Some(Some(holder)) = found else {
             return;
         };
         let Some(holder) = holder else {
@@ -739,52 +763,23 @@ impl Session {
             });
             return;
         };
-        let address = self.with_live(|held| {
-            held.role
-                .discovery()
-                .devices()
-                .iter()
-                .find(|device| device.number == holder)
-                .map(|device| device.ip)
-        });
-        let Some(Some(address)) = address else {
-            tracing::warn!(%holder, "the tempo master has no address to ask");
+        if !self.ask_for_tempo_master(holder) {
             return;
-        };
-        // The request itself goes out on this thread. The session lives behind
-        // a lock whose guard is not `Send`, so it cannot be held across an
-        // await inside a spawned task — and one UDP datagram is not worth
-        // restructuring the ownership of the whole session for.
-        let asked = self.with_live(|held| {
-            held.role.cdj().map(|cdj| {
-                self.runtime
-                    .block_on(async { cdj.request_tempo_master(address).await })
-            })
-        });
-        match asked {
-            Some(Some(Ok(()))) => {}
-            Some(Some(Err(error))) => {
-                tracing::warn!(%error, "could not ask for tempo master");
-                return;
-            }
-            _ => return,
         }
 
         // Then watch the holder's own status, because the `0x27` reply is
         // unicast to a port the monitor holds; see
         // `VirtualCdj::request_tempo_master`.
-        //
-        // **The grant is byte `0x9f`, not the absence of byte `0x9e`.** A deck
-        // handing over keeps claiming mastership and names its successor at
-        // `0x9f`; it drops the claim only once the successor has picked it up.
-        // Waiting for the claim to go away first is therefore a deadlock, and
-        // it is one that looks exactly like a refusal: the request goes out,
-        // the CDJ answers and sits at "yielding to 4", and Mixxx times out
-        // saying the master never yielded. It had. It was waiting for us.
+        let master_generation = Arc::clone(&self.master_generation);
+        let resend = self.resend_handle();
         self.runtime.spawn(async move {
-            for _ in 0..MASTER_HANDOVER_POLLS {
+            for poll in 0..MASTER_HANDOVER_POLLS {
                 tokio::time::sleep(MASTER_HANDOVER_POLL).await;
-                let done = {
+                if master_generation.load(Ordering::SeqCst) != generation {
+                    // Pressed again, or let go of: this take is over.
+                    return;
+                }
+                let outcome = {
                     let held = match live.read() {
                         Ok(held) => held,
                         Err(poisoned) => poisoned.into_inner(),
@@ -792,27 +787,86 @@ impl Session {
                     let Some(session) = held.as_ref() else {
                         return;
                     };
-                    let ours = session.role.number();
-                    let granted = session.monitor.player(holder).is_none_or(|player| {
-                        // Either it has named us as its successor, or it has
-                        // stopped claiming mastership altogether -- which is
-                        // what a deck does when it is simply stopped rather
-                        // than handing over.
-                        player.yielding_to().is_some_and(|to| to.get() == ours)
-                            || player.is_tempo_master() != Some(true)
-                    });
-                    if let (true, Some(cdj)) = (granted, session.role.cdj()) {
-                        cdj.set_tempo_master(true);
-                        tracing::info!(%holder, "took tempo master");
+                    let Some(cdj) = session.role.cdj() else {
+                        return;
+                    };
+                    if cdj.is_tempo_master() {
+                        return;
                     }
-                    granted
+                    take_outcome(&session.monitor.players(), holder, session.role.number())
                 };
-                if done {
-                    return;
+                match outcome {
+                    TakeOutcome::Granted | TakeOutcome::Vacant => {
+                        let held = match live.read() {
+                            Ok(held) => held,
+                            Err(poisoned) => poisoned.into_inner(),
+                        };
+                        if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
+                            && master_generation.load(Ordering::SeqCst) == generation
+                        {
+                            cdj.set_tempo_master(true);
+                            tracing::info!(%holder, ?outcome, "took tempo master");
+                        }
+                        return;
+                    }
+                    TakeOutcome::TakenByAnother(other) => {
+                        tracing::info!(%holder, %other, "tempo master went to another deck");
+                        return;
+                    }
+                    TakeOutcome::Waiting => {
+                        // A request lost on the wire is never answered; one
+                        // more, a few status packets in, costs nothing.
+                        if poll == MASTER_REQUEST_RESEND_AFTER {
+                            resend(holder);
+                        }
+                    }
                 }
             }
             tracing::warn!(%holder, "the tempo master never yielded");
         });
+    }
+
+    /// Send the `0x26` to *holder*. False when it could not be sent.
+    fn ask_for_tempo_master(&self, holder: prolink::DeviceNumber) -> bool {
+        self.resend_handle()(holder)
+    }
+
+    /// A callable that sends the `0x26` to a holder, for the take's watcher,
+    /// which runs after this call has returned.
+    fn resend_handle(&self) -> impl Fn(prolink::DeviceNumber) -> bool + Send + 'static {
+        let live = Arc::clone(&self.live);
+        move |holder| {
+            let held = match live.read() {
+                Ok(held) => held,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            let Some(session) = held.as_ref() else {
+                return false;
+            };
+            let address = session
+                .role
+                .discovery()
+                .devices()
+                .iter()
+                .find(|device| device.number == holder)
+                .map(|device| device.ip);
+            let Some(address) = address else {
+                tracing::warn!(%holder, "the tempo master has no address to ask");
+                return false;
+            };
+            match session
+                .role
+                .cdj()
+                .map(|cdj| cdj.request_tempo_master(address))
+            {
+                Some(Ok(())) => true,
+                Some(Err(error)) => {
+                    tracing::warn!(%error, "could not ask for tempo master");
+                    false
+                }
+                None => false,
+            }
+        }
     }
 
     /// Whether SYNC is engaged here, published as flag bit 4.
@@ -824,8 +878,9 @@ impl Session {
         });
     }
 
-    /// Give up tempo master.
+    /// Give up tempo master, and abandon any take still waiting for a grant.
     pub fn release_tempo_master(&self) {
+        self.master_generation.fetch_add(1, Ordering::SeqCst);
         self.with_live(|live| {
             if let Some(cdj) = live.role.cdj() {
                 cdj.set_tempo_master(false);
@@ -1368,6 +1423,60 @@ fn player_of(live: &Arc<RwLock<Option<Live>>>) -> Option<Arc<VirtualPlayer>> {
 /// in one packet.
 const MASTER_HANDOVER_POLL: std::time::Duration = std::time::Duration::from_millis(100);
 const MASTER_HANDOVER_POLLS: usize = 20;
+/// After how many unanswered polls the `0x26` is sent once more.
+const MASTER_REQUEST_RESEND_AFTER: usize = 3;
+/// A status packet older than this describes a deck that may have gone. A deck
+/// sends one every ~200 ms; a silent one is otherwise believed, mastership
+/// included, until it is forgotten some 30 s later.
+const STATUS_FRESH: std::time::Duration = std::time::Duration::from_secs(1);
+
+fn status_is_fresh(player: &prolink::PlayerState) -> bool {
+    player
+        .status
+        .is_some_and(|observed| observed.age < STATUS_FRESH)
+}
+
+/// Where a take of ours stands, from what the network says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TakeOutcome {
+    /// The holder names us at `0x9f`.
+    Granted,
+    /// The holder has let go without naming anyone, or gone, and nobody else
+    /// claims it: the mastership is empty, and ours to take.
+    Vacant,
+    /// Someone else holds it now -- the holder named them, or they claimed.
+    TakenByAnother(prolink::DeviceNumber),
+    /// Nothing has happened yet.
+    Waiting,
+}
+
+fn take_outcome(
+    players: &[prolink::PlayerState],
+    holder: prolink::DeviceNumber,
+    ours: u8,
+) -> TakeOutcome {
+    let holder_state = players.iter().find(|player| player.device == holder);
+    if let Some(state) = holder_state.filter(|state| status_is_fresh(state))
+        && state.is_tempo_master() == Some(true)
+    {
+        return match state.yielding_to() {
+            Some(to) if to.get() == ours => TakeOutcome::Granted,
+            Some(to) => TakeOutcome::TakenByAnother(to),
+            None => TakeOutcome::Waiting,
+        };
+    }
+    // The holder no longer claims it, or has gone. Not a grant: is anyone
+    // else claiming it now?
+    match players.iter().find(|player| {
+        player.device != holder
+            && player.device.get() != ours
+            && player.is_tempo_master() == Some(true)
+            && status_is_fresh(player)
+    }) {
+        Some(other) => TakeOutcome::TakenByAnother(other.device),
+        None => TakeOutcome::Vacant,
+    }
+}
 
 /// The pitch fader as the wire carries it: a fixed-point multiplier where
 /// `0x00100000` is unity, so 100% is 0x100000 and each percent is 0x2800.
@@ -1942,3 +2051,93 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod take_tests {
+    use std::time::Duration;
+
+    use prolink::monitor::{PlayState, PlayerStatus, StatusObservation};
+    use prolink::{DeviceNumber, PlayerState};
+
+    use super::{TakeOutcome, take_outcome};
+
+    const OURS: u8 = 3;
+
+    fn number(n: u8) -> DeviceNumber {
+        DeviceNumber::new(n).expect("a device number")
+    }
+
+    fn deck(n: u8, master: bool, yielding_to: Option<u8>, age_ms: u64) -> PlayerState {
+        PlayerState {
+            device: number(n),
+            name: prolink::DeviceName::default(),
+            beat: None,
+            status: Some(StatusObservation {
+                status: PlayerStatus {
+                    play_state: PlayState::PLAYING,
+                    track: None,
+                    bpm_centi: None,
+                    pitch: None,
+                    is_tempo_master: master,
+                    is_synced: false,
+                    is_playing: true,
+                    yielding_to: yielding_to.map(number),
+                    beat: None,
+                    beat_in_bar: None,
+                },
+                age: Duration::from_millis(age_ms),
+            }),
+        }
+    }
+
+    #[test]
+    fn only_a_holder_naming_us_is_a_grant() {
+        assert_eq!(
+            take_outcome(&[deck(2, true, Some(OURS), 50)], number(2), OURS),
+            TakeOutcome::Granted
+        );
+        assert_eq!(
+            take_outcome(&[deck(2, true, None, 50)], number(2), OURS),
+            TakeOutcome::Waiting
+        );
+    }
+
+    #[test]
+    fn a_holder_naming_another_deck_gave_it_to_that_deck() {
+        assert_eq!(
+            take_outcome(&[deck(2, true, Some(4), 50)], number(2), OURS),
+            TakeOutcome::TakenByAnother(number(4))
+        );
+    }
+
+    /// Three decks: the holder handed over to deck 4 and dropped its claim.
+    /// That is not ours to take -- the PRD's rule, and the bug of claiming it.
+    #[test]
+    fn a_holder_letting_go_is_not_a_grant_when_someone_else_claims() {
+        assert_eq!(
+            take_outcome(
+                &[deck(2, false, None, 50), deck(4, true, None, 50)],
+                number(2),
+                OURS
+            ),
+            TakeOutcome::TakenByAnother(number(4))
+        );
+    }
+
+    #[test]
+    fn a_holder_letting_go_with_nobody_claiming_leaves_it_vacant() {
+        assert_eq!(
+            take_outcome(&[deck(2, false, None, 50)], number(2), OURS),
+            TakeOutcome::Vacant
+        );
+    }
+
+    /// The holder went silent; its last status still says master.
+    #[test]
+    fn a_holder_that_has_gone_leaves_it_vacant() {
+        assert_eq!(
+            take_outcome(&[deck(2, true, None, 5000)], number(2), OURS),
+            TakeOutcome::Vacant
+        );
+    }
+}
