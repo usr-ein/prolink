@@ -237,7 +237,7 @@ impl Playback {
             pitch: self.pitch,
             bpm_centi: self.bpm_centi.unwrap_or(0),
             beat_in_bar: Some(position.in_bar()),
-            // We have no platter to scratch.
+            // No beat is sent while scratching at all; see `beat_to_emit`.
             scratching: false,
         })
     }

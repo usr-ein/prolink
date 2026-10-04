@@ -187,16 +187,13 @@ impl Events {
     /// Everything but two kinds is also in a table the host re-reads, or is
     /// overtaken by a later event. A transfer's end is not: a fetch whose
     /// `TransferDone` was discarded would keep its caller waiting for ever.
-    /// Nor is a slot description, which a deck sends once (F37).
+    /// Nor is a slot description, which a deck sends once (F37). A queue
+    /// holding nothing else grows instead, which is bounded: by the transfers
+    /// the host asked for, and by the slots on the network.
     pub(crate) fn push(&mut self, event: Event) {
-        if self.queue.len() >= EVENT_QUEUE {
-            let spare = self
-                .queue
-                .iter()
-                .position(|queued| {
-                    queued.kind != EventKind::TransferDone && queued.kind != EventKind::MediaInfo
-                })
-                .unwrap_or(0);
+        if self.queue.len() >= EVENT_QUEUE
+            && let Some(spare) = self.queue.iter().position(can_spare)
+        {
             self.queue.remove(spare);
             self.dropped = self.dropped.saturating_add(1);
         }
@@ -211,6 +208,11 @@ impl Events {
         }
         taken
     }
+}
+
+/// Whether a full queue may discard *event*; see [`Events::push`].
+fn can_spare(event: &Event) -> bool {
+    event.kind != EventKind::TransferDone && event.kind != EventKind::MediaInfo
 }
 
 /// The interfaces that could carry Pro DJ Link traffic.
@@ -668,7 +670,8 @@ impl Session {
     /// is the fader, because that is how the wire carries them and deriving one
     /// from the other here would lose which is which. `beat_number` counts from
     /// 1; zero means "no grid", and then nothing is published but the fact that
-    /// a track is loaded.
+    /// a track is loaded. `scratching` is the platter under the DJ's hand: no
+    /// beat goes out while it is, because the playhead is then the hand's.
     pub fn set_playback(
         &self,
         bpm: f64,
@@ -2167,6 +2170,17 @@ mod event_tests {
         assert_eq!(drained[0].kind, EventKind::TransferDone);
         assert_eq!(drained[1].kind, EventKind::MediaInfo);
         assert_eq!(drained[0].dropped, 2);
+    }
+
+    #[test]
+    fn a_full_queue_with_nothing_to_spare_grows() {
+        let mut events = Events::default();
+        for _ in 0..=EVENT_QUEUE {
+            events.push(plain(EventKind::TransferDone, 0, 0));
+        }
+        let drained = events.drain();
+        assert_eq!(drained.len(), EVENT_QUEUE + 1);
+        assert_eq!(drained[0].dropped, 0);
     }
 }
 

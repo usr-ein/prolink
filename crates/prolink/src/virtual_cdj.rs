@@ -1287,7 +1287,7 @@ fn observe_peer_media(peers: &PeerMedia, response: &status::MediaResponse) {
 ///    once put it on the wire mid-beat; catching up beat by beat put
 ///    sixty-four packets on it in a third of a second for a hot cue sixteen
 ///    bars on. Followers acted on both.
-///  * **Stopping** clears the count.
+///  * **Stopping**, or the platter being scratched, clears the count.
 fn beat_to_emit(playback: &Playback, emitted: &mut Option<u32>) -> Option<BeatPosition> {
     // A scratched platter's playhead is the hand's, not the music's: its
     // position comes in thirty times a second and jumps both ways, and every
