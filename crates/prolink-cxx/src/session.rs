@@ -337,9 +337,14 @@ impl Supervisor {
                     }
                     self.teardown();
                 }
-                // Already on it.
+                // Already on it. The MAC counts as much as the address: it
+                // goes verbatim into every keep-alive and claim, and peers key
+                // their device tables on it, so a session that outlived its
+                // interface's MAC would announce a device that is not there.
                 (Some(wanted), Some(current))
-                    if wanted.name == current.name && wanted.ip == current.ip =>
+                    if wanted.name == current.name
+                        && wanted.ip == current.ip
+                        && wanted.mac == current.mac =>
                 {
                     announced_failure = false;
                 }
@@ -500,6 +505,22 @@ async fn start(
     Ok(Live { monitor, role })
 }
 
+/// How long starting a player waits for UDP 111 to come free.
+///
+/// The usual holder is the session this one replaces. Dropping it aborts its
+/// servers, but an aborted task lets go of its socket only once the runtime
+/// next polls it, and a call still being answered holds the socket until it is
+/// done -- so a rebuild that bound at once found the port taken, by ourselves,
+/// and settled for watching as device 7: unbrowsable and serving nothing until
+/// the host restarted. Every time the network moved under a deck, which is what
+/// unplugging and replugging its cable does, it was a race.
+///
+/// Nothing is sent while waiting: the number is claimed only once the files
+/// are served, as before. A port held for good (an `rpcbind`) costs this much
+/// longer to fall back.
+const PORTMAP_RELEASE: std::time::Duration = std::time::Duration::from_secs(5);
+const PORTMAP_RETRY: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Take a real player number, falling back to watching from outside the range.
 ///
 /// A number in 1–4 is not a preference. A deck will not offer us as a LINK
@@ -527,7 +548,19 @@ async fn announce_as_player(
         preferred_number: prolink::BrowsableDeviceNumber::new(config.preferred_number),
         ..VirtualPlayerConfig::new(interface.clone())
     };
-    match VirtualPlayer::start(settings, media).await {
+    let since = std::time::Instant::now();
+    let started = loop {
+        match VirtualPlayer::start(settings.clone(), media.iter().cloned()).await {
+            Err(prolink::Error::PrivilegedPort { ref source, .. })
+                if source.kind() == std::io::ErrorKind::AddrInUse
+                    && since.elapsed() < PORTMAP_RELEASE =>
+            {
+                tokio::time::sleep(PORTMAP_RETRY).await;
+            }
+            other => break other,
+        }
+    };
+    match started {
         Ok(player) => {
             tracing::info!(number = %player.device_number(), "claimed a player number");
             Ok(Role::Player(Arc::new(player)))
