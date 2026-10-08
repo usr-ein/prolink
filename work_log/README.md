@@ -46,6 +46,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 24 | `prolink-proto::beat` + `prolink::monitor`: beat packets, phase, tempo and tempo master | done | [024](024-beats-and-status.md); all 1110 beat packets in the corpus re-encode byte for byte |
 | 34 | One device, both directions: `VirtualPlayer` consumes and serves from one identity, media hot-plug, and binding when the cable appears | done | [031](031-one-device-both-directions.md) |
 | 33 | Becoming a real player: claim 1–4 from the consumer side, share UDP 50002, and stop blocking the host's UI thread | done | [030](030-becoming-a-real-player.md); five defects from a Pi running Mixxx against two CDJs |
+| 35 | Several TriMixxx on one network: a rebuilt session waits for UDP 111, a new MAC is a new session, and two players claiming one number at once settle it by address | done | [032](032-rebinding-and-claiming-together.md); found on emulated decks; the claim rule replayed against every discovery packet in the corpus |
 
 ## Acceptance: what the CLI must be able to do
 

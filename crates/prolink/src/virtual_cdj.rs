@@ -1449,7 +1449,19 @@ async fn claim(
 
 /// One pass of the claim chain for one candidate.
 ///
-/// `Err(holder)` means somebody defended it.
+/// `Err(holder)` means somebody defended it, or that a rival claiming it at the
+/// same moment outranks us.
+///
+/// # Two at once
+///
+/// Only a holder defends a number, so two devices claiming the same one at the
+/// same time never hear a conflict: both finish the chain, and both announce
+/// it. That is what emulated decks started together did, every time, each
+/// having watched the network before the other spoke. So a rival heard
+/// proposing our candidate in its own claim decides it: the lower address keeps
+/// claiming and the higher backs off to its next candidate. Both apply the same
+/// rule to the same two addresses, so exactly one of them moves. A deck that
+/// never backs off (real hardware) costs us nothing we did not already lose.
 async fn claim_one(
     socket: &UdpSocket,
     to: SocketAddr,
@@ -1506,16 +1518,49 @@ async fn claim_one(
                 () = &mut deadline => break,
                 received = conflicts.recv() => {
                     let Ok(announcement) = received else { break };
-                    if let Body::NumberConflict { device_number, ip } = announcement.packet.body
-                        && device_number == candidate.get()
-                    {
-                        return Err(if ip.is_unspecified() { announcement.from } else { ip });
+                    if let Some(holder) = contested(&announcement, candidate, interface) {
+                        return Err(holder);
                     }
                 }
             }
         }
     }
     Ok(())
+}
+
+/// Whether `announcement` takes `candidate` from us mid-claim, and from whom.
+fn contested(
+    announcement: &crate::discovery::Announcement,
+    candidate: BrowsableDeviceNumber,
+    interface: &crate::Interface,
+) -> Option<Ipv4Addr> {
+    match announcement.packet.body {
+        Body::NumberConflict { device_number, ip } if device_number == candidate.get() => {
+            Some(if ip.is_unspecified() {
+                announcement.from
+            } else {
+                ip
+            })
+        }
+        // A rival's claim for the same number: the lower address keeps it.
+        // Our own claims come back to us too (we bind 0.0.0.0), and are ours by
+        // their address.
+        Body::ClaimIp {
+            device_number, ip, ..
+        } if device_number == candidate.get() && outranks(ip, interface) => Some(ip),
+        Body::ClaimNumber { device_number, .. }
+            if device_number == candidate.get() && outranks(announcement.from, interface) =>
+        {
+            Some(announcement.from)
+        }
+        _ => None,
+    }
+}
+
+/// Whether a rival at `ip` keeps a number we are both claiming. An address of
+/// nothing outranks nobody: it is not a device anyone could unicast to.
+fn outranks(ip: Ipv4Addr, interface: &crate::Interface) -> bool {
+    !ip.is_unspecified() && ip < interface.ip
 }
 
 /// The addresses of every peer currently answering, refreshed as the table
@@ -1659,6 +1704,184 @@ mod tests {
             netmask: Ipv4Addr::new(255, 255, 0, 0),
             mac: prolink_proto::MacAddress([0xa0, 0xce, 0xc8, 0xe2, 0x26, 0xde]),
         }
+    }
+
+    fn announcement(body: Body, from: [u8; 4]) -> crate::discovery::Announcement {
+        crate::discovery::Announcement {
+            packet: djl::Packet::new(DeviceName::default(), DeviceKind::CDJ, body),
+            from: Ipv4Addr::from(from),
+        }
+    }
+
+    fn browsable(number: u8) -> BrowsableDeviceNumber {
+        BrowsableDeviceNumber::new(number).expect("a browsable device number")
+    }
+
+    #[test]
+    fn a_rival_claiming_our_number_at_once_is_settled_by_address() {
+        let ours = interface(); // 169.254.99.100
+        let claim_ip = |ip: [u8; 4], number: u8| {
+            announcement(
+                Body::ClaimIp {
+                    ip: Ipv4Addr::from(ip),
+                    mac: prolink_proto::MacAddress([2, 0, 0, 0, 0, 1]),
+                    device_number: number,
+                    iteration: 1,
+                    role: DeviceKind::CDJ.role(),
+                    assignment_mode: djl::AssignmentMode::MANUAL,
+                },
+                ip,
+            )
+        };
+        let lower = [169, 254, 3, 7];
+        let higher = [169, 254, 200, 1];
+        assert_eq!(
+            contested(&claim_ip(lower, 4), browsable(4), &ours),
+            Some(Ipv4Addr::from(lower)),
+            "a lower address claiming our candidate keeps it"
+        );
+        assert_eq!(
+            contested(&claim_ip(higher, 4), browsable(4), &ours),
+            None,
+            "a higher one backs off itself, by the same rule"
+        );
+        assert_eq!(
+            contested(&claim_ip(lower, 3), browsable(4), &ours),
+            None,
+            "another number is no contest"
+        );
+        assert_eq!(
+            contested(&claim_ip(ours.ip.octets(), 4), browsable(4), &ours),
+            None,
+            "our own claim, heard back, is not a rival"
+        );
+
+        let claim_number = |from: [u8; 4]| {
+            announcement(
+                Body::ClaimNumber {
+                    device_number: 4,
+                    iteration: 1,
+                },
+                from,
+            )
+        };
+        assert_eq!(
+            contested(&claim_number(lower), browsable(4), &ours),
+            Some(Ipv4Addr::from(lower)),
+            "the last stage carries no address of its own: the sender's decides"
+        );
+        assert_eq!(contested(&claim_number(higher), browsable(4), &ours), None);
+        assert_eq!(
+            contested(&claim_number(ours.ip.octets()), browsable(4), &ours),
+            None
+        );
+        assert_eq!(
+            contested(&claim_number([0, 0, 0, 0]), browsable(4), &ours),
+            None,
+            "nor does a sender with no address"
+        );
+    }
+
+    /// Every discovery packet real hardware sent, put to [`contested`] as if
+    /// we were claiming each browsable number at that moment, from the lowest
+    /// and from the highest link-local address.
+    ///
+    /// The rule must only ever take a number from us when the packet is that
+    /// very number being claimed (or defended) by a device below us: never a
+    /// keep-alive, a hello, a MAC claim, a NUMBER_IN_USE, a mixer, or a claim
+    /// for another number. From the lowest address nothing but a defence can
+    /// move us, which is the behaviour this had before the rule existed.
+    #[test]
+    fn real_hardware_takes_a_number_from_a_claim_only_by_claiming_it() {
+        let Some(corpus) = prolink_capture::Corpus::locate() else {
+            return;
+        };
+        let lowest = crate::Interface {
+            ip: Ipv4Addr::new(169, 254, 0, 1),
+            ..interface()
+        };
+        let highest = crate::Interface {
+            ip: Ipv4Addr::new(169, 254, 255, 254),
+            ..interface()
+        };
+        let (mut packets, mut rival_claims) = (0usize, 0usize);
+        for path in corpus.captures() {
+            let Ok(capture) = prolink_capture::Capture::open(&path) else {
+                continue;
+            };
+            for packet in capture.udp_to(DISCOVERY_PORT).flatten() {
+                let Ok(decoded) = djl::Packet::decode(&packet.payload) else {
+                    continue;
+                };
+                packets += 1;
+                let heard = crate::discovery::Announcement {
+                    packet: decoded,
+                    from: *packet.source.ip(),
+                };
+                for number in 1..=4 {
+                    let candidate = browsable(number);
+                    let (expected_low, expected_high) = match heard.packet.body {
+                        Body::NumberConflict { device_number, .. } if device_number == number => {
+                            let holder = contested(&heard, candidate, &lowest);
+                            assert!(holder.is_some(), "a defence must always win");
+                            (holder, holder)
+                        }
+                        Body::ClaimIp {
+                            device_number, ip, ..
+                        } if device_number == number && !ip.is_unspecified() => {
+                            rival_claims += 1;
+                            (None, Some(ip))
+                        }
+                        Body::ClaimNumber { device_number, .. } if device_number == number => {
+                            rival_claims += 1;
+                            (None, Some(heard.from))
+                        }
+                        _ => (None, None),
+                    };
+                    assert_eq!(
+                        contested(&heard, candidate, &lowest),
+                        expected_low,
+                        "{} frame {}: {:?} claiming {number} from below everyone",
+                        path.display(),
+                        packet.index,
+                        heard.packet.body
+                    );
+                    assert_eq!(
+                        contested(&heard, candidate, &highest),
+                        expected_high,
+                        "{} frame {}: {:?} claiming {number} from above everyone",
+                        path.display(),
+                        packet.index,
+                        heard.packet.body
+                    );
+                }
+            }
+        }
+        assert!(
+            packets > 1000,
+            "only {packets} discovery packets in the corpus"
+        );
+        assert!(
+            rival_claims > 0,
+            "the corpus holds real claims, and each one is checked above"
+        );
+    }
+
+    #[test]
+    fn a_holder_defending_our_candidate_still_takes_it() {
+        let ours = interface();
+        let defended = announcement(
+            Body::NumberConflict {
+                device_number: 4,
+                ip: Ipv4Addr::new(169, 254, 250, 250),
+            },
+            [169, 254, 250, 250],
+        );
+        assert_eq!(
+            contested(&defended, browsable(4), &ours),
+            Some(Ipv4Addr::new(169, 254, 250, 250)),
+            "a defence wins whatever the address"
+        );
     }
 
     #[test]
