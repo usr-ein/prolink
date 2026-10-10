@@ -1,0 +1,32 @@
+#!/bin/sh
+# E16-rekordbox-control: the control session. A holds SAM1, a copy of Sam's
+# rekordbox stick, instead of the plain stick, and B browses it over LINK
+# as in E11 and E12: the root menu, FOLDER down to a track, a hover and a
+# load; then TRACK, a hover and a load. Same emulator, rig and keys, so
+# what differs from E11/E12 is the stick. What two real NXSs did with a
+# rekordbox stick is in captures/S05, S06 and S20.
+#
+# These commands were run one at a time, each after a look at B's screen.
+# Run from emu-captures/E16-rekordbox-control/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=sam1-usb.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up --dsp-model
+sleep 4
+key $B link 2
+sleep 14;           shot $B E16-01-link
+move $B 10 1;       shot $B E16-02-on-key             # root menu row 10: KEY (SAM1 has no DATE ADDED)
+move $B -1 1;       shot $B E16-03-on-folder         # row 9: FOLDER
+key $B enter 2;     shot $B E16-04-folder-root       # the stick's root, by folder
+# FOLDER answered 0 items: its preview says EMPTY, and it does not open.
+move $B -3 1;       key $B enter 2; shot $B E16-05-track      # row 6: TRACK
+move $B 1 1;        shot $B E16-06-track-row-1
+key $B enter 5;     shot $B E16-07-loaded                     # load it
+sleep 10;           shot $B E16-08-playing
+key $B play 3
+key $B browse 2
+key $B info 3;      shot $B E16-09-info
+key $B info 2
+sleep 3
+rig_down

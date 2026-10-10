@@ -1,0 +1,24 @@
+#!/bin/sh
+# E13-link-load-pioneer-dsp: the load of E12 again, with B running Pioneer's
+# own DSP code (interpreted, ~0.04x), as `pi-qemu cdj up` does by default:
+# B cues the track and waits for PLAY, as a real NXS does; then PLAY, and
+# half a minute of what that slow DSP asks for. A serves either way.
+#
+# Run from emu-captures/E13-link-load-pioneer-dsp/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=plainmp3.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up                               # B: Pioneer's DSP code
+sleep 4
+key $B link 2
+sleep 14;           shot $B E13-01-link
+key $B enter 2;     shot $B E13-02-root
+move $B 10;         sleep 2; shot $B E13-03-on-01-full-v23   # root row 10
+key $B enter 4;     shot $B E13-04-loaded     # loaded over LINK: cued, waiting for PLAY
+sleep 20;           shot $B E13-05-cued
+key $B play 3;      shot $B E13-06-play
+sleep 30;           shot $B E13-07-playing
+key $B play 3;      shot $B E13-08-paused
+sleep 3
+rig_down

@@ -1,0 +1,51 @@
+#!/bin/sh
+# E14-link-load-formats: B loads, one after another over LINK, every other
+# kind of file on A's plain stick: the root's tag variants, the Unicode
+# names, then Formats -- AAC, AIFF, an MP3 without its Info header, MPEG-2,
+# VBR, WAV -- and last what should not play: FLAC, random bytes named .mp3,
+# and macOS's AppleDouble ._ file. After each load, INFO.
+# (01 Full v23.mp3 is E12's.) B runs the behavioural DSP: each loaded track
+# plays at once, until the next load replaces it.
+#
+# Run from emu-captures/E14-link-load-formats/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=plainmp3.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+# Load the row under the cursor; shoot the browser, then INFO; back to the list.
+load() {
+    key $B enter 5;  shot $B "E14-$1-loaded"
+    key $B browse 2
+    key $B info 3;   shot $B "E14-$1-info"
+    key $B info 2
+    key $B browse 2
+}
+
+rig_up --dsp-model
+sleep 4
+key $B link 2
+sleep 14;           shot $B E14-00-link
+key $B enter 2                                  # the stick's root
+move $B 11;         load 02-full-v24            # root row 11: ID3v2.4, a PNG cover
+move $B 1;          load 03-id3v1-only          # 12
+move $B 1;          load 04-no-tags             # 13
+move $B -4;         load 05-short-8.3           # 9: SHORT.MP3
+move $B -1;         load 06-filename-dash       # 8: Filename Artist - Filename Title.mp3
+move $B -1;         key $B enter 2              # 7: Unicode
+                    load 07-nfd-name            # its row 0: Café Crème, decomposed
+move $B 1;          load 08-emoji-name          # 1
+move $B 1;          load 09-long-name           # 2: the long non-ASCII name
+key $B back 2
+move $B -5;         key $B enter 2              # 2: Formats
+                    load 10-aac                 # row 0: AAC.m4a
+move $B 1;          load 11-aiff                # 1
+move $B 1;          load 12-cbr-no-info         # 2
+move $B 3;          load 13-mpeg2-22k           # 5
+move $B 1;          load 14-vbr-v2              # 6
+move $B 1;          load 15-wav                 # 7
+move $B -3;         load 16-flac                # 4: FLAC.flac
+move $B -1;         load 17-corrupt             # 3: Corrupt.mp3, random bytes
+key $B back 2
+move $B 12;         load 18-appledouble         # root row 14: ._01 Full v23.mp3
+sleep 3
+rig_down
