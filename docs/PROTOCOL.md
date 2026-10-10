@@ -170,10 +170,13 @@ the capture's first Pro DJ Link packet.
   beside a real deck that also says it, and the deck sends 18-249 claims a
   session (0.5-0.9 a second), its keep-alives up to 2.6 s apart. S24b: claims at
   3.283 and 8.189 while the Mac says `0x02`; silent from 4.799, the Mac is
-  dropped, the deck re-claims once, unanswered (14.998), says `0x02` (15.899),
-  and claims nothing for 24 s; the Mac comes back saying `0x02` (39.576) and
-  the claims start again (42.033). S18 the same: no claims while the Mac is
-  silent (5.0-17.0), and again from 17.223 once both say `0x02`.
+  dropped and the deck says `0x01` (12.795), re-claims once, unanswered
+  (14.998), says `0x02` (15.899), and claims nothing for 24 s; the Mac comes
+  back saying `0x02` (39.576) and the claims start again (42.033). S18 the
+  same: no claims while the Mac is silent (5.0-17.0). Saying `0x01` since it
+  dropped the Mac (14.719), the deck re-claims once at 17.223, as S24b's did,
+  and says `0x02` (18.124); beside the Mac saying `0x02` again, the claims
+  resume at 21.428.
 - **An unanswered re-claim takes the role.** When the holder leaves, the
   survivor re-claims once, unanswered, and says `0x02` (S24b 14.998-15.899;
   emulated, E07 23.611), and then answers the next joiner with `0x05` (E07
