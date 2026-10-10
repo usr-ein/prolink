@@ -274,11 +274,12 @@ pub enum Body {
     ///
     /// Byte-for-byte a [`Body::ClaimNumber`] but for the type byte. The
     /// pre-hardware literature files `0x05` under mixer channel assignment.
-    /// What we saw instead: in the same instant a joining deck sent its stage-3
-    /// claim, an **auto-numbered** deck *unicast* one of these back carrying its
-    /// own number (F36). Reading it as "this number is taken" fits what an
-    /// auto-assigning device must publish, though that is inference from a
-    /// single occurrence.
+    /// What we saw instead: in the same instant a deck sent a stage-3 claim,
+    /// the **auto-numbered** deck saying it was first on the network (byte
+    /// `0x25` of its keep-alive) *unicast* one of these back, carrying its own
+    /// number (F36; S13 17.391, S26 5.606). The deck it answers stops claiming
+    /// and says it was not first from then on: this is how the two settle
+    /// which one was. See `docs/PROTOCOL.md` §2.5.
     #[br(pre_assert(kind == PacketKind::NUMBER_IN_USE))]
     NumberInUse {
         /// The number the sender holds.
@@ -295,10 +296,12 @@ pub enum Body {
         /// Byte `0x24`.
         device_number: u8,
         /// Byte `0x25`: **"was I first on this network?"** — `0x02` if this
-        /// device was first, `0x01` if peers were already present. Latched at
-        /// boot and never re-evaluated: a deck held `0x02` while its peer count
-        /// went 1→2 (F9). It is not a CDJ/mixer role byte as documented, and
-        /// not the peer count.
+        /// device was first, `0x01` if peers were already present. It is not
+        /// a CDJ/mixer role byte as documented, and not the peer count. A deck
+        /// holding `0x02` keeps it as peers join (F9), but it is not latched:
+        /// exactly one device says it, a deck that hears another say it too
+        /// re-claims its number until one of them is answered with a `0x05`,
+        /// and the one answered gives it up (`docs/PROTOCOL.md` §2.5).
         was_first_on_network: u8,
         /// `0x26`–`0x2b`.
         mac: MacAddress,

@@ -123,9 +123,10 @@ impl Discovery {
 
     /// Whether nothing else was on the network when this was asked.
     ///
-    /// A real deck latches this at boot and never re-evaluates it: it drives
-    /// both the stage-3 claim repeat count and keep-alive byte `0x25`, and one
-    /// deck held `0x02` while its peer count went 1→2 (F9).
+    /// What a deck starts from: it drives both the stage-3 claim repeat count
+    /// and keep-alive byte `0x25`, and a deck holding `0x02` keeps it as peers
+    /// join (F9). It is not the last word on `0x25`, which the devices settle
+    /// between them afterwards (`docs/PROTOCOL.md` §2.5).
     pub fn is_alone(&self) -> bool {
         self.with_table(DeviceTable::is_empty)
     }

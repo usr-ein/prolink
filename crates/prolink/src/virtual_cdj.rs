@@ -40,6 +40,28 @@
 //! Before any of that, we watch for [`PRESCAN`]. Silence is not evidence a
 //! number is free: an XDJ-XZ and an Opus Quad do not defend their numbers with
 //! conflict packets at all, so only having watched the network is.
+//!
+//! # Who was first, and why we give it up
+//!
+//! Keep-alive byte `0x25` says whether a device was first on the network, and
+//! it is **not** latched at boot: it is a role the players settle between
+//! them. Exactly one says `0x02`. A player that says `0x02` and hears another
+//! say it too re-claims its number, stage 3 again, every few seconds, for as
+//! long as it hears the other: S10-S24, the 20 sessions with this library's
+//! ancestors on the link saying `0x02` beside a real deck, have 18-249 claims
+//! each, and in S24b and S18 the claims stop while the other device is silent
+//! and start again when it comes back saying `0x02`. Between two players it is
+//! settled by an AUTO-numbered holder answering the claim with a unicast
+//! `0x05` (S13 17.391, S26 5.606), at which the claimer says `0x01` from then
+//! on.
+//!
+//! We announce as MANUAL and never send `0x05`, so we settle it the other way:
+//! **we step aside.** Another device's keep-alive saying `0x02`, or a `0x05`
+//! answering our own stage-3 claim, makes us say `0x01` for good. The role,
+//! and whatever a player does with it (answering joiners, and perhaps
+//! defending numbers, which no capture shows a player saying `0x01` doing),
+//! stays with Pioneer's firmware. Saying `0x02` beside a real deck is what made
+//! it re-claim for ever.
 
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
@@ -91,9 +113,12 @@ pub const OBSERVER_NUMBER: DeviceNumber = match DeviceNumber::new(7) {
 const BEAT_TICK: Duration = Duration::from_millis(5);
 
 /// Keep-alive byte `0x25` when this device was first onto the network.
+///
+/// Held while no other device says it. A deck holding it keeps it as peers
+/// join (F9), but gives it up when another device holding it answers its
+/// claim (S26 5.606); see the module docs for why we give it up sooner.
 const FIRST_ON_NETWORK: u8 = 0x02;
-/// ...and when peers were already present. Latched at start and never
-/// re-evaluated: a deck held `0x02` while its peer count went 1→2 (F9).
+/// ...and when peers were already present, or another device holds the role.
 const JOINED_PEERS: u8 = 0x01;
 
 /// How a virtual CDJ gets its device number.
@@ -428,6 +453,12 @@ pub struct VirtualCdj {
     /// on its SYNC button and what decides whether it is part of the tempo
     /// group at all.
     synced: Arc<AtomicBool>,
+    /// Whether our keep-alive says we were first on the network, byte `0x25`.
+    ///
+    /// True only from a start into an empty network, and only until another
+    /// device says it too, or answers our claim with a `0x05`: then false for
+    /// good. See "Who was first" in the module docs.
+    first_on_network: Arc<AtomicBool>,
     tasks: Vec<JoinHandle<()>>,
 }
 
@@ -462,11 +493,11 @@ impl VirtualCdj {
         );
 
         let (phase, _) = watch::channel(Phase::Watching);
-        let number = match config.numbering {
-            Numbering::Observer(number) => number,
+        let (number, answered) = match config.numbering {
+            Numbering::Observer(number) => (number, false),
             Numbering::Claim { preferred } => {
                 match claim(discovery, &config, &interface, preferred, was_first, &phase).await {
-                    Ok(number) => number,
+                    Ok(claimed) => claimed,
                     Err(error) => {
                         let _ = phase.send(Phase::Failed);
                         return Err(error);
@@ -475,6 +506,9 @@ impl VirtualCdj {
             }
         };
         let _ = phase.send(Phase::Announcing);
+        if answered {
+            info!("a player holding the first-on-network role answered our claim; not taking it");
+        }
 
         // Bound here rather than inside the responder, because asking a peer
         // what is in its slots uses the same socket as answering that question
@@ -504,10 +538,12 @@ impl VirtualCdj {
             tempo_master: Arc::new(AtomicBool::new(false)),
             yielding_to: Arc::new(AtomicU8::new(0)),
             synced: Arc::new(AtomicBool::new(false)),
+            first_on_network: Arc::new(AtomicBool::new(was_first && !answered)),
             tasks: Vec::new(),
         };
         cdj.tasks.push(cdj.spawn_keep_alive(discovery));
         cdj.tasks.push(cdj.spawn_defender(discovery));
+        cdj.tasks.push(cdj.spawn_step_aside(discovery));
         if let Some(socket) = cdj.status_socket.clone() {
             cdj.tasks.push(cdj.spawn_status(discovery)?);
             cdj.tasks.push(cdj.spawn_query_responder(socket));
@@ -642,6 +678,14 @@ impl VirtualCdj {
     /// Whether we are claiming tempo master.
     pub fn is_tempo_master(&self) -> bool {
         self.tempo_master.load(Ordering::Relaxed)
+    }
+
+    /// Whether our keep-alive says we were first on the network, byte `0x25`.
+    ///
+    /// Becomes false for good once another device says it, or answers our
+    /// claim with a `0x05`; see "Who was first" in the module docs.
+    pub fn first_on_network(&self) -> bool {
+        self.first_on_network.load(Ordering::Relaxed)
     }
 
     /// Answer a `0x26` and stand down.
@@ -891,7 +935,7 @@ impl VirtualCdj {
             self.interface.broadcast(),
             DISCOVERY_PORT,
         ));
-        let was_first = discovery.is_alone();
+        let first_on_network = Arc::clone(&self.first_on_network);
         let config = self.config.clone();
         let interface = self.interface.clone();
         let number = Arc::clone(&self.number);
@@ -901,10 +945,52 @@ impl VirtualCdj {
             let mut ticker = tokio::time::interval(djl::KEEPALIVE_INTERVAL);
             loop {
                 ticker.tick().await;
-                let packet =
-                    keep_alive_packet(&config, &interface, &number, peers.len(), was_first);
+                let packet = keep_alive_packet(
+                    &config,
+                    &interface,
+                    &number,
+                    peers.len(),
+                    first_on_network.load(Ordering::Relaxed),
+                );
                 if let Err(error) = socket.send_to(&packet.encode(), broadcast).await {
                     warn!(%error, "keep-alive failed");
+                }
+            }
+        })
+    }
+
+    /// Give up keep-alive byte `0x25` the moment another device says it.
+    ///
+    /// A real deck saying `0x02` re-claims its number every few seconds for as
+    /// long as it hears another device say it too (S10-S24, S24b, S18), so
+    /// saying it beside one is what kept a CDJ re-claiming for ever. See "Who
+    /// was first" in the module docs. Nothing is sent: our next keep-alive
+    /// simply says `0x01`, and goes on saying it.
+    fn spawn_step_aside(&self, discovery: &Discovery) -> JoinHandle<()> {
+        let mut announcements = discovery.announcements();
+        let first_on_network = Arc::clone(&self.first_on_network);
+        let ours = self.interface.mac;
+
+        tokio::spawn(async move {
+            loop {
+                let announcement = match announcements.recv().await {
+                    Ok(announcement) => announcement,
+                    // Behind by a few: the next keep-alive saying 0x02 comes
+                    // within two seconds, and is as good as the one missed.
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => return,
+                };
+                if !first_on_network.load(Ordering::Relaxed) {
+                    // Given up for good: nothing left to watch for.
+                    return;
+                }
+                if steps_aside(&announcement, ours) {
+                    first_on_network.store(false, Ordering::Relaxed);
+                    info!(
+                        holder = %announcement.from,
+                        "another device says it was first on the network; stepping aside"
+                    );
+                    return;
                 }
             }
         })
@@ -1394,7 +1480,9 @@ fn play_state_for(playback: &Playback) -> crate::monitor::PlayState {
     }
 }
 
-/// Run the claim chain and return the number we ended up holding.
+/// Run the claim chain and return the number we ended up holding, and whether
+/// a player answered our stage-3 claim with a `0x05`: the one holding the
+/// first-on-network role, which we then leave to it.
 async fn claim(
     discovery: &Discovery,
     config: &VirtualCdjConfig,
@@ -1402,7 +1490,7 @@ async fn claim(
     preferred: Option<BrowsableDeviceNumber>,
     was_first: bool,
     phase: &watch::Sender<Phase>,
-) -> Result<DeviceNumber> {
+) -> Result<(DeviceNumber, bool)> {
     debug!(?preferred, "watching before claiming");
     let _ = phase.send(Phase::Watching);
     tokio::time::sleep(PRESCAN).await;
@@ -1435,9 +1523,9 @@ async fn claim(
         )
         .await
         {
-            Ok(()) => {
+            Ok(answered) => {
                 info!(number = %candidate, "claimed a browsable device number");
-                return Ok(candidate.number());
+                return Ok((candidate.number(), answered));
             }
             Err(holder) => {
                 warn!(number = %candidate, %holder, "number is taken; backing off");
@@ -1449,8 +1537,10 @@ async fn claim(
 
 /// One pass of the claim chain for one candidate.
 ///
-/// `Err(holder)` means somebody defended it, or that a rival claiming it at the
-/// same moment outranks us.
+/// `Ok(true)` means it is ours and a player answered our stage-3 claim with a
+/// `0x05`, which ends the burst there: that player holds the first-on-network
+/// role (S13 17.389-17.392, S26 5.605-5.606). `Err(holder)` means somebody
+/// defended it, or that a rival claiming it at the same moment outranks us.
 ///
 /// # Two at once
 ///
@@ -1470,7 +1560,7 @@ async fn claim_one(
     candidate: BrowsableDeviceNumber,
     was_first: bool,
     conflicts: &mut broadcast::Receiver<crate::discovery::Announcement>,
-) -> std::result::Result<(), Ipv4Addr> {
+) -> std::result::Result<bool, Ipv4Addr> {
     // N is 3 into an empty network and 1 into a populated one (C13).
     let final_stage = if was_first { 3 } else { 1 };
     let mut stages: Vec<Body> = Vec::new();
@@ -1506,6 +1596,7 @@ async fn claim_one(
     }
 
     for body in stages {
+        let stage_3 = matches!(body, Body::ClaimNumber { .. });
         let packet = djl::Packet::new(config.name, config.kind, body);
         if let Err(error) = socket.send_to(&packet.encode(), to).await {
             warn!(%error, "claim packet failed");
@@ -1521,11 +1612,44 @@ async fn claim_one(
                     if let Some(holder) = contested(&announcement, candidate, interface) {
                         return Err(holder);
                     }
+                    // Answered: the number is ours (a 0x05 names the sender's
+                    // own, F58), and the burst ends here, as a real deck's did.
+                    if stage_3 && answers_our_claim(&announcement) {
+                        return Ok(true);
+                    }
                 }
             }
         }
     }
-    Ok(())
+    Ok(false)
+}
+
+/// Whether `announcement` is a player answering our stage-3 claim.
+///
+/// A `0x05` is only ever sent in answer to a claim, unicast to the claimer, by
+/// the player holding the first-on-network role (S13 17.391, S26 5.606, E07
+/// 56.165). It names the sender's own number, not a rejection of ours (F58).
+fn answers_our_claim(announcement: &crate::discovery::Announcement) -> bool {
+    matches!(announcement.packet.body, Body::NumberInUse { .. })
+}
+
+/// Whether `announcement` is another device's keep-alive saying it was first
+/// on the network, which is our cue to stop saying so.
+///
+/// Our own keep-alives come back to us (we bind 0.0.0.0), and are ours by
+/// their MAC.
+fn steps_aside(
+    announcement: &crate::discovery::Announcement,
+    ours: prolink_proto::MacAddress,
+) -> bool {
+    matches!(
+        announcement.packet.body,
+        Body::KeepAlive {
+            was_first_on_network: FIRST_ON_NETWORK,
+            mac,
+            ..
+        } if mac != ours
+    )
 }
 
 /// Whether `announcement` takes `candidate` from us mid-claim, and from whom.
@@ -1865,6 +1989,223 @@ mod tests {
             rival_claims > 0,
             "the corpus holds real claims, and each one is checked above"
         );
+    }
+
+    fn keep_alive_from(mac: [u8; 6], was_first_on_network: u8) -> crate::discovery::Announcement {
+        announcement(
+            Body::KeepAlive {
+                device_number: 1,
+                was_first_on_network,
+                mac: prolink_proto::MacAddress(mac),
+                ip: Ipv4Addr::new(169, 254, 103, 172),
+                peer_count: 2,
+                pad_31: [0; 3],
+                flags: DeviceKind::CDJ.role(),
+                trailing: 0,
+            },
+            [169, 254, 103, 172],
+        )
+    }
+
+    #[test]
+    fn another_device_saying_it_was_first_makes_us_step_aside() {
+        let ours = interface().mac;
+        assert!(
+            steps_aside(
+                &keep_alive_from([0x74, 0x5e, 0x1c, 0x56, 0x67, 0xac], 0x02),
+                ours
+            ),
+            "a player saying 0x02 holds the role, and we leave it to it"
+        );
+        assert!(
+            !steps_aside(
+                &keep_alive_from([0x74, 0x5e, 0x1c, 0x56, 0x67, 0xac], 0x01),
+                ours
+            ),
+            "a player saying 0x01 holds nothing we have to give up"
+        );
+        assert!(
+            !steps_aside(&keep_alive_from(ours.0, 0x02), ours),
+            "our own keep-alive comes back to us, and is ours by its MAC"
+        );
+        let claim = announcement(
+            Body::ClaimNumber {
+                device_number: 2,
+                iteration: 1,
+            },
+            [169, 254, 202, 84],
+        );
+        assert!(
+            !steps_aside(&claim, ours),
+            "a claim says nothing of the role"
+        );
+    }
+
+    #[test]
+    fn only_a_0x05_answers_our_claim() {
+        let answer = announcement(
+            Body::NumberInUse {
+                device_number: 2,
+                iteration: 1,
+            },
+            [169, 254, 202, 84],
+        );
+        assert!(answers_our_claim(&answer));
+        let claim = announcement(
+            Body::ClaimNumber {
+                device_number: 2,
+                iteration: 1,
+            },
+            [169, 254, 202, 84],
+        );
+        assert!(
+            !answers_our_claim(&claim),
+            "a rival's claim is not an answer"
+        );
+        assert!(!answers_our_claim(&keep_alive_from(
+            [2, 0, 0, 0, 0, 1],
+            0x02
+        )));
+    }
+
+    /// Every discovery packet real hardware sent, put to the two rules that
+    /// end our hold on keep-alive byte `0x25`, as if we were on each link
+    /// with a MAC no capture holds.
+    ///
+    /// We step aside for exactly the keep-alives that say `0x02`, and take a
+    /// `0x05` as an answer, and nothing else does either. And S26, replayed
+    /// from player 2's side: it heard player 1 say `0x02` 1.8 s before it
+    /// re-claimed and was answered, so a deck stepping aside on the keep-alive
+    /// alone gives the role up sooner, and sends nothing to do it.
+    #[test]
+    fn real_hardware_asks_us_to_step_aside_only_by_saying_it_was_first() {
+        let Some(corpus) = prolink_capture::Corpus::locate() else {
+            return;
+        };
+        let ours = prolink_proto::MacAddress([0x02, 0xff, 0xff, 0xff, 0xff, 0xfe]);
+        let (mut said_first, mut answers, mut others) = (0usize, 0usize, 0usize);
+        for path in corpus.captures() {
+            let Ok(capture) = prolink_capture::Capture::open(&path) else {
+                continue;
+            };
+            for packet in capture.udp_to(DISCOVERY_PORT).flatten() {
+                let Ok(decoded) = djl::Packet::decode(&packet.payload) else {
+                    continue;
+                };
+                let heard = crate::discovery::Announcement {
+                    packet: decoded,
+                    from: *packet.source.ip(),
+                };
+                let first = matches!(
+                    heard.packet.body,
+                    Body::KeepAlive {
+                        was_first_on_network: FIRST_ON_NETWORK,
+                        ..
+                    }
+                );
+                let answer = matches!(heard.packet.body, Body::NumberInUse { .. });
+                assert_eq!(
+                    steps_aside(&heard, ours),
+                    first,
+                    "{} frame {}: {:?}",
+                    path.display(),
+                    packet.index,
+                    heard.packet.body
+                );
+                assert_eq!(answers_our_claim(&heard), answer);
+                match (first, answer) {
+                    (true, _) => said_first += 1,
+                    (_, true) => answers += 1,
+                    _ => others += 1,
+                }
+            }
+        }
+        assert!(
+            said_first > 1000,
+            "only {said_first} keep-alives saying 0x02"
+        );
+        assert!(others > 1000, "only {others} other discovery packets");
+        assert_eq!(answers, 2, "the corpus holds two 0x05s, S13's and S26's");
+    }
+
+    /// Run one claim pass against a stand-in for the other player, which hears
+    /// everything we send and answers our first stage-3 claim with `answer`.
+    /// What came back, and every packet body we sent.
+    async fn claim_against(
+        answer: Option<crate::discovery::Announcement>,
+    ) -> (std::result::Result<bool, Ipv4Addr>, Vec<Body>) {
+        let player_socket = UdpSocket::bind("127.0.0.1:0").await.expect("a socket");
+        let to = player_socket.local_addr().expect("its address");
+        let socket = UdpSocket::bind("127.0.0.1:0").await.expect("a socket");
+        let (tell, mut heard) = broadcast::channel(16);
+        let player = tokio::spawn(async move {
+            let mut answer = answer;
+            let mut sent = Vec::new();
+            let mut buffer = [0u8; 128];
+            // Our packets are 300 ms apart; half a second of silence is the end.
+            while let Ok(Ok(len)) =
+                tokio::time::timeout(Duration::from_millis(500), player_socket.recv(&mut buffer))
+                    .await
+            {
+                let packet = djl::Packet::decode(&buffer[..len]).expect("our own packet");
+                if matches!(packet.body, Body::ClaimNumber { .. })
+                    && let Some(answer) = answer.take()
+                {
+                    let _ = tell.send(answer);
+                }
+                sent.push(packet.body);
+            }
+            sent
+        });
+        let result = claim_one(
+            &socket,
+            to,
+            &VirtualCdjConfig::default(),
+            &interface(),
+            browsable(4),
+            true,
+            &mut heard,
+        )
+        .await;
+        (result, player.await.expect("the stand-in player"))
+    }
+
+    /// Our stage-3 burst against a player that answers it, and one that does
+    /// not. The answer is S13's own `0x05` (17.391): player 2, holding the
+    /// first-on-network role, answering player 1's first stage-3 claim.
+    #[tokio::test]
+    async fn a_0x05_ends_our_burst_and_we_do_not_take_the_role() {
+        const S13_ANSWER: &[u8] = &[
+            0x51, 0x73, 0x70, 0x74, 0x31, 0x57, 0x6d, 0x4a, 0x4f, 0x4c, 0x05, 0x00, 0x43, 0x44,
+            0x4a, 0x2d, 0x32, 0x30, 0x30, 0x30, 0x6e, 0x65, 0x78, 0x75, 0x73, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x00, 0x26, 0x02, 0x01,
+        ];
+        let answer = crate::discovery::Announcement {
+            packet: djl::Packet::decode(S13_ANSWER).expect("S13's 0x05 decodes"),
+            from: Ipv4Addr::new(169, 254, 202, 84),
+        };
+        let claims = |sent: &[Body]| {
+            sent.iter()
+                .filter(|body| matches!(body, Body::ClaimNumber { .. }))
+                .count()
+        };
+
+        let ((answered, sent_answered), (unanswered, sent_unanswered)) =
+            tokio::join!(claim_against(Some(answer)), claim_against(None));
+
+        assert_eq!(
+            answered,
+            Ok(true),
+            "the number is ours, and we were answered"
+        );
+        assert_eq!(
+            (sent_answered.len(), claims(&sent_answered)),
+            (10, 1),
+            "the burst ends at the answer: S13's player 1 sent one claim"
+        );
+        // Unanswered, into an empty network, the burst is three (C13).
+        assert_eq!(unanswered, Ok(false));
+        assert_eq!((sent_unanswered.len(), claims(&sent_unanswered)), (12, 3));
     }
 
     #[test]

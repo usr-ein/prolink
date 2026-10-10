@@ -132,21 +132,62 @@ deck holding 1 answered a stray second CLAIM_NUMBER round *for number 2* with
 sender holds, and it is only evidence against a claim when the two numbers
 happen to match.
 
+What it does is settle byte `0x25` of the keep-alive (§2.4): it comes from the
+deck saying `0x02`, and the deck it answers says `0x01` from then on.
+
 ### 2.4 Keep-alive fields *(confirmed)*
 
 - **Interval 2.0026 s**, a tight hardware timer — not the 1.5 s `research/02`
   gives, which traces back to what reference *tools* chose (C12). The 10 s
   device timeout is therefore 5 missed keep-alives, not 6–7.
 - **Byte `0x25` is "was I first on this network?"** — `0x02` if the device was
-  first, `0x01` if peers were already present. Latched at boot and never
-  re-evaluated: a deck held `0x02` while its peer count went 1→2 (F9). Not a
-  CDJ/mixer role byte as documented, and not the peer count.
+  first, `0x01` if peers were already present. Not a CDJ/mixer role byte as
+  documented, and not the peer count. A deck holding `0x02` keeps it as peers
+  join (F9), but it is **not latched**: it is a role the decks settle, below.
 - **Byte `0x35` is `00`** on nexus hardware, not `01` (C3). `0x64` is required
   for CDJ-3000 coexistence.
 - Byte `0x30` of CLAIM_IP is a **CDJ/mixer role**, not a constant: a
   DJM-2000nexus sends `02`, a CDJ `01` (C1).
 - The device name is 20 bytes, NUL-padded, and `CDJ-2000nexus` is the exact
   casing (F1).
+
+### 2.5 Who was first is settled, and a deck that is not answered re-claims *(confirmed)*
+
+Exactly one device on a link says `0x25` = `0x02`. Times below are seconds from
+the capture's first Pro DJ Link packet.
+
+- **An AUTO deck holding it answers a claim with `0x05`.** S13 17.389-17.392:
+  player 1 (MANUAL) joins; player 2 (AUTO, `0x02`) answers player 1's first
+  stage-3 claim with a unicast `0x05` carrying 2, 2 ms later; player 1 sends no
+  more claims and says `0x01`. S26 3.602-5.606: both AUTO decks booted together
+  and both say `0x02`; at its next keep-alive slot player 2 re-claims, player 1
+  answers with `0x05` 1 ms later, and player 2 says `0x01` from then on.
+- **MANUAL decks send no `0x05`.** In S02 and S2c the joiner hears the other's
+  keep-alive and says `0x01` with nothing exchanged.
+- **A deck saying `0x02` that hears another say it re-claims its number**, stage
+  3 again, every few seconds, for as long as it hears the other. All twenty
+  sessions S10-S24 have this library's ancestors on the link saying `0x02`
+  beside a real deck that also says it, and the deck sends 18-249 claims a
+  session (0.5-0.9 a second), its keep-alives up to 2.6 s apart. S24b: claims at
+  3.283 and 8.189 while the Mac says `0x02`; silent from 4.799, the Mac is
+  dropped, the deck re-claims once, unanswered (14.998), says `0x02` (15.899),
+  and claims nothing for 24 s; the Mac comes back saying `0x02` (39.576) and
+  the claims start again (42.033). S18 the same: no claims while the Mac is
+  silent (5.0-17.0), and again from 17.223 once both say `0x02`.
+- **An unanswered re-claim takes the role.** When the holder leaves, the
+  survivor re-claims once, unanswered, and says `0x02` (S24b 14.998-15.899;
+  emulated, E07 23.611), and then answers the next joiner with `0x05` (E07
+  56.165).
+- **Not shown:** whether a deck saying `0x01` defends its own number against an
+  AUTO joiner's proposal. Every `0x05` and every `0x03` in the captures came
+  from the device saying `0x02`.
+
+A device that says `0x02` beside a real deck and never answers is what makes
+that deck re-claim for ever. This library announces as MANUAL and never sends
+`0x05`, so it **steps aside**: another device's keep-alive saying `0x02`, or a
+`0x05` answering its own stage-3 claim (which ends the burst there), makes it
+say `0x01` for good. The role, and whatever a deck does with it, stays with a
+real deck.
 
 ---
 
