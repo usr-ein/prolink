@@ -294,7 +294,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         last_error: Arc::clone(&session.last_error),
     };
     session.runtime.spawn(supervisor.run());
-    spawn_media_survey(&session.runtime, Arc::clone(&session.live));
+    spawn_media_asker(&session.runtime, Arc::clone(&session.live));
     if config.share_local_media {
         spawn_volume_watch(
             &session.runtime,
@@ -607,31 +607,57 @@ fn load_medium(
 /// be noticed.
 fn spawn_media_watch(media: Arc<prolink::PeerMedia>, sink: Arc<Mutex<Events>>) {
     tokio::spawn(async move {
-        let mut seen: std::collections::BTreeMap<(u8, prolink_proto::Slot), String> =
-            std::collections::BTreeMap::new();
+        let mut seen = std::collections::BTreeMap::new();
         loop {
             tokio::time::sleep(MEDIA_POLL).await;
-            for slot in media.all() {
-                let Some(description) = slot.description.as_ref() else {
-                    continue;
-                };
-                let key = (slot.device.get(), slot.slot);
-                let now = format!(
-                    "{}/{}/{}",
-                    description.volume_name, description.track_count, description.playlist_count
-                );
-                if seen.get(&key) == Some(&now) {
-                    continue;
-                }
-                seen.insert(key, now);
-                let mut event = plain(EventKind::MediaInfo, slot.device.get(), 0);
-                event.slot = convert::slot(slot.slot);
+            for (device, slot) in media_changes(&mut seen, &media.all()) {
+                let mut event = plain(EventKind::MediaInfo, device, 0);
+                event.slot = convert::slot(slot);
                 if let Ok(mut queue) = sink.lock() {
                     queue.push(event);
                 }
             }
         }
     });
+}
+
+/// The slots whose description changed since *seen* was last brought up to
+/// date, and bring it up to date.
+///
+/// A description arriving or changing is news, and so is one going: a slot
+/// that empties loses its description (`PeerMedia`), and the host reads that
+/// slot as empty, which is how a medium taken out of a player reaches it. It
+/// used to reach it as the zeroed answer a deck gives about an empty slot,
+/// which only came because the slot was asked about every five seconds.
+fn media_changes(
+    seen: &mut std::collections::BTreeMap<(u8, prolink_proto::Slot), String>,
+    slots: &[prolink::PeerSlot],
+) -> Vec<(u8, prolink_proto::Slot)> {
+    let mut changed = Vec::new();
+    for slot in slots {
+        let key = (slot.device.get(), slot.slot);
+        let now = slot.description.as_ref().map(|described| {
+            format!(
+                "{}/{}/{}",
+                described.volume_name, described.track_count, described.playlist_count
+            )
+        });
+        match now {
+            Some(now) => {
+                if seen.get(&key) == Some(&now) {
+                    continue;
+                }
+                seen.insert(key, now);
+            }
+            None => {
+                if seen.remove(&key).is_none() {
+                    continue;
+                }
+            }
+        }
+        changed.push(key);
+    }
+    changed
 }
 
 impl Session {
@@ -1622,20 +1648,6 @@ fn player_of(live: &Arc<RwLock<Option<Live>>>) -> Option<Arc<VirtualPlayer>> {
     held.as_ref()?.role.player().map(Arc::clone)
 }
 
-/// How often peers are asked what is in their slots.
-///
-/// **Nothing arrives unasked.** A player publishes its volume name and its
-/// counts *only* in answer to a media query, and it answers each one once and
-/// never repeats it (F37) — so a host that does not ask never learns that the
-/// deck across the booth has a stick in at all.
-///
-/// That is exactly what happened: everything else worked against real hardware
-/// — the CDJ found us, queried our media and opened a dbserver connection — and
-/// its own stick simply never appeared in our source list, because the only
-/// thing that sends a query lived in the CLI.
-///
-/// Five seconds, and two small UDP packets per peer per round. A deck answers
-/// one in about a millisecond.
 /// How long a hand-over may take before it is given up on: a holder that has
 /// not granted our request, or a successor that has not picked up a
 /// mastership we are naming it for.
@@ -1711,33 +1723,118 @@ fn pitch_from_percent(percent: f64) -> Pitch {
     Pitch(u32::try_from(raw).unwrap_or(Pitch::UNITY.0))
 }
 
-const MEDIA_SURVEY: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// How long to wait for the answers before reading the table. A deck-to-deck
-/// query is answered in ~1 ms; this is generous by three orders of magnitude
-/// and costs nothing, because it is a sleep inside a task of its own.
-const MEDIA_SURVEY_WAIT: std::time::Duration = std::time::Duration::from_millis(400);
-
-/// Keep asking the players what they have in their slots.
+/// How often the asker looks at what our peers' status says about their slots.
 ///
-/// Repeated rather than done once per device, because media are swapped mid-set
-/// and a slot's description is not re-sent when that happens.
-fn spawn_media_survey(runtime: &Runtime, live: Arc<RwLock<Option<Live>>>) {
+/// A real deck asks 0.3-0.9 s after a peer's status shows a slot loaded (all
+/// eight answered deck-to-deck queries in the corpus); looking twice a second
+/// asks within half a second of hearing it.
+const MEDIA_CHECK: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// How long an unanswered media query waits before it is asked again.
+///
+/// What a real deck does: unanswered, it asked again every 5.03 s (S10, 22
+/// times), and once answered never again (S10b, at the fourth).
+const MEDIA_RETRY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Ask the players what they have in their slots, the way a deck asks.
+///
+/// **Nothing arrives unasked.** A player publishes its volume name and its
+/// counts *only* in answer to a media query (F37), so a host that does not ask
+/// never learns that the deck across the booth has a stick in at all. That is
+/// what happened before anything here asked: everything else worked against
+/// real hardware, and the CDJ's own stick never appeared in our source list.
+///
+/// So each slot a peer's status shows loaded is asked about, again every
+/// [`MEDIA_RETRY`] while unanswered, and never once answered. A swap passes
+/// through an empty slot, which forgets the answer, so the next medium is
+/// asked about too. This used to ask about both slots of every peer every 5 s,
+/// answered or not and loaded or not, where a deck asks once (Sam's problem
+/// 02).
+fn spawn_media_asker(runtime: &Runtime, live: Arc<RwLock<Option<Live>>>) {
     runtime.spawn(async move {
+        let mut asker = MediaAsker::default();
+        let mut asking_for: Option<Arc<VirtualPlayer>> = None;
+        let mut check = tokio::time::interval(MEDIA_CHECK);
+        check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            tokio::time::sleep(MEDIA_SURVEY).await;
+            check.tick().await;
             let Some(player) = player_of(&live) else {
                 continue;
             };
-            if let Err(error) = player
-                .cdj()
-                .survey_media(player.discovery(), MEDIA_SURVEY_WAIT)
-                .await
+            // A rebuilt session is a new table, with nothing asked yet.
+            if !asking_for
+                .as_ref()
+                .is_some_and(|before| Arc::ptr_eq(before, &player))
             {
-                tracing::debug!(%error, "a media survey did not complete");
+                asker = MediaAsker::default();
+                asking_for = Some(Arc::clone(&player));
+            }
+            let cdj = player.cdj();
+            let ours = cdj.number();
+            let online: std::collections::BTreeMap<u8, Ipv4Addr> = player
+                .discovery()
+                .online()
+                .iter()
+                .map(|device| (device.number.get(), device.ip))
+                .collect();
+            let slots: Vec<prolink::PeerSlot> = cdj
+                .peer_media()
+                .all()
+                .into_iter()
+                .filter(|slot| slot.device != ours && online.contains_key(&slot.device.get()))
+                .collect();
+            for (device, slot) in asker.due(&slots, std::time::Instant::now()) {
+                let Some(&address) = online.get(&device.get()) else {
+                    continue;
+                };
+                if let Err(error) = cdj.ask_media(address, device, slot).await {
+                    tracing::debug!(%error, %device, %slot, "could not ask about a slot");
+                }
             }
         }
     });
+}
+
+/// Which peer slots are due a media query, as a deck decides it.
+#[derive(Debug, Default)]
+struct MediaAsker {
+    /// When each `(device, slot)` was last asked about, while unanswered.
+    asked: std::collections::BTreeMap<(u8, prolink_proto::Slot), std::time::Instant>,
+}
+
+impl MediaAsker {
+    /// The slots to ask about now, and note them as asked.
+    ///
+    /// A slot is due when its status shows a medium and no answer has come,
+    /// and it has not been asked about in the last [`MEDIA_RETRY`]. A slot
+    /// without a medium is forgotten, so that the next one in it is asked
+    /// about at once.
+    fn due(
+        &mut self,
+        slots: &[prolink::PeerSlot],
+        now: std::time::Instant,
+    ) -> Vec<(prolink::DeviceNumber, prolink_proto::Slot)> {
+        let mut due = Vec::new();
+        for slot in slots {
+            let key = (slot.device.get(), slot.slot);
+            if !slot.has_media() {
+                self.asked.remove(&key);
+                continue;
+            }
+            if slot.description.is_some() {
+                continue;
+            }
+            let recently = self
+                .asked
+                .get(&key)
+                .is_some_and(|&asked| now.saturating_duration_since(asked) < MEDIA_RETRY);
+            if !recently {
+                self.asked.insert(key, now);
+                due.push((slot.device, slot.slot));
+            }
+        }
+        due
+    }
 }
 
 /// How often the local sticks are re-scanned.
@@ -2435,6 +2532,130 @@ mod take_tests {
         assert_eq!(
             take_outcome(&[deck(2, true, None, 5000)], number(2), OURS),
             TakeOutcome::Vacant
+        );
+    }
+}
+
+#[cfg(test)]
+mod media_asker_tests {
+    use std::time::{Duration, Instant};
+
+    use prolink::{DeviceNumber, MediaDescription, PeerSlot};
+    use prolink_proto::Slot;
+    use prolink_proto::status::MediaState;
+
+    use super::{MediaAsker, media_changes};
+
+    fn usb(state: MediaState, answered: bool) -> PeerSlot {
+        PeerSlot {
+            device: DeviceNumber::new(1).expect("1 is a device number"),
+            slot: Slot::USB,
+            state,
+            description: answered.then(|| MediaDescription {
+                volume_name: "SAM1".to_owned(),
+                created: "2026-01-04".to_owned(),
+                track_count: 141,
+                playlist_count: 4,
+                total_bytes: None,
+                free_bytes: None,
+            }),
+        }
+    }
+
+    fn asked(asker: &mut MediaAsker, slot: &PeerSlot, at: Instant) -> bool {
+        !asker.due(std::slice::from_ref(slot), at).is_empty()
+    }
+
+    /// S10b's deck asked at 4.29, 9.32 and 14.35 s, was answered after its
+    /// fourth (20.44), and never asked again; S10's, never answered, asked
+    /// every 5.03 s to the end.
+    #[test]
+    fn a_loaded_slot_is_asked_about_every_5_s_until_answered_then_never() {
+        let start = Instant::now();
+        let s = |secs: u64| start + Duration::from_secs(secs);
+        let mut asker = MediaAsker::default();
+        let loaded = usb(MediaState::LOADED, false);
+        assert!(
+            asked(&mut asker, &loaded, s(0)),
+            "asked as soon as it shows loaded"
+        );
+        assert!(!asked(&mut asker, &loaded, s(1)));
+        assert!(!asked(&mut asker, &loaded, s(4)));
+        assert!(asked(&mut asker, &loaded, s(5)), "unanswered: again at 5 s");
+        assert!(
+            asked(&mut asker, &loaded, s(10)),
+            "and its third try at 10 s"
+        );
+        let answered = usb(MediaState::LOADED, true);
+        assert!(
+            !asked(&mut asker, &answered, s(15)),
+            "answered: never again"
+        );
+        assert!(!asked(&mut asker, &answered, s(60)));
+    }
+
+    #[test]
+    fn an_empty_slot_is_never_asked_about() {
+        let mut asker = MediaAsker::default();
+        let empty = usb(MediaState::EMPTY, false);
+        let now = Instant::now();
+        assert!(!asked(&mut asker, &empty, now));
+        assert!(!asked(&mut asker, &empty, now + Duration::from_secs(30)));
+        let ejecting = usb(MediaState::UNMOUNTING, false);
+        assert!(!asked(&mut asker, &ejecting, now));
+    }
+
+    #[test]
+    fn a_swapped_medium_is_asked_about_afresh() {
+        let start = Instant::now();
+        let mut asker = MediaAsker::default();
+        assert!(asked(&mut asker, &usb(MediaState::LOADED, false), start));
+        // Answered, then pulled: an eject walks through empty, and an empty
+        // slot has no description (`PeerMedia` drops it).
+        assert!(!asked(&mut asker, &usb(MediaState::LOADED, true), start));
+        assert!(!asked(&mut asker, &usb(MediaState::EMPTY, false), start));
+        assert!(
+            asked(
+                &mut asker,
+                &usb(MediaState::LOADED, false),
+                start + Duration::from_secs(1)
+            ),
+            "the next stick is asked about at once, not 5 s after the last"
+        );
+    }
+
+    #[test]
+    fn a_description_arriving_changing_or_going_is_news_to_the_host() {
+        let mut seen = std::collections::BTreeMap::new();
+        let key = (1, Slot::USB);
+        assert_eq!(
+            media_changes(&mut seen, &[usb(MediaState::LOADED, false)]),
+            vec![],
+            "loaded but not yet described: nothing to say"
+        );
+        assert_eq!(
+            media_changes(&mut seen, &[usb(MediaState::LOADED, true)]),
+            vec![key],
+            "described"
+        );
+        assert_eq!(
+            media_changes(&mut seen, &[usb(MediaState::LOADED, true)]),
+            vec![],
+            "unchanged"
+        );
+        assert_eq!(
+            media_changes(&mut seen, &[usb(MediaState::EMPTY, false)]),
+            vec![key],
+            "pulled: the host reads the slot as empty, and drops the medium"
+        );
+        assert_eq!(
+            media_changes(&mut seen, &[usb(MediaState::EMPTY, false)]),
+            vec![]
+        );
+        assert_eq!(
+            media_changes(&mut seen, &[usb(MediaState::LOADED, true)]),
+            vec![key],
+            "the same stick back is news again"
         );
     }
 }

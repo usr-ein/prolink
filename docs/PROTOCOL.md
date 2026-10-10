@@ -306,7 +306,16 @@ Query carries the requester, its IP, the target device and the slot. Response
 | `0xac` | **playlist count** |
 | `0xb4` / `0xbc` | total / free bytes |
 
-One query per slot, issued when a deck first browses it, not repeated (F37).
+**When a deck asks.** One query per slot, 0.3-0.9 s after the peer's status
+shows that slot loaded, or a few seconds after first hearing a peer that has
+one (S26: 2.9 s), and not repeated once answered: all eight answered
+deck-to-deck queries in the corpus (S13, S15a, S15b, S16a, S25, S26, S4b twice).
+Never one for an empty slot. **Unanswered, it asks again every 5.03 s:** S10,
+22 times while nothing answered; S10b at 4.29, 9.32 and 14.35 s, answered at
+the fourth (20.44) and never asked again. This library asks the same way, on a
+slot turning loaded, every 5 s while unanswered (F37 is the "once"). It used to
+ask about both slots of every peer every 5 s, answered or not, loaded or not.
+
 Answer with the true counts: a deck told there are no tracks has no reason to
 offer the medium.
 

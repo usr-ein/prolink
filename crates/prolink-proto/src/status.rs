@@ -1120,8 +1120,9 @@ impl CdjStatusBuilder {
 /// **The step no reference implementation performs, because none of them
 /// serve.** A deck asks what a slot actually contains and will not offer a
 /// medium it believes is empty — announcing and emitting status are not enough
-/// (F24). One query per slot, issued when a deck first browses it, and not
-/// repeated (F37).
+/// (F24). One query per slot, 0.3-0.9 s after the peer's status shows it
+/// loaded, again every ~5 s while unanswered (S10, S10b), and never once
+/// answered (F37). See `docs/PROTOCOL.md` §3.3.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MediaQuery {
     /// The device asking, from byte `0x21`.

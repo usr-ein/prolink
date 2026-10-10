@@ -28,8 +28,24 @@ by [`work_log/`](work_log/README.md).
   they leave. A real deck sends status the same way, and a hand-over waits for
   it: one asked for master named its successor 172 ms after its `0x27` here
   before, against 3.3-5.2 ms on S28's decks. `docs/PROTOCOL.md` §3.2, §3.3b.
+- **We ask a peer about a slot as a deck does** (prolink-cxx): when its status
+  shows the slot loaded, again every 5 s while unanswered, and never once
+  answered, until the slot empties and loads again. A real deck asks 0.3-0.9 s
+  after a slot turns loaded and retries every 5.03 s until answered (all eight
+  answered deck-to-deck queries in the corpus; S10, S10b). We used to ask
+  about both slots of every peer every 5 s, answered or not, loaded or not.
+  `docs/PROTOCOL.md` §3.3.
 
 ### Behind the API
+
+- **prolink:** `PeerMedia` forgets a slot's description when the slot is empty
+  (kept through the eject's unmounting states), so the next medium is
+  described afresh; `VirtualCdj::ask_media` asks about one slot without waiting
+  for the answer.
+- **prolink-cxx:** a slot losing its description is a `MediaInfo` event, so a
+  medium taken out of a player still reaches the host as an empty slot. It used
+  to reach it as the zeroed answer about an empty slot, which only came because
+  every slot was asked about every 5 s.
 
 - **prolink-cxx:** taking and handing over tempo master wake on the monitor's
   events instead of a 100 ms poll, so we claim in the packet after a holder's

@@ -300,7 +300,9 @@ pub struct PeerSlot {
     /// What the owner publishes at `0x6f`/`0x73`, including the states an
     /// eject passes through.
     pub state: MediaState,
-    /// The label and the counts, once a media query has been answered.
+    /// The label and the counts, once a media query has been answered, and
+    /// until the slot is empty: a pulled or swapped medium's name goes with it
+    /// at the end of its eject (§3.2b), so the next one is asked about afresh.
     pub description: Option<MediaDescription>,
 }
 
@@ -376,8 +378,18 @@ impl PeerMedia {
     }
 
     /// Record what a status packet says about a slot.
+    ///
+    /// An empty slot loses its description: the label and counts were the
+    /// medium's, and the next medium in that slot has to be asked about. Kept
+    /// through the eject's two unmounting states, which still name what is
+    /// going.
     fn note_state(&self, device: DeviceNumber, slot: Slot, state: MediaState) {
-        self.entry(device, slot, |entry| entry.state = state);
+        self.entry(device, slot, |entry| {
+            if state == MediaState::EMPTY {
+                entry.description = None;
+            }
+            entry.state = state;
+        });
     }
 
     /// Record what a media response says about a slot.
@@ -871,6 +883,15 @@ impl VirtualCdj {
             what: "a media query",
             after: wait,
         })
+    }
+
+    /// Ask one peer about one slot, and return without waiting for the answer.
+    ///
+    /// The answer lands in [`Self::peer_media`] when it comes. For a host that
+    /// asks the way a deck does: when a peer's status shows a slot loaded, and
+    /// again while it is unanswered.
+    pub async fn ask_media(&self, peer: Ipv4Addr, target: DeviceNumber, slot: Slot) -> Result<()> {
+        self.send_media_query(peer, target, slot).await
     }
 
     /// Send one `0x05`, addressed the way a deck addresses it.
@@ -2841,6 +2862,55 @@ mod tests {
         let usb = peers.get(device, Slot::USB).expect("still there");
         assert_eq!(usb.state, MediaState::UNMOUNTING);
         assert_eq!(usb.volume_name(), "SAM2");
+    }
+
+    #[test]
+    fn a_pulled_mediums_name_goes_with_it() {
+        let peers = PeerMedia::default();
+        let deck = DeviceNumber::new(1).expect("1 is a device number");
+        peers.note_state(deck, Slot::USB, MediaState::LOADED);
+        peers.note_description(
+            deck,
+            Slot::USB,
+            &MediaDescription {
+                volume_name: "SAM1".to_owned(),
+                created: "2026-01-04".to_owned(),
+                track_count: 141,
+                playlist_count: 4,
+                total_bytes: None,
+                free_bytes: None,
+            },
+        );
+        assert_eq!(
+            peers.get(deck, Slot::USB).expect("a slot").volume_name(),
+            "SAM1"
+        );
+
+        // An eject walks 0x02, 0x03, 0x04 (§3.2b). The name stays while it
+        // unmounts, and goes when the slot is empty.
+        peers.note_state(deck, Slot::USB, MediaState::UNMOUNTING);
+        peers.note_state(deck, Slot::USB, MediaState::UNMOUNTING_ALT);
+        assert_eq!(
+            peers.get(deck, Slot::USB).expect("a slot").volume_name(),
+            "SAM1"
+        );
+        peers.note_state(deck, Slot::USB, MediaState::EMPTY);
+        let pulled = peers.get(deck, Slot::USB).expect("a slot");
+        assert!(
+            pulled.description.is_none(),
+            "the medium's name went with it"
+        );
+        assert_eq!(pulled.volume_name(), "");
+
+        // The next stick is not described until it is asked about.
+        peers.note_state(deck, Slot::USB, MediaState::LOADED);
+        assert!(
+            peers
+                .get(deck, Slot::USB)
+                .expect("a slot")
+                .description
+                .is_none()
+        );
     }
 
     #[test]
