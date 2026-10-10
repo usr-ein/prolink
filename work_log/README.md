@@ -47,6 +47,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 34 | One device, both directions: `VirtualPlayer` consumes and serves from one identity, media hot-plug, and binding when the cable appears | done | [031](031-one-device-both-directions.md) |
 | 33 | Becoming a real player: claim 1–4 from the consumer side, share UDP 50002, and stop blocking the host's UI thread | done | [030](030-becoming-a-real-player.md); five defects from a Pi running Mixxx against two CDJs |
 | 35 | Several TriMixxx on one network: a rebuilt session waits for UDP 111, a new MAC is a new session, and two players claiming one number at once settle it by address | done | [032](032-rebinding-and-claiming-together.md); found on emulated decks; the claim rule replayed against every discovery packet in the corpus |
+| 36 | What the CDJ-to-CDJ captures teach: we give up "first on the network" to a real deck, status goes out on a change, and a slot is asked about as a deck asks | done, on no real CDJ | [033](033-what-the-cdj-to-cdj-captures-teach.md); three wire changes, each its own commit; 0.4.0 |
 
 ## Acceptance: what the CLI must be able to do
 
@@ -81,6 +82,7 @@ a real CDJ, and these are the places where that matters most:
 
 | | |
 |---|---|
+| **Stepping aside from `0x25`** | A real deck re-claims while it hears another device say it was first, and stops when that device goes silent (S24b, S18), so it should stop once we say `0x01`. That is predicted, not seen: no capture has a device that stays on the link saying `0x01` without a `0x05` ever passing. And whether a deck saying `0x01` defends its own number is not shown at all, which is why we leave the role to a real deck rather than holding it ([033](033-what-the-cdj-to-cdj-captures-teach.md)). |
 | **The claim chain's back-off** | No capture in the corpus contains a type-`0x08` conflict packet — nothing has ever contested a number on that rig — so our response to one is written from the specification and never observed. The corpus test asserts the absence, so the day a capture contains one, it says so. What hardware *does* send is type `0x05`, and it carries the sender's own number rather than the contested one (F58), so it is not a rejection and we are right not to treat it as one. We can only fail to notice a taken number if its holder sent no keep-alive during the five seconds we watch, and they go out every 2.0026 s. |
 | **`0x3d03`** | Acknowledged with a reply shaped like the one a deck sends for `0x3100`. No capture shows a real answer. Erroring is known to be worse (F25). |
 | **The `0x35` settings variants** | Four `*SETTING*.DAT` files exist and nothing in the request obviously selects between them. We answer with `MYSETTING.DAT`, which is what the one captured exchange carried. |
