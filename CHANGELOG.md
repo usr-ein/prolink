@@ -7,7 +7,10 @@ is listed under its own heading, with the capture that justifies it.
 Releases before 0.4.0 are described by their tags (`v0.1.0` to `v0.3.0`) and
 by [`work_log/`](work_log/README.md).
 
-## Unreleased
+## 0.4.0
+
+What the CDJ-to-CDJ captures teach ([work log 033](work_log/033-what-the-cdj-to-cdj-captures-teach.md)).
+None of it has met a real CDJ yet.
 
 ### On the wire
 

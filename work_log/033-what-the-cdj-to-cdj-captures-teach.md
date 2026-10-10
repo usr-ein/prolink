@@ -80,7 +80,7 @@ before.
 
 ## What is checked, and what is not
 
-**Checked, with `cargo test --workspace`** (777 passed):
+**Checked, with `cargo test --workspace`** (778 passed):
 - The two step-aside rules against every discovery packet in the corpus.
 - Our claim burst against a stand-in answering with S13's own `0x05`.
 - The status pacing, the hand-over clock, and the asker:
