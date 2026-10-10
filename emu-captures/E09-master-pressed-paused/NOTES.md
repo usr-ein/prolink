@@ -35,7 +35,7 @@ play and pause.
 | 15.915 | b, stopped: MASTER | 16.034: **0x26** b to a. 16.042 (+8.0 ms): **0x27** a to b, granted. +8.2 ms: a's `0x9f` = 2. +63.7 ms: b's status **0xa4 (master, not playing)**, `0x9e` = 1. +79.9 ms: a's status 0xc4 (playing), `0x9e` = 0. **A stopped deck can ask for master, and is given it,** while the deck that gives it up plays on. |
 | 27.915 | b: PLAY | 28.082: b's status 0xe4 (playing, master), 132.00. |
 | 39.915 | a: MASTER | 40.020: 0x26 a to b. 40.021 (+0.7 ms): 0x27, granted. +1.0 ms: b's `0x9f` = 1. +48.0 ms: a's `0x9e` = 1. +64.6 ms: b's `0x9e` = 0. |
-| 51.914 | b: SYNC | 52.033: b's status 0xd4 (playing, sync); its pitch goes to -4.55%: 126.00. |
+| 51.914 | b: SYNC | 52.033: b's status 0xd4 (playing, sync); its pitch goes to -4.55%: 126.00. Its beats were 0.58 beat after a's. **For four beats (52.681-54.277) its beat packets say -14.49%** (112.87 BPM), 10 points under its status and beyond the ±10% its slider allows, while its status says -4.55%: b holds back until a's beats have caught up with its own. From 54.754 its beats come 1 ms from a's, at -4.55%. This is how an emulated NXS gets into phase (`../README.md`); a real one jumps. |
 | 59.917 | a, the master: SYNC | 60.036: a's status 0xf4 (playing, master, sync). |
 | 70.0 | (capture ends) | |
 
@@ -53,9 +53,14 @@ at 40.14.
 - The two request hand-overs: 0x27 at +8.0 and +0.7 ms, `0x9f` with it,
   the successor's `0x9e` at +63.7 and +48.0 ms, the old master's cleared at
   +79.9 and +64.6 ms.
+- **SYNC's way into phase went past the tempo range:** b's beat packets said
+  -14.49% for four beats (52.681-54.277) against its status's -4.55%, the
+  largest bend in these sessions.
 
 ## Against S28
 
+- **Getting into phase:** a real NXS put in sync jumps into phase on its next
+  beat (S28 102.269); b here played four beats at 112.87 BPM instead.
 - **Neither MASTER on the master nor MASTER on a stopped deck happened in
   S28:** all five of its requests came from a deck that was playing and not
   master. What this session shows for both rests on the emulator.

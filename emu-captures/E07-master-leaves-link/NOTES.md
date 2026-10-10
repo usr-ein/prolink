@@ -31,7 +31,7 @@ start and the end of its `pi-qemu` command.
 | t (s) | what was done | what came of it |
 | ---: | --- | --- |
 | 0.000 | (capture running) | a: 0xe4 (playing, master), 126.00. b: 0xc4 (playing), 132.00. |
-| 4.865-5.020 | b: SYNC | 5.026: b's status 0xd4 (playing, sync), pitch -4.55%: 126.00. |
+| 4.865-5.020 | b: SYNC | 5.026: b's status 0xd4 (playing, sync), pitch -4.55%: 126.00. Its beat packets say -5.56% for four beats (5.799-7.242), bending into a's phase (`../README.md`), then -4.55%. |
 | 11.866-14.693 | a switched off (`cdj rm`) | a's last keep-alive at 11.156, its last beat at 12.004, its last status at 12.016. Then nothing from a. |
 | | | b keeps playing, at 126.00, and keeps sending its status to a's address, `0x9e` = 0 (not master), until 20.787: 8.8 s after a's last packet, 9.6 s after its last keep-alive. Then b sends a no more status: it has dropped a. |
 | | | **b takes master then, by itself**: its MASTER lamp lit at 20.97 (the panel poll). Nobody on the link hears it: status goes only to peers, and b has none. b's beats go on at 126.00, its tempo when a left. |

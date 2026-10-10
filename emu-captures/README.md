@@ -25,8 +25,8 @@ Shared by every emu-capture.
 - **The players:** CDJ-2000NXS, firmware 1.44 (Pioneer's `C2KNXS.UPD`; it is
   in no repository), each running on
   [cdj2000-emulator](https://github.com/usr-ein/cdj2000-emulator) at
-  `dbc4e31`: cdj2k-revival's emulator with geepot's NXS series and TriMixxx's
-  changes. MAIN, the SH-4 that runs the player, the network and the panel,
+  `dbc4e31` (on the fork's `cdj-gui` branch): cdj2k-revival's emulator with
+  geepot's NXS series and TriMixxx's changes. MAIN, the SH-4 that runs the player, the network and the panel,
   is a QEMU machine (QEMU `55347990`); the GUI board's Blackfin is the
   series' fast core. Both boards run Pioneer's code, unchanged.
 - **Driven by** TriMixxx's `pi-qemu cdj` (TriMixxx `3c0c2aa`): `cdj up NAME
@@ -101,7 +101,7 @@ records the loads. E07 boots a again within its capture, and centres it.
 | `E03-master-handoff-playing` | 0.5 MB | MASTER handed back and forth four times in sync, once out of sync |
 | `E04-handoff-tempo-catch-up` | 0.7 MB | a new master holds the tempo until its fader comes to it |
 | `E05-master-stops` | 0.5 MB | a master that stops hands over to the deck playing; a deck in sync starts again |
-| `E06-paused-master-yields` | 0.5 MB | a paused master hands over to a deck that plays in sync, not to one out of sync |
+| `E06-paused-master-yields` | 0.5 MB | a paused master and a deck that starts, in all four sync combinations: it hands over unless it is in sync and the other is not |
 | `E07-master-leaves-link` | 0.4 MB | the master switched off: the other takes master after ~10 s, alone; the master back as a follower |
 | `E08-sync-while-paused` | 0.4 MB | SYNC on a stopped deck; the master's tempo changed while it is stopped |
 | `E09-master-pressed-paused` | 0.4 MB | MASTER pressed on the master, and on a stopped deck |
@@ -143,8 +143,8 @@ records the loads. E07 boots a again within its capture, and centres it.
 - **A master that stops while another deck plays** hands master to it in its
   status alone: `0x9f` in the very packet that says it stopped, nothing on
   50001 (S28 193.7; E05, E01).
-- **A paused master hands master to a deck that starts playing in sync**
-  (S28 208.3; E06), again in status alone.
+- **A paused master in sync hands master to a deck that starts playing in
+  sync** (S28 208.3; E06 case D, like for like), again in status alone.
 - **The new master keeps the tempo** that was playing; its fader does
   nothing until it comes to that tempo, then drives it (S28's own notes,
   S28 156.5-163.2; E04).
@@ -168,8 +168,10 @@ emulator alone):
 
 - A master that stops hands master to the deck playing even when that deck
   is out of sync (E01), or the master itself is (E05).
-- A paused master does **not** hand over to a deck that starts playing out
-  of sync (E06).
+- A master that is not playing hands master to a deck that plays,
+  **unless it is in sync and that deck is not** (E06: the four combinations,
+  one case each); and it gives master away the moment its own sync goes off
+  (E06, case E).
 - MASTER pressed on the master gives master to the other playing deck,
   without 0x26/0x27 (E09). MASTER pressed on a stopped deck takes master in
   the ordinary exchange, and the stopped deck is then master (E09).
@@ -187,16 +189,40 @@ emulator alone):
    (playing), with no 0x06 (cued) and no PLAY pressed. A real one cues it and
    waits for PLAY (S28 20.2-22.1). With nobody master, the deck that loads
    first becomes master by playing. These sessions work with it; any
-   emulated session that loads a track starts it.
+   emulated session that loads a track starts it. And while a deck still
+   plays from its load, CUE does nothing; once it has been stopped and cued,
+   CUE in play takes it back to its cue point and stops it there (play state
+   0x06), as on a real NXS. (A test beside these sessions, not kept: two CUE
+   presses 6 s apart on a deck playing from its load changed nothing; PLAY
+   to pause, then CUE, cued it (0x06) and moved it to its cue point at beat
+   0; and from then on each CUE in play went to 0x06, beat 0.)
 2. **Catching the phase.** A real NXS put in sync jumps into phase: S28's
    deck 1 was 0.12-0.15 beat off at 102.111, and its next beat came after a
    339 ms beat, not 414 ms, 0.1 ms after the master's; a real deck starting in
    sync is in phase from its first beat (S28 210.354). An emulated one bends
-   its tempo for four to seven beats instead (its beat packets say +2.9% to
-   +8.5%, or -5.5% to -6.4%, while its status keeps the target pitch), or
-   starts a little off (E08: 9.8 ms). Its CUE does nothing while playing,
-   either (seen while setting up, not in a capture). Both look like the DSP
-   model not moving a playing track's position as the real DSP does.
+   its tempo instead, for four or five beats: its beat packets carry another
+   pitch than its status, which keeps the target, and the bend reaches 10
+   points either way. In E09 the follower played four beats at -14.49%,
+   beyond the ±10% its slider allows. It shows wherever a deck goes into sync
+   while its master plays, or starts in sync while its master plays (E03's
+   bend, 0.05 points, lasted nine beats); where a deck starts in sync beside
+   a paused master (E06 25.5 and 45.5) there is no phase to catch:
+
+   | session | deck | beats (s) | beat packets | status |
+   | --- | --- | --- | ---: | ---: |
+   | E02 | b | 4.85-6.29 (4) | -5.45% | -4.55% |
+   | E03 | b | 4.77-8.58 (9) | -4.50% | -4.55% |
+   | E04 | b | 5.69-7.13 (4) | -5.45% | -4.55% |
+   | E05 | a | 34.94-36.69 (5) | +8.49% | -0.00% |
+   | E05 | b | 57.79-59.55 (5) | +2.90% | -4.55% |
+   | E05 | a | 82.01-83.84 (5) | +4.18% | -0.00% |
+   | E06 | b | 3.93-5.80 (5) | -2.72% | -4.55% |
+   | E07 | b | 5.80-7.24 (4) | -5.56% | -4.55% |
+   | E08 | b | 28.09-29.46 (4) | -0.18% | +0.32% |
+   | E09 | b | 52.68-54.28 (4) | -14.49% | -4.55% |
+
+   Why it bends is not known. It is not that the DSP model cannot move a
+   playing track: CUE pressed in play takes it back to its cue point (1).
 3. **Pitch copies 2 and 4 while stopped.** A real NXS zeroes status `0x98`
    and `0xc4` while paused (S28: 274 of 275 paused packets; S06: all 323). An
    emulated one keeps a value there: the pitch, or the pitch it had when it
@@ -217,6 +243,17 @@ emulator alone):
    nothing on it but the two players. Status is unicast to peers, so a
    player alone on the link sends none, and when E07's master leaves, the
    other player's status goes unseen until a peer comes back.
+
+## What is in the packets
+
+Link-local addresses (169.254.0.0/16), MACs made up from the players' names
+(`02:43:44:..`), device numbers, and what the players say about what they
+play: the loaded tracks' ids in the stick's `export.pdb` (77 and 116), their
+tempos, pitches, beat counts and grid timings. In E07 the players also ask
+each other about their USB slots, and the answers carry the stick's name
+(`SAM1`), its track and playlist counts and its sizes. No titles, artists,
+artwork, file paths or audio: nothing in these sessions browses another
+player's stick or loads from it.
 
 ## Reading them
 

@@ -29,7 +29,7 @@ start and the end of its `pi-qemu` command, about 0.13 s later.
 | t (s) | what was done | what came of it |
 | ---: | --- | --- |
 | 0.000 | (capture running) | a: 0xe4 (playing, master), 126.00 BPM, pitch 0. b: 0xc4 (playing), 132.00, pitch 0. |
-| 4.385-4.508 | b: SYNC | 4.497: b's status 0xd4 (playing, sync), pitch still 0. 4.561 (+64 ms): pitch -4.55% (0x000f45d1), so b plays at 132.00 x 0.95455 = 126.000, a's tempo. Its first beat after (4.772) falls 4.6 ms after a's, where the one before fell 13.5 ms after; its beat packets carry -4.49% for a few beats, a nudge the status packets never show. |
+| 4.385-4.508 | b: SYNC | 4.497: b's status 0xd4 (playing, sync), pitch still 0. 4.561 (+64 ms): pitch -4.55% (0x000f45d1), so b plays at 132.00 x 0.95455 = 126.000, a's tempo. Its first beat after (4.772) falls 4.6 ms after a's, where the one before fell 13.5 ms after; its beat packets carry -4.50% for nine beats (4.772-8.583), a 0.05-point bend into a's phase that the status packets never show (`../README.md`). |
 | 9.383-9.513 | a: SYNC | 9.530: a's status 0xf4 (playing, master, sync). A master may be in sync too: nothing else changes. |
 | 19.383-19.503 | b: MASTER | 19.490: **0x26** (40 B) b to a, on 50001. 19.491 (+0.8 ms): **0x27** (44 B) a to b, granted (1). 19.491 (+1.2 ms): a's status `0x9e` = 1, **`0x9f` = 2**. 19.562 (+72 ms): b's status 0xf4, `0x9e` = 1. 19.618 (+128 ms): a's status 0xd4, `0x9e` = 0, `0x9f` = 0xff. |
 | | | b keeps playing at 126.00 (pitch -4.55%), the tempo it was following: its own fader (at 0, 132.00) is not taken up. a, now a follower in sync, reads pitch 0x000fffff (-0.00%): 126.00 x 0.999999. |

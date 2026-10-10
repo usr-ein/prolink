@@ -37,7 +37,7 @@ start and the end of its `pi-qemu` command, about 0.14 s later.
 | t (s) | what was done | what came of it |
 | ---: | --- | --- |
 | 0.000 | (capture running) | a: 0xe4 (playing, master), 126.00, pitch 0. b: 0xc4 (playing), 132.00, pitch 0. |
-| 4.807-4.959 | b: SYNC | 4.943: b's status 0xd4 (playing, sync); the next packets put its pitch at -4.55%: 126.00. |
+| 4.807-4.959 | b: SYNC | 4.943: b's status 0xd4 (playing, sync); the next packets put its pitch at -4.55%: 126.00. **Its beat packets say -5.45% for four beats (5.689-7.129)** while its status says -4.55%: b slows by 0.9 points to bring its beats onto a's (an emulated NXS's way into phase, `../README.md`), then plays at -4.55%. |
 | 7.807-7.938 | a: SYNC | 7.928: a's status 0xf4 (playing, master, sync). |
 | 11.806-13.809 | a's fader 0% to -5.1% over 2 s | a's pitch steps down to -5.10% (119.574); b follows each step, to -9.41% (132.00 x 0.90586 = 119.574). |
 | 21.807-21.949 | b: MASTER | 21.937: 0x26 b to a. +7.6 ms: 0x27, granted. +7.8 ms: a's `0x9f` = 2. +24.2 ms: b's `0x9e` = 1. +71.7 ms: a's `0x9e` = 0. **b, now master, stays at -9.41%: 119.574,** the tempo that was playing. Its fader is at 0% (132.00), and is not taken up. |
@@ -62,7 +62,8 @@ start and the end of its `pi-qemu` command, about 0.14 s later.
 - **The follower tracks the master's tempo packet by packet:** each of the
   master's 130 changes of tempo was matched by the follower's status, to
   0.005 BPM, 4.8-64 ms later (median 7.9 ms).
-- **Beat phase** stayed within 0.01 beat through all of it (10-s windows:
+- **Beat phase,** once b's four-beat bend after SYNC was done (7.13), stayed
+  within 0.01 beat through all of it (10-s windows:
   mean -0.0025 to +0.0016 beat, sd 0.002-0.005), the catch-ups included.
 - In the second hand-over (64.930) the old master named its successor
   (`0x9f`) 56 ms after its 0x27, on its next status tick, not with the 0x27.

@@ -45,8 +45,10 @@ started); each press lands between the step's start and the end of its
 - **A stopped deck in sync starts at the master's tempo,** and here nearly
   in phase: 0.022 beat off on its first beat, then a slight bend for four
   beats. (In E05 a deck that had stopped while in sync started 0.29 beat off
-  and bent +2.9% for five beats. The difference between the two is that
-  here SYNC was pressed while the deck was stopped.)
+  and bent +2.9% for five beats. Why the two differ is a guess: one case
+  each, and where a playing track is, is the DSP model's, not Pioneer's
+  (`../README.md`). One difference between them is that here SYNC was
+  pressed while the deck was stopped.)
 - **While stopped, pitch copies 2 and 4 keep the value they had when the
   deck stopped** (0x00100000) while pitch 1 follows the master. In the packet
   that says it plays again they read 0; after that they move with pitch 1,
