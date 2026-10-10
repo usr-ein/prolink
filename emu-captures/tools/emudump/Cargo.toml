@@ -1,0 +1,15 @@
+[package]
+name = "emudump"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+description = "A transcript of an emu-capture: every dbserver message, NFS call, media query and status change, by frame"
+
+# Its own workspace: a reading aid for emu-captures/, not one of prolink's
+# crates, so `cargo test --workspace` at the root never builds it.
+[workspace]
+
+[dependencies]
+prolink-capture = { path = "../../../crates/prolink-capture" }
+prolink-proto = { path = "../../../crates/prolink-proto" }
