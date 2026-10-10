@@ -1,0 +1,33 @@
+#!/bin/sh
+# E15-link-tag-list: B tags tracks of A's plain stick over LINK from four
+# folders (TAG TRACK on the row under the cursor), opens its TAG LIST, loads
+# a track from it, untags one there, and opens the list again.
+#
+# Run from emu-captures/E15-link-tag-list/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=plainmp3.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up --dsp-model
+sleep 4
+key $B link 2
+sleep 14
+key $B enter 2                                  # the stick's root
+move $B 10 1;       key $B "tag track" 2; shot $B E15-01-tag-01-full-v23  # row 10
+move $B 3 1;        key $B "tag track" 2; shot $B E15-02-tag-04-no-tags   # 13
+move $B -8;         key $B enter 2                                       # 5: Order
+move $B 4 1;        key $B "tag track" 2; shot $B E15-03-tag-track-2      # its row 4: Track 2.mp3
+key $B back 2
+move $B 2;          key $B enter 2                                       # 7: Unicode
+move $B 2 1;        key $B "tag track" 2; shot $B E15-04-tag-long-name    # its row 2
+key $B back 2
+key $B "tag list" 3; shot $B E15-05-tag-list                              # TAG LIST
+move $B 1 1;        shot $B E15-06-tag-list-row-1
+move $B 1 1
+move $B 1 1;        shot $B E15-07-tag-list-row-3
+key $B enter 5;     shot $B E15-08-loaded-from-tag-list                   # load the row under the cursor
+move $B -2 1;       key $B "tag track" 3; shot $B E15-09-untagged          # row 1: untag it
+key $B back 2
+key $B "tag list" 3; shot $B E15-10-tag-list-again
+sleep 3
+rig_down

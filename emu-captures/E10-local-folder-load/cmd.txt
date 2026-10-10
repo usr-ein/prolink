@@ -1,0 +1,37 @@
+#!/bin/sh
+# E10-local-folder-load: A's own browser on the plain stick, then a track
+# loaded and played from it. B is on the link and is never touched: it is
+# there to receive A's status packets (a player unicasts status only to the
+# players it has seen), and to show what a stick appearing on the link makes
+# another player do by itself.
+#
+# Run from emu-captures/E10-local-folder-load/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=plainmp3.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up --dsp-model                   # B on the behavioural DSP too, though only A plays here
+sleep 6;            shot $A E10-01-usb         # the emulator pressed USB at boot: A's USB browser
+sleep 10;           shot $A E10-02-usb-later   # the "rekordbox Database not found!" notice gone
+key $A enter 2;     shot $A E10-03-root        # [FOLDER] opened: the stick's root
+move $A 14 1;       shot $A E10-04-root-end    # down every row of the root, a second on each
+move $A -9;         key $A enter 2; shot $A E10-05-order      # row 5: Order
+move $A 5 1;        shot $A E10-06-order-end
+key $A back 2
+move $A 1;          key $A enter 2; shot $A E10-07-sort-0     # row 6: Sort, five rows a screen
+for rows in 5 10 15 20 25; do move $A 5; shot $A E10-07-sort-$rows; done
+key $A back 2;      shot $A E10-08-back-at-sort
+move $A 4 1;        shot $A E10-08-on-01-full-v23            # row 10: 01 Full v23.mp3
+key $A enter 4;     shot $A E10-09-loaded      # loaded; the behavioural DSP plays it at once
+sleep 10;           shot $A E10-10-playing
+key $A play 3;      shot $A E10-11-paused
+key $A browse 2;    shot $A E10-12-player
+key $A info 3;      shot $A E10-13-info
+key $A info 2
+key $A browse 2;    shot $A E10-14-browser
+move $A -10;        key $A enter 2; shot $A E10-15-deep       # row 0: Deep, then its first row,
+for level in 01 02 03 04 05 06 07 08 09 10; do                # level after level
+    key $A enter 2; shot $A E10-16-deep-$level
+done
+sleep 2
+rig_down

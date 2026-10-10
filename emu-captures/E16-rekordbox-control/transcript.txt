@@ -1,0 +1,1171 @@
+      1      0.000     P1>169.254.255.255 keep-alive: player 1 is 169.254.209.145, "CDJ-2000nexus"
+      5      7.445  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      7      8.444  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      9     10.444  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+     16     16.446  169.254.173.12>169.254.255.255 hello
+     17     16.744  169.254.173.12>169.254.255.255 hello
+     18     17.044  169.254.173.12>169.254.255.255 hello
+     19     17.344  169.254.173.12>169.254.255.255 claim_mac
+     20     17.644  169.254.173.12>169.254.255.255 claim_mac
+     21     17.944  169.254.173.12>169.254.255.255 claim_mac
+     23     18.244  169.254.173.12>169.254.255.255 claim_ip number=1 ip=169.254.173.12
+     26     18.246     P1>169.254.173.12 mixer_assign
+     27     18.247  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     28     18.544  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     29     18.844  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     30     19.144  169.254.173.12>169.254.255.255 claim_number number=2
+     31     19.144     P1>169.254.173.12 number_in_use number=1
+     32     19.146     P2>169.254.255.255 keep-alive: player 2 is 169.254.173.12, "CDJ-2000nexus"
+     33     19.173     P1>P2    status usb=empty sd=empty link=false no track play=Some(0) flags=0x84 bpm=- browse=None
+     40     20.064     P2>P1    status usb=loaded sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     43     20.153     P1>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 42]
+     45     20.153     P1>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 44]
+     47     20.155     P1>P2    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 46]
+     48     20.165     P1>P2    media_query: P1 (169.254.209.145) asks about P2 usb
+     49     20.166     P2>P1    media_response: P2 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+     52     20.169     P1>P2    port query (0000000f52656d6f7465444253657276657200)
+     53     20.169     P2>P1    port reply: dbserver on 1051
+     58     20.171     P1>P2    dbserver preamble 11 00 00 00 01
+     59     20.172     P2>P1    dbserver preamble 11 00 00 00 01
+     60     20.173     P1>P2    status usb=empty sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     61     20.173     P1>P2    db introduce txn=0xfffffffe [0x1]
+     62     20.175     P2>P1    db success txn=0xfffffffe [0x0, 0x2]
+     64     20.181     P1>P2    db unknown_3e03 txn=0x3800001 [0x01010301=D1/M1/S3/T1]
+     66     20.190     P2>P1    db unknown_4b02 txn=0x3800001 [0x3e03, 0x0, 0x2, ""]
+    114     23.356     P1>P2    db menu_root txn=0x3800002 [0x01010301=D1/M1/S3/T1, 0x0, 0xffffff]
+    116     23.365     P2>P1    db success txn=0x3800002 [0x1000, 0xc]
+    118     23.371     P1>P2    db render_menu txn=0x3800003 [0x01010301=D1/M1/S3/T1, 0x0, 0x6, 0x0, 0xc, 0x0]
+    120     23.381     P2>P1    db menu_header txn=0x3800003 [0x1, 0x0]
+    120     23.381     P2>P1    db menu_item id=5 type=0x0084 (PLAYLIST menu) label1="⟦PLAYLIST⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    120     23.381     P2>P1    db menu_item id=3 type=0x0082 (ALBUM menu) label1="⟦ALBUM⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    120     23.381     P2>P1    db menu_item id=1 type=0x0080 (GENRE menu) label1="⟦GENRE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    120     23.381     P2>P1    db menu_item id=10 type=0x0089 (LABEL menu) label1="⟦LABEL⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    120     23.381     P2>P1    db menu_item id=2 type=0x0081 (ARTIST menu) label1="⟦ARTIST⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    120     23.381     P2>P1    db menu_item id=20 type=0x0093 (BITRATE menu) label1="⟦BITRATE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    120     23.381     P2>P1    db menu_footer txn=0x3800003 []
+    122     23.406     P1>P2    db menu_playlist txn=0x3800004 [0x01020301=D1/M2/S3/T1, 0x0, 0x0, 0x1]
+    125     23.416     P2>P1    db success txn=0x3800004 [0x1105, 0x4]
+    127     23.421     P1>P2    db render_menu txn=0x3800005 [0x01020301=D1/M2/S3/T1, 0x0, 0x4, 0x0, 0x4, 0x0]
+    130     23.431     P2>P1    db menu_header txn=0x3800005 [0x1, 0x0]
+    130     23.431     P2>P1    db menu_item id=1 type=0x0008 (playlist) label1="technobase_set" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    130     23.431     P2>P1    db menu_item id=2 type=0x0008 (playlist) label1="IDM" label2="" arg0=0x0 flags=0x0 artwork=0 pos=1 key=0
+    130     23.431     P2>P1    db menu_item id=3 type=0x0008 (playlist) label1="DomSam1" label2="" arg0=0x0 flags=0x0 artwork=0 pos=2 key=0
+    130     23.431     P2>P1    db menu_item id=4 type=0x0008 (playlist) label1="Openings" label2="" arg0=0x0 flags=0x0 artwork=0 pos=3 key=0
+    130     23.431     P2>P1    db menu_footer txn=0x3800005 []
+    615     56.727     P1>P2    db menu_album txn=0x3800006 [0x01020301=D1/M2/S3/T1, 0x0]
+    617     56.733     P2>P1    db success txn=0x3800006 [0x1003, 0x3b]
+    619     56.742     P1>P2    db render_menu txn=0x3800007 [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0x3b, 0x0]
+    622     56.748     P2>P1    db menu_header txn=0x3800007 [0x1, 0x0]
+    622     56.748     P2>P1    db menu_item id=9 type=0x0002 (album) label1="Agaki Home Radio" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    622     56.748     P2>P1    db menu_item id=15 type=0x0002 (album) label1="Andromeda" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    622     56.748     P2>P1    db menu_item id=53 type=0x0002 (album) label1="Archives" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    622     56.748     P2>P1    db menu_item id=24 type=0x0002 (album) label1="Black Box EP" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    622     56.748     P2>P1    db menu_item id=44 type=0x0002 (album) label1="Cascade" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    622     56.748     P2>P1    db menu_item id=55 type=0x0002 (album) label1="Clarion Call" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    622     56.748     P2>P1    db menu_footer txn=0x3800007 []
+    638     57.850     P1>P2    db menu_genre txn=0x3800008 [0x01020301=D1/M2/S3/T1, 0x0]
+    640     57.860     P2>P1    db success txn=0x3800008 [0x1001, 0xa]
+    642     57.865     P1>P2    db render_menu txn=0x3800009 [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0xa, 0x0]
+    644     57.875     P2>P1    db menu_header txn=0x3800009 [0x1, 0x0]
+    644     57.875     P2>P1    db menu_item id=7 type=0x0006 (genre) label1="Acid Techno" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    644     57.875     P2>P1    db menu_item id=4 type=0x0006 (genre) label1="Ambient" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    644     57.875     P2>P1    db menu_item id=8 type=0x0006 (genre) label1="Bouncy Techno" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    644     57.875     P2>P1    db menu_item id=3 type=0x0006 (genre) label1="Breakcore" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    644     57.875     P2>P1    db menu_item id=2 type=0x0006 (genre) label1="House" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    644     57.875     P2>P1    db menu_item id=9 type=0x0006 (genre) label1="Hypnotic Techno" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    644     57.875     P2>P1    db menu_footer txn=0x3800009 []
+    663     58.980     P1>P2    db menu_label txn=0x380000a [0x01020301=D1/M2/S3/T1, 0x0]
+    665     58.989     P2>P1    db success txn=0x380000a [0x100a, 0xb]
+    667     58.995     P1>P2    db render_menu txn=0x380000b [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0xb, 0x0]
+    670     59.005     P2>P1    db menu_header txn=0x380000b [0x1, 0x0]
+    670     59.005     P2>P1    db menu_item id=8 type=0x000e (label) label1="AKRONYM" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    670     59.005     P2>P1    db menu_item id=7 type=0x000e (label) label1="Children Of Tomorrow" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    670     59.005     P2>P1    db menu_item id=2 type=0x000e (label) label1="Criminal Justice Act Records" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    670     59.005     P2>P1    db menu_item id=11 type=0x000e (label) label1="Good Looking Records" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    670     59.005     P2>P1    db menu_item id=4 type=0x000e (label) label1="Monnom Black" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    670     59.005     P2>P1    db menu_item id=9 type=0x000e (label) label1="n-PLEX" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    670     59.005     P2>P1    db menu_footer txn=0x380000b []
+    687     60.105     P1>P2    db menu_artist txn=0x380000c [0x01020301=D1/M2/S3/T1, 0x0]
+    689     60.114     P2>P1    db success txn=0x380000c [0x1002, 0x40]
+    691     60.120     P1>P2    db render_menu txn=0x380000d [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0x40, 0x0]
+    693     60.130     P2>P1    db menu_header txn=0x380000d [0x1, 0x0]
+    693     60.130     P2>P1    db menu_item id=66 type=0x0007 (artist) label1="AADJA" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    693     60.130     P2>P1    db menu_item id=5 type=0x0007 (artist) label1="AFX" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    693     60.130     P2>P1    db menu_item id=11 type=0x0007 (artist) label1="Alchemical Sisters, Eris Drew, Octa Octa" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    693     60.130     P2>P1    db menu_item id=15 type=0x0007 (artist) label1="Alex Kassian" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    693     60.130     P2>P1    db menu_item id=50 type=0x0007 (artist) label1="Almaty" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    693     60.130     P2>P1    db menu_item id=49 type=0x0007 (artist) label1="Amor Satyr, Toma Kami" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    693     60.130     P2>P1    db menu_footer txn=0x380000d []
+    711     61.235     P1>P2    db menu_bitrate txn=0x380000e [0x01020301=D1/M2/S3/T1, 0x0]
+    713     61.245     P2>P1    db success txn=0x380000e [0x1011, 0x1]
+    715     61.250     P1>P2    db render_menu txn=0x380000f [0x01020301=D1/M2/S3/T1, 0x0, 0x1, 0x0, 0x1, 0x0]
+    717     61.259     P2>P1    db menu_header txn=0x380000f [0x1, 0x0]
+    717     61.259     P2>P1    db menu_item id=320 type=0x0010 (bitrate) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    717     61.259     P2>P1    db menu_footer txn=0x380000f []
+    735     62.360     P1>P2    db render_menu txn=0x3800010 [0x01010301=D1/M1/S3/T1, 0x1, 0x6, 0x0, 0xc, 0x0]
+    737     62.370     P2>P1    db menu_header txn=0x3800010 [0x1, 0x1]
+    737     62.370     P2>P1    db menu_item id=3 type=0x0082 (ALBUM menu) label1="⟦ALBUM⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    737     62.370     P2>P1    db menu_item id=1 type=0x0080 (GENRE menu) label1="⟦GENRE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    737     62.370     P2>P1    db menu_item id=10 type=0x0089 (LABEL menu) label1="⟦LABEL⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    737     62.370     P2>P1    db menu_item id=2 type=0x0081 (ARTIST menu) label1="⟦ARTIST⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    737     62.370     P2>P1    db menu_item id=20 type=0x0093 (BITRATE menu) label1="⟦BITRATE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    737     62.370     P2>P1    db menu_item id=4 type=0x0083 (TRACK menu) label1="⟦TRACK⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    737     62.370     P2>P1    db menu_footer txn=0x3800010 []
+    739     62.390     P1>P2    db menu_track txn=0x3800011 [0x01020301=D1/M2/S3/T1, 0x0]
+    741     62.399     P2>P1    db success txn=0x3800011 [0x1004, 0x8d]
+    743     62.405     P1>P2    db render_menu txn=0x3800012 [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0x0]
+    745     62.415     P2>P1    db menu_header txn=0x3800012 [0x1, 0x0]
+    745     62.415     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=0
+    745     62.415     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=0
+    745     62.415     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=0
+    745     62.415     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=0
+    745     62.415     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=0
+    745     62.415     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=0
+    745     62.415     P2>P1    db menu_footer txn=0x3800012 []
+    762     63.500     P1>P2    db render_menu txn=0x3800013 [0x01010301=D1/M1/S3/T1, 0x2, 0x6, 0x0, 0xc, 0x0]
+    764     63.510     P2>P1    db menu_header txn=0x3800013 [0x1, 0x2]
+    764     63.510     P2>P1    db menu_item id=1 type=0x0080 (GENRE menu) label1="⟦GENRE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    764     63.510     P2>P1    db menu_item id=10 type=0x0089 (LABEL menu) label1="⟦LABEL⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    764     63.510     P2>P1    db menu_item id=2 type=0x0081 (ARTIST menu) label1="⟦ARTIST⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    764     63.510     P2>P1    db menu_item id=20 type=0x0093 (BITRATE menu) label1="⟦BITRATE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    764     63.510     P2>P1    db menu_item id=4 type=0x0083 (TRACK menu) label1="⟦TRACK⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    764     63.510     P2>P1    db menu_item id=22 type=0x0095 (HISTORY menu) label1="⟦HISTORY⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    764     63.510     P2>P1    db menu_footer txn=0x3800013 []
+    766     63.530     P1>P2    db menu_history txn=0x3800014 [0x01020301=D1/M2/S3/T1, 0x0]
+    769     63.545     P2>P1    db success txn=0x3800014 [0x1012, 0x4]
+    771     63.555     P1>P2    db render_menu txn=0x3800015 [0x01020301=D1/M2/S3/T1, 0x0, 0x4, 0x0, 0x4, 0x0]
+    774     63.565     P2>P1    db menu_header txn=0x3800015 [0x1, 0x0]
+    774     63.565     P2>P1    db menu_item id=4 type=0x0024 (history playlist) label1="HISTORY 004" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    774     63.565     P2>P1    db menu_item id=3 type=0x0024 (history playlist) label1="HISTORY 003" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    774     63.565     P2>P1    db menu_item id=2 type=0x0024 (history playlist) label1="HISTORY 002" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    774     63.565     P2>P1    db menu_item id=1 type=0x0024 (history playlist) label1="HISTORY 001" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    774     63.565     P2>P1    db menu_footer txn=0x3800015 []
+    791     64.630     P1>P2    db render_menu txn=0x3800016 [0x01010301=D1/M1/S3/T1, 0x3, 0x6, 0x0, 0xc, 0x0]
+    793     64.640     P2>P1    db menu_header txn=0x3800016 [0x1, 0x3]
+    793     64.640     P2>P1    db menu_item id=10 type=0x0089 (LABEL menu) label1="⟦LABEL⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    793     64.640     P2>P1    db menu_item id=2 type=0x0081 (ARTIST menu) label1="⟦ARTIST⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    793     64.640     P2>P1    db menu_item id=20 type=0x0093 (BITRATE menu) label1="⟦BITRATE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    793     64.640     P2>P1    db menu_item id=4 type=0x0083 (TRACK menu) label1="⟦TRACK⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    793     64.640     P2>P1    db menu_item id=22 type=0x0095 (HISTORY menu) label1="⟦HISTORY⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    793     64.640     P2>P1    db menu_item id=18 type=0x0091 (SEARCH menu) label1="⟦SEARCH⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    793     64.640     P2>P1    db menu_footer txn=0x3800016 []
+    810     65.775     P1>P2    db render_menu txn=0x3800017 [0x01010301=D1/M1/S3/T1, 0x4, 0x6, 0x0, 0xc, 0x0]
+    812     65.784     P2>P1    db menu_header txn=0x3800017 [0x1, 0x4]
+    812     65.784     P2>P1    db menu_item id=2 type=0x0081 (ARTIST menu) label1="⟦ARTIST⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    812     65.784     P2>P1    db menu_item id=20 type=0x0093 (BITRATE menu) label1="⟦BITRATE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    812     65.784     P2>P1    db menu_item id=4 type=0x0083 (TRACK menu) label1="⟦TRACK⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    812     65.784     P2>P1    db menu_item id=22 type=0x0095 (HISTORY menu) label1="⟦HISTORY⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    812     65.784     P2>P1    db menu_item id=18 type=0x0091 (SEARCH menu) label1="⟦SEARCH⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    812     65.784     P2>P1    db menu_item id=17 type=0x0090 (FOLDER menu) label1="⟦FOLDER⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    812     65.784     P2>P1    db menu_footer txn=0x3800017 []
+    815     65.805     P1>P2    db menu_folder txn=0x3800018 [0x01020302=D1/M2/S3/T2, 0x0, 0xffffffff, 0x0]
+    817     65.819     P2>P1    db success txn=0x3800018 [0x2006, 0x0]
+    836     66.910     P1>P2    db render_menu txn=0x3800019 [0x01010301=D1/M1/S3/T1, 0x5, 0x6, 0x0, 0xc, 0x0]
+    838     66.920     P2>P1    db menu_header txn=0x3800019 [0x1, 0x5]
+    838     66.920     P2>P1    db menu_item id=20 type=0x0093 (BITRATE menu) label1="⟦BITRATE⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    838     66.920     P2>P1    db menu_item id=4 type=0x0083 (TRACK menu) label1="⟦TRACK⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    838     66.920     P2>P1    db menu_item id=22 type=0x0095 (HISTORY menu) label1="⟦HISTORY⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    838     66.920     P2>P1    db menu_item id=18 type=0x0091 (SEARCH menu) label1="⟦SEARCH⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    838     66.920     P2>P1    db menu_item id=17 type=0x0090 (FOLDER menu) label1="⟦FOLDER⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    838     66.920     P2>P1    db menu_item id=12 type=0x008b (KEY menu) label1="⟦KEY⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    838     66.920     P2>P1    db menu_footer txn=0x3800019 []
+    840     66.945     P1>P2    db menu_key txn=0x380001a [0x01020301=D1/M2/S3/T1, 0x0]
+    842     66.954     P2>P1    db success txn=0x380001a [0x1014, 0x18]
+    844     66.960     P1>P2    db render_menu txn=0x380001b [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0x18, 0x0]
+    846     66.969     P2>P1    db menu_header txn=0x380001b [0x1, 0x0]
+    846     66.969     P2>P1    db menu_item id=1 type=0x000f (key) label1="Abm" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    846     66.969     P2>P1    db menu_item id=2 type=0x000f (key) label1="B" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    846     66.969     P2>P1    db menu_item id=3 type=0x000f (key) label1="Ebm" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    846     66.969     P2>P1    db menu_item id=4 type=0x000f (key) label1="F#" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    846     66.969     P2>P1    db menu_item id=5 type=0x000f (key) label1="Bbm" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    846     66.969     P2>P1    db menu_item id=6 type=0x000f (key) label1="Db" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    846     66.969     P2>P1    db menu_footer txn=0x380001b []
+   1039     80.902     P1>P2    db menu_folder txn=0x380001c [0x01020302=D1/M2/S3/T2, 0x0, 0xffffffff, 0x0]
+   1041     80.909     P2>P1    db success txn=0x380001c [0x2006, 0x0]
+   1501    119.582     P1>P2    db menu_history txn=0x380001d [0x01020301=D1/M2/S3/T1, 0x0]
+   1503    119.592     P2>P1    db success txn=0x380001d [0x1012, 0x4]
+   1505    119.602     P1>P2    db render_menu txn=0x380001e [0x01020301=D1/M2/S3/T1, 0x0, 0x4, 0x0, 0x4, 0x0]
+   1507    119.607     P2>P1    db menu_header txn=0x380001e [0x1, 0x0]
+   1507    119.607     P2>P1    db menu_item id=4 type=0x0024 (history playlist) label1="HISTORY 004" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1507    119.607     P2>P1    db menu_item id=3 type=0x0024 (history playlist) label1="HISTORY 003" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1507    119.607     P2>P1    db menu_item id=2 type=0x0024 (history playlist) label1="HISTORY 002" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1507    119.607     P2>P1    db menu_item id=1 type=0x0024 (history playlist) label1="HISTORY 001" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1507    119.607     P2>P1    db menu_footer txn=0x380001e []
+   1523    120.712     P1>P2    db menu_track txn=0x380001f [0x01020301=D1/M2/S3/T1, 0x0]
+   1525    120.717     P2>P1    db success txn=0x380001f [0x1004, 0x8d]
+   1527    120.727     P1>P2    db render_menu txn=0x3800020 [0x01020301=D1/M2/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0x0]
+   1529    120.732     P2>P1    db menu_header txn=0x3800020 [0x1, 0x0]
+   1529    120.732     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=0
+   1529    120.732     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=0
+   1529    120.732     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=0
+   1529    120.732     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=0
+   1529    120.732     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=0
+   1529    120.732     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=0
+   1529    120.732     P2>P1    db menu_footer txn=0x3800020 []
+   1543    121.952     P1>P2    db menu_track txn=0x3800021 [0x01010301=D1/M1/S3/T1, 0x0]
+   1545    121.962     P2>P1    db success txn=0x3800021 [0x1004, 0x8d]
+   1547    121.972     P1>P2    db render_menu txn=0x3800022 [0x01010301=D1/M1/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0xc]
+   1549    121.977     P2>P1    db menu_header txn=0x3800022 [0x1, 0x0]
+   1549    121.977     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=17
+   1549    121.977     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=3
+   1549    121.977     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=11
+   1549    121.977     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=1
+   1549    121.977     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=5
+   1549    121.977     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=11
+   1549    121.977     P2>P1    db menu_footer txn=0x3800022 []
+   1556    122.324     P1>P2    db get_artwork txn=0x3800023 [0x01080301=D1/M8/S3/T1, 0x2]
+   1558    122.333     P2>P1    db artwork txn=0x3800023 [0x2003, 0x0, 0xbad, blob[2989] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...a63fb15db50c7556bc2f3122733fffd9 (81 zero bytes)]
+   1562    122.414     P1>P2    db get_artwork txn=0x3800024 [0x01080301=D1/M8/S3/T1, 0x3a]
+   1564    122.423     P2>P1    db artwork txn=0x3800024 [0x2003, 0x0, 0xb2d, blob[2861] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...6e318e08e4dffdc14660639b70bfffd9 (87 zero bytes)]
+   1570    122.504     P1>P2    db get_artwork txn=0x3800025 [0x01080301=D1/M8/S3/T1, 0x1f]
+   1572    122.513     P2>P1    db artwork txn=0x3800025 [0x2003, 0x0, 0x7ca, blob[1994] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...c88ecc01565200390324853db469ffd9 (85 zero bytes)]
+   1575    122.594     P1>P2    db get_artwork txn=0x3800026 [0x01080301=D1/M8/S3/T1, 0x33]
+   1577    122.603     P2>P1    db artwork txn=0x3800026 [0x2003, 0x0, 0x439, blob[1081] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...37f293cf46bb6d3a1d21b1cd415fffd9 (72 zero bytes)]
+   1580    122.669     P1>P2    db get_artwork txn=0x3800027 [0x01080301=D1/M8/S3/T1, 0x39]
+   1582    122.678     P2>P1    db artwork txn=0x3800027 [0x2003, 0x0, 0xbaf, blob[2991] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...d2ee090cc7d4d9fb1fc69b5d275fffd9 (90 zero bytes)]
+   1587    122.754     P1>P2    db get_artwork txn=0x3800028 [0x01080301=D1/M8/S3/T1, 0x4c]
+   1589    122.763     P2>P1    db artwork txn=0x3800028 [0x2003, 0x0, 0x954, blob[2388] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...151d555b28cb086267207e43568fffd9 (90 zero bytes)]
+   1622    125.484     P1>P2    db menu_track txn=0x3800029 [0x01030301=D1/M3/S3/T1, 0x0]
+   1624    125.489     P2>P1    db success txn=0x3800029 [0x1004, 0x8d]
+   1626    125.499     P1>P2    db render_menu txn=0x380002a [0x01030301=D1/M3/S3/T1, 0x1, 0x1, 0x0, 0x8d, 0x0]
+   1628    125.509     P2>P1    db menu_header txn=0x380002a [0x1, 0x1]
+   1628    125.509     P2>P1    db menu_item id=58 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x1000000 artwork=0 pos=0 key=0
+   1628    125.509     P2>P1    db menu_footer txn=0x380002a []
+   1630    125.519     P1>P2    db get_track_info txn=0x380002b [0x01080301=D1/M8/S3/T1, 0x3a]
+   1632    125.529     P2>P1    db success txn=0x380002b [0x2102, 0x6]
+   1634    125.539     P1>P2    db render_menu txn=0x380002c [0x01080301=D1/M8/S3/T1, 0x0, 0x6, 0x0, 0x6, 0x0]
+   1636    125.544     P2>P1    db menu_header txn=0x380002c [0x1, 0x0]
+   1636    125.544     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1636    125.544     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1636    125.544     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1636    125.544     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1636    125.544     P2>P1    db menu_item id=58 type=0x0000 (path) label1="/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" label2="" arg0=0x2c714d flags=0x0 artwork=0 pos=0 key=0
+   1636    125.544     P2>P1    db menu_item id=1 type=0x002f (track info 6) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1636    125.544     P2>P1    db menu_footer txn=0x380002c []
+   1639    125.554     P1>P2    db get_waveform_preview txn=0x380002d [0x01080301=D1/M8/S3/T1, 0x3, 0x3a, 0x0, blob[0]]
+   1641    125.579     P2>P1    db waveform_preview txn=0x380002d [0x2004, 0x0, 0x384, blob[900] 0205020505050305080402040f040504070502050e05020504040d0404040804...0f0f0f0f0f0f0f0f0e0f0f0f0f0f0f0f (235 zero bytes)]
+   1643    125.589     P1>P2    db get_metadata txn=0x380002e [0x01010301=D1/M1/S3/T1, 0x3a]
+   1645    125.599     P2>P1    db success txn=0x380002e [0x2002, 0xd]
+   1647    125.609     P1>P2    db render_menu txn=0x380002f [0x01010301=D1/M1/S3/T1, 0x0, 0xd, 0x0, 0xd, 0x0]
+   1649    125.611     P1>P2    status usb=empty sd=empty link=true track P2 usb type=1 id=58 play=Some(2) flags=0x84 bpm=- browse=Some(141)
+   1650    125.619     P2>P1    db menu_header txn=0x380002f [0x1, 0x0]
+   1650    125.619     P2>P1    db menu_item id=58 type=0x0004 (title) label1="AM FM" label2="" arg0=0x1 flags=0x1000000 artwork=58 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=8 type=0x0007 (artist) label1="Vertigoaway" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=9 type=0x0002 (album) label1="Agaki Home Radio" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=1 type=0x000f (key) label1="2A" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=0 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=0 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=3 type=0x0006 (genre) label1="Breakcore" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=58 type=0x002e (date added) label1="2026-09-29" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=320 type=0x0010 (bitrate) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_item id=0 type=0x000e (label) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1650    125.619     P2>P1    db menu_footer txn=0x380002f []
+   1653    125.630     P1>P2    db get_cue_points txn=0x3800030 [0x01080301=D1/M8/S3/T1, 0x3a]
+   1655    125.644     P2>P1    db cue_points txn=0x3800030 [0x2104, 0x0, 0x0, blob[0], 0x24, 0x0, 0x0, 0x0, blob[0]]
+   1657    125.655     P1>P2    db get_metadata txn=0x3800031 [0x01010301=D1/M1/S3/T1, 0x3a]
+   1659    125.664     P2>P1    db success txn=0x3800031 [0x2002, 0xd]
+   1661    125.670     P1>P2    db render_menu txn=0x3800032 [0x01010301=D1/M1/S3/T1, 0x0, 0xd, 0x0, 0xd, 0x0]
+   1664    125.679     P2>P1    db menu_header txn=0x3800032 [0x1, 0x0]
+   1664    125.679     P2>P1    db menu_item id=58 type=0x0004 (title) label1="AM FM" label2="" arg0=0x1 flags=0x1000000 artwork=58 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=8 type=0x0007 (artist) label1="Vertigoaway" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=9 type=0x0002 (album) label1="Agaki Home Radio" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=1 type=0x000f (key) label1="2A" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=0 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=0 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=3 type=0x0006 (genre) label1="Breakcore" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=58 type=0x002e (date added) label1="2026-09-29" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=320 type=0x0010 (bitrate) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_item id=0 type=0x000e (label) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   1664    125.679     P2>P1    db menu_footer txn=0x3800032 []
+   1666    125.710     P1>P2    db get_track_info txn=0x3800033 [0x01080301=D1/M8/S3/T1, 0x3a]
+   1668    125.719     P2>P1    db success txn=0x3800033 [0x2102, 0x6]
+   1670    125.724     P1>P2    db render_menu txn=0x3800034 [0x01080301=D1/M8/S3/T1, 0x0, 0x6, 0x0, 0x6, 0x0]
+   1672    125.734     P2>P1    db menu_header txn=0x3800034 [0x1, 0x0]
+   1672    125.734     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1672    125.734     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1672    125.734     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1672    125.734     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1672    125.734     P2>P1    db menu_item id=58 type=0x0000 (path) label1="/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" label2="" arg0=0x2c714d flags=0x0 artwork=0 pos=0 key=0
+   1672    125.734     P2>P1    db menu_item id=1 type=0x002f (track info 6) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1672    125.734     P2>P1    db menu_footer txn=0x3800034 []
+   1675    125.738     P1>P2    nfs LOOKUP "/C/Contents" (name bytes 43006f006e00740065006e0074007300; dir fh tail 0301000000001b5800000000020301000000003a) = NFDIR size=0 fileid=19864916 fh:012f1d54012538a8012538a80000000000000000000000000000000000000000   [call 1674]
+   1677    125.738     P1>P2    nfs LOOKUP "/C/Contents/Vertigoaway" (name bytes 5600650072007400690067006f006100770061007900; dir fh tail 0301000000001b5800000000020301000000003a) = NFDIR size=0 fileid=19930004 fh:01301b94012f1d54012538a80000000000000000000000000000000000000000   [call 1676]
+   1679    125.739     P1>P2    nfs LOOKUP "/C/Contents/Vertigoaway/Agaki Home Radio" (name bytes 4100670061006b006900200048006f006d006500200052006100640069006f00; dir fh tail 0301000000001b5800000000020301000000003a) = NFDIR size=0 fileid=19995152 fh:01311a1001301b94012538a80000000000000000000000000000000000000000   [call 1678]
+   1681    125.741     P1>P2    nfs LOOKUP "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" (name bytes 30003100200041004d00200046004d002e006d0070003300; dir fh tail 0301000000001b5800000000020301000000003a) = NFREG size=2912589 fileid=20060028 fh:0132177c01311a10012538a80000000000000000000000000000000000000000   [call 1680]
+   1682    125.745     P1>P2    db unknown_3100 txn=0x3800035 [0x01030301=D1/M3/S3/T1, 0x3a, 0x0, 0x0]
+   1684    125.754     P2>P1    db success txn=0x3800035 [0x3100, 0x1]
+   1686    125.760     P1>P2    db get_track_info txn=0x3800036 [0x01080301=D1/M8/S3/T1, 0x3a]
+   1688    125.769     P2>P1    db success txn=0x3800036 [0x2102, 0x6]
+   1690    125.775     P1>P2    db render_menu txn=0x3800037 [0x01080301=D1/M8/S3/T1, 0x0, 0x6, 0x0, 0x6, 0x0]
+   1692    125.784     P2>P1    db menu_header txn=0x3800037 [0x1, 0x0]
+   1692    125.784     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1692    125.784     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1692    125.784     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1692    125.784     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1692    125.784     P2>P1    db menu_item id=58 type=0x0000 (path) label1="/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" label2="" arg0=0x2c714d flags=0x0 artwork=0 pos=0 key=0
+   1692    125.784     P2>P1    db menu_item id=1 type=0x002f (track info 6) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1692    125.784     P2>P1    db menu_footer txn=0x3800037 []
+   1694    125.789     P1>P2    db get_vbr_index txn=0x3800038 [0x01080301=D1/M8/S3/T1, 0x3a]
+   1696    125.799     P2>P1    db vbr_index txn=0x3800038 [0x2504, 0x0, 0x644, blob[1604] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000942c00 (1602 zero bytes)]
+   1699    125.804     P1>P2    db get_beat_grid txn=0x3800039 [0x01080301=D1/M8/S3/T1, 0x3a]
+   1701    125.814     P2>P1    db beat_grid txn=0x3800039 [0x2204, 0x0, 0xc34, blob[3124] 00000800c2000000200c000001000000dc8e070601005d4434000000ffffffff...02005d44ab020100ffffffffffffffff (593 zero bytes), 0x0]
+   1705    125.820     P1>P2    db get_waveform_preview txn=0x380003a [0x01080301=D1/M8/S3/T1, 0x3, 0x3a, 0x0, blob[0]]
+   1708    125.829     P2>P1    db waveform_preview txn=0x380003a [0x2004, 0x0, 0x384, blob[900] 0205020505050305080402040f040504070502050e05020504040d0404040804...0f0f0f0f0f0f0f0f0e0f0f0f0f0f0f0f (235 zero bytes)]
+   1711    125.833     P1>P2    nfs GETATTR "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" = NFREG size=2912589 fileid=20060028   [call 1710]
+   1713    125.841     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2912429 +160 = 160 bytes   [call 1712]
+   1716    125.842     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @0 +2048 = 2048 bytes   [call 1714]
+   1723    125.846     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @213 +8192 = 8192 bytes   [call 1717]
+   1726    125.847     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @259036 +2048 = 2048 bytes   [call 1724]
+   1729    125.849     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @261074 +2048 = 2048 bytes   [call 1727]
+   1732    125.850     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @262729 +2048 = 2048 bytes   [call 1730]
+   1735    125.851     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @264816 +2048 = 2048 bytes   [call 1733]
+   1738    125.853     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @262729 +2048 = 2048 bytes   [call 1736]
+   1741    125.854     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @262729 +1463 = 1463 bytes   [call 1739]
+   1744    125.855     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @264192 +2048 = 2048 bytes   [call 1742]
+   1747    125.856     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @266240 +2048 = 2048 bytes   [call 1745]
+   1750    125.856     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @268288 +2048 = 2048 bytes   [call 1748]
+   1753    125.857     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @270336 +2048 = 2048 bytes   [call 1751]
+   1756    125.858     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @272384 +2048 = 2048 bytes   [call 1754]
+   1759    125.859     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @274432 +2048 = 2048 bytes   [call 1757]
+   1762    125.859     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @276480 +2048 = 2048 bytes   [call 1760]
+   1765    125.861     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @278528 +2048 = 2048 bytes   [call 1763]
+   1768    125.861     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @280576 +2048 = 2048 bytes   [call 1766]
+   1771    125.863     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @282624 +2048 = 2048 bytes   [call 1769]
+   1774    125.863     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @284672 +2048 = 2048 bytes   [call 1772]
+   1777    125.864     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @286720 +2048 = 2048 bytes   [call 1775]
+   1780    125.865     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @288768 +2048 = 2048 bytes   [call 1778]
+   1783    125.866     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @290816 +2048 = 2048 bytes   [call 1781]
+   1786    125.866     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @292864 +2048 = 2048 bytes   [call 1784]
+   1789    125.868     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @294912 +2048 = 2048 bytes   [call 1787]
+   1792    125.868     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @296960 +2048 = 2048 bytes   [call 1790]
+   1795    125.869     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @299008 +2048 = 2048 bytes   [call 1793]
+   1798    125.870     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @301056 +2048 = 2048 bytes   [call 1796]
+   1801    125.871     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @303104 +2048 = 2048 bytes   [call 1799]
+   1804    125.872     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @305152 +2048 = 2048 bytes   [call 1802]
+   1807    125.873     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @307200 +2048 = 2048 bytes   [call 1805]
+   1810    125.873     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @309248 +2048 = 2048 bytes   [call 1808]
+   1813    125.874     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @311296 +2048 = 2048 bytes   [call 1811]
+   1817    125.875     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @313344 +2048 = 2048 bytes   [call 1814]
+   1820    125.878     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1587659 +2048 = 2048 bytes   [call 1818]
+   1823    125.879     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1589747 +2048 = 2048 bytes   [call 1821]
+   1825    125.882     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1588703 +545 = 545 bytes   [call 1824]
+   1828    125.883     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1589248 +2048 = 2048 bytes   [call 1826]
+   1831    125.883     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1591296 +2048 = 2048 bytes   [call 1829]
+   1834    125.884     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1593344 +2048 = 2048 bytes   [call 1832]
+   1837    125.885     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1595392 +2048 = 2048 bytes   [call 1835]
+   1840    125.886     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1597440 +2048 = 2048 bytes   [call 1838]
+   1843    125.886     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1599488 +2048 = 2048 bytes   [call 1841]
+   1846    125.887     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1601536 +2048 = 2048 bytes   [call 1844]
+   1849    125.888     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1603584 +2048 = 2048 bytes   [call 1847]
+   1852    125.889     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1605632 +2048 = 2048 bytes   [call 1850]
+   1855    125.889     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1607680 +2048 = 2048 bytes   [call 1853]
+   1858    125.891     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1609728 +2048 = 2048 bytes   [call 1856]
+   1861    125.891     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1611776 +2048 = 2048 bytes   [call 1859]
+   1864    125.892     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1613824 +2048 = 2048 bytes   [call 1862]
+   1867    125.893     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1615872 +2048 = 2048 bytes   [call 1865]
+   1870    125.894     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1617920 +2048 = 2048 bytes   [call 1868]
+   1873    125.894     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1619968 +2048 = 2048 bytes   [call 1871]
+   1876    125.895     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1622016 +2048 = 2048 bytes   [call 1874]
+   1879    125.896     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1624064 +2048 = 2048 bytes   [call 1877]
+   1882    125.897     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1626112 +2048 = 2048 bytes   [call 1880]
+   1885    125.897     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1628160 +2048 = 2048 bytes   [call 1883]
+   1888    125.898     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1630208 +2048 = 2048 bytes   [call 1886]
+   1891    125.899     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1632256 +2048 = 2048 bytes   [call 1889]
+   1894    125.900     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1634304 +2048 = 2048 bytes   [call 1892]
+   1897    125.900     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1636352 +2048 = 2048 bytes   [call 1895]
+   1900    125.901     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1638400 +2048 = 2048 bytes   [call 1898]
+   1903    125.902     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1640448 +2048 = 2048 bytes   [call 1901]
+   1910    125.907     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @262729 +7607 = 7607 bytes   [call 1904]
+   1917    125.913     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @270336 +8192 = 8192 bytes   [call 1911]
+   1924    125.917     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @278528 +8192 = 8192 bytes   [call 1918]
+   1931    125.921     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @286720 +8192 = 8192 bytes   [call 1925]
+   1938    125.927     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @294912 +8192 = 8192 bytes   [call 1932]
+   1945    125.933     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @303104 +8192 = 8192 bytes   [call 1939]
+   1952    125.940     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @311296 +8192 = 8192 bytes   [call 1946]
+   1959    125.945     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @319488 +8192 = 8192 bytes   [call 1953]
+   1961    125.950     P1>P2    nfs LOOKUP "/C/Contents" (name bytes 43006f006e00740065006e0074007300; dir fh tail 0301000000001b5800000000020301000000003a) = NFDIR size=0 fileid=19864916 fh:012f1d54012538a8012538a80000000000000000000000000000000000000000   [call 1960]
+   1963    125.951     P1>P2    nfs LOOKUP "/C/Contents/Vertigoaway" (name bytes 5600650072007400690067006f006100770061007900; dir fh tail 0301000000001b5800000000020301000000003a) = NFDIR size=0 fileid=19930004 fh:01301b94012f1d54012538a80000000000000000000000000000000000000000   [call 1962]
+   1965    125.951     P1>P2    nfs LOOKUP "/C/Contents/Vertigoaway/Agaki Home Radio" (name bytes 4100670061006b006900200048006f006d006500200052006100640069006f00; dir fh tail 0301000000001b5800000000020301000000003a) = NFDIR size=0 fileid=19995152 fh:01311a1001301b94012538a80000000000000000000000000000000000000000   [call 1964]
+   1967    125.953     P1>P2    nfs LOOKUP "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" (name bytes 30003100200041004d00200046004d002e006d0070003300; dir fh tail 0301000000001b5800000000020301000000003a) = NFREG size=2912589 fileid=20060028 fh:0132177c01311a10012538a80000000000000000000000000000000000000000   [call 1966]
+   1968    125.960     P1>P2    db render_menu txn=0x380003b [0x01030301=D1/M3/S3/T1, 0x0, 0x1, 0x0, 0x8d, 0x0]
+   1970    125.969     P2>P1    db menu_header txn=0x380003b [0x1, 0x0]
+   1970    125.969     P2>P1    db menu_item id=2 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x1000000 artwork=0 pos=0 key=0
+   1970    125.969     P2>P1    db menu_footer txn=0x380003b []
+   1972    125.975     P1>P2    db get_track_info txn=0x380003c [0x01080301=D1/M8/S3/T1, 0x2]
+   1974    125.984     P2>P1    db success txn=0x380003c [0x2102, 0x6]
+   1976    125.990     P1>P2    db render_menu txn=0x380003d [0x01080301=D1/M8/S3/T1, 0x0, 0x6, 0x0, 0x6, 0x0]
+   1979    125.999     P2>P1    db menu_header txn=0x380003d [0x1, 0x0]
+   1979    125.999     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1979    125.999     P2>P1    db menu_item id=300 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1979    125.999     P2>P1    db menu_item id=18000 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1979    125.999     P2>P1    db menu_item id=2 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1979    125.999     P2>P1    db menu_item id=2 type=0x0000 (path) label1="/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" label2="" arg0=0xc160d9 flags=0x0 artwork=0 pos=0 key=0
+   1979    125.999     P2>P1    db menu_item id=1 type=0x002f (track info 6) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1979    125.999     P2>P1    db menu_footer txn=0x380003d []
+   1981    126.005     P1>P2    db get_track_info txn=0x380003e [0x01080301=D1/M8/S3/T1, 0x2]
+   1983    126.014     P2>P1    db success txn=0x380003e [0x2102, 0x6]
+   1985    126.020     P1>P2    db render_menu txn=0x380003f [0x01080301=D1/M8/S3/T1, 0x0, 0x6, 0x0, 0x6, 0x0]
+   1988    126.029     P2>P1    db menu_header txn=0x380003f [0x1, 0x0]
+   1988    126.029     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1988    126.029     P2>P1    db menu_item id=300 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1988    126.029     P2>P1    db menu_item id=18000 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1988    126.029     P2>P1    db menu_item id=2 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1988    126.029     P2>P1    db menu_item id=2 type=0x0000 (path) label1="/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" label2="" arg0=0xc160d9 flags=0x0 artwork=0 pos=0 key=0
+   1988    126.029     P2>P1    db menu_item id=1 type=0x002f (track info 6) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   1988    126.029     P2>P1    db menu_footer txn=0x380003f []
+   1991    126.030     P1>P2    nfs LOOKUP "/C/Contents" (name bytes 43006f006e00740065006e0074007300; dir fh tail 0301000000001b58000000000203010000000002) = NFDIR size=0 fileid=19864916 fh:012f1d54012538a8012538a80000000000000000000000000000000000000000   [call 1990]
+   1993    126.031     P1>P2    nfs LOOKUP "/C/Contents/Venetian Snares" (name bytes 560065006e0065007400690061006e00200053006e006100720065007300; dir fh tail 0301000000001b58000000000203010000000002) = NFDIR size=0 fileid=19226680 fh:01256038012f1d54012538a80000000000000000000000000000000000000000   [call 1992]
+   1995    126.032     P1>P2    nfs LOOKUP "/C/Contents/Venetian Snares/My So-Called Life" (name bytes 4d007900200053006f002d00430061006c006c006500640020004c00690066006500; dir fh tail 0301000000001b58000000000203010000000002) = NFDIR size=0 fileid=19226936 fh:0125613801256038012538a80000000000000000000000000000000000000000   [call 1994]
+   1997    126.034     P1>P2    nfs LOOKUP "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" (name bytes 3000330020004100610072006f006e0032002e006d0070003300; dir fh tail 0301000000001b58000000000203010000000002) = NFREG size=12673241 fileid=19227240 fh:0125626801256138012538a80000000000000000000000000000000000000000   [call 1996]
+   1998    126.035     P1>P2    db unknown_3100 txn=0x3800040 [0x01030301=D1/M3/S3/T1, 0x2, 0x0, 0x0]
+   2000    126.044     P2>P1    db success txn=0x3800040 [0x3100, 0x0]
+   2002    126.050     P1>P2    db get_track_info txn=0x3800041 [0x01080301=D1/M8/S3/T1, 0x2]
+   2004    126.059     P2>P1    db success txn=0x3800041 [0x2102, 0x6]
+   2006    126.065     P1>P2    db render_menu txn=0x3800042 [0x01080301=D1/M8/S3/T1, 0x0, 0x6, 0x0, 0x6, 0x0]
+   2008    126.074     P2>P1    db menu_header txn=0x3800042 [0x1, 0x0]
+   2008    126.074     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2008    126.074     P2>P1    db menu_item id=300 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2008    126.074     P2>P1    db menu_item id=18000 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2008    126.074     P2>P1    db menu_item id=2 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2008    126.074     P2>P1    db menu_item id=2 type=0x0000 (path) label1="/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" label2="" arg0=0xc160d9 flags=0x0 artwork=0 pos=0 key=0
+   2008    126.074     P2>P1    db menu_item id=1 type=0x002f (track info 6) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2008    126.074     P2>P1    db menu_footer txn=0x3800042 []
+   2011    126.080     P1>P2    db get_vbr_index txn=0x3800043 [0x01080301=D1/M8/S3/T1, 0x2]
+   2013    126.109     P2>P1    db vbr_index txn=0x3800043 [0x2504, 0x0, 0x644, blob[1604] 0000000000000000000000000000000000000000000000000000000000000000...000000000000000000000000000bca00 (1602 zero bytes)]
+   2016    126.115     P1>P2    db get_beat_grid txn=0x3800044 [0x01080301=D1/M8/S3/T1, 0x2]
+   2019    126.124     P2>P1    db beat_grid txn=0x3800044 [0x2204, 0x0, 0x3864, blob[14436] 0000080085030000503800000100000030aa08060300504641000000ffffffff...0300504621940400ffffffffffffffff (2013 zero bytes), 0x0]
+   2035    126.131     P1>P2    db get_waveform_preview txn=0x3800045 [0x01080301=D1/M8/S3/T1, 0x3, 0x2, 0x0, blob[0]]
+   2037    126.140     P2>P1    db waveform_preview txn=0x3800045 [0x2004, 0x0, 0x384, blob[900] 0204020402050205020502050205020502040204020502050304070407040504...0e0c0f0f0e0b0e0e0d01020202010201 (60 zero bytes)]
+   2040    126.142     P1>P2    nfs GETATTR "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" = NFREG size=12673241 fileid=19227240   [call 2039]
+   2042    126.163     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12673081 +160 = 160 bytes   [call 2041]
+   2045    126.164     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @0 +2048 = 2048 bytes   [call 2043]
+   2052    126.166     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @233 +8192 = 8192 bytes   [call 2046]
+   2055    126.168     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @649085 +2048 = 2048 bytes   [call 2053]
+   2058    126.169     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @651123 +2048 = 2048 bytes   [call 2056]
+   2061    126.169     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @653161 +2048 = 2048 bytes   [call 2059]
+   2064    126.170     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @655199 +2048 = 2048 bytes   [call 2062]
+   2067    126.171     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @657237 +2048 = 2048 bytes   [call 2065]
+   2070    126.172     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @659275 +2048 = 2048 bytes   [call 2068]
+   2073    126.173     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @661313 +2048 = 2048 bytes   [call 2071]
+   2076    126.174     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @662140 +2048 = 2048 bytes   [call 2074]
+   2079    126.177     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @662141 +2048 = 2048 bytes   [call 2077]
+   2082    126.177     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @664227 +2048 = 2048 bytes   [call 2080]
+   2085    126.180     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @663184 +2048 = 2048 bytes   [call 2083]
+   2087    126.182     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @663184 +368 = 368 bytes   [call 2086]
+   2090    126.183     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @663552 +2048 = 2048 bytes   [call 2088]
+   2093    126.183     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @665600 +2048 = 2048 bytes   [call 2091]
+   2096    126.185     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @667648 +2048 = 2048 bytes   [call 2094]
+   2099    126.185     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @669696 +2048 = 2048 bytes   [call 2097]
+   2102    126.186     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @671744 +2048 = 2048 bytes   [call 2100]
+   2105    126.187     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @673792 +2048 = 2048 bytes   [call 2103]
+   2108    126.188     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @675840 +2048 = 2048 bytes   [call 2106]
+   2111    126.188     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @677888 +2048 = 2048 bytes   [call 2109]
+   2114    126.189     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @679936 +2048 = 2048 bytes   [call 2112]
+   2117    126.190     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @681984 +2048 = 2048 bytes   [call 2115]
+   2120    126.191     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @684032 +2048 = 2048 bytes   [call 2118]
+   2123    126.191     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @686080 +2048 = 2048 bytes   [call 2121]
+   2126    126.192     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @688128 +2048 = 2048 bytes   [call 2124]
+   2129    126.193     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @690176 +2048 = 2048 bytes   [call 2127]
+   2132    126.194     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @692224 +2048 = 2048 bytes   [call 2130]
+   2135    126.194     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @694272 +2048 = 2048 bytes   [call 2133]
+   2138    126.195     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @696320 +2048 = 2048 bytes   [call 2136]
+   2141    126.196     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @698368 +2048 = 2048 bytes   [call 2139]
+   2144    126.197     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @700416 +2048 = 2048 bytes   [call 2142]
+   2147    126.197     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @702464 +2048 = 2048 bytes   [call 2145]
+   2150    126.198     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @704512 +2048 = 2048 bytes   [call 2148]
+   2153    126.199     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @706560 +2048 = 2048 bytes   [call 2151]
+   2156    126.200     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @708608 +2048 = 2048 bytes   [call 2154]
+   2159    126.201     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @710656 +2048 = 2048 bytes   [call 2157]
+   2162    126.202     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @712704 +2048 = 2048 bytes   [call 2160]
+   2165    126.202     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @714752 +2048 = 2048 bytes   [call 2163]
+   2168    126.213     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6668212 +2048 = 2048 bytes   [call 2166]
+   2171    126.213     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6670301 +2048 = 2048 bytes   [call 2169]
+   2173    126.221     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6668212 +76 = 76 bytes   [call 2172]
+   2176    126.222     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6668288 +2048 = 2048 bytes   [call 2174]
+   2179    126.222     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6670336 +2048 = 2048 bytes   [call 2177]
+   2182    126.223     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6672384 +2048 = 2048 bytes   [call 2180]
+   2185    126.224     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6674432 +2048 = 2048 bytes   [call 2183]
+   2188    126.225     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6676480 +2048 = 2048 bytes   [call 2186]
+   2191    126.225     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6678528 +2048 = 2048 bytes   [call 2189]
+   2194    126.227     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6680576 +2048 = 2048 bytes   [call 2192]
+   2197    126.227     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6682624 +2048 = 2048 bytes   [call 2195]
+   2200    126.228     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6684672 +2048 = 2048 bytes   [call 2198]
+   2203    126.229     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6686720 +2048 = 2048 bytes   [call 2201]
+   2206    126.230     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6688768 +2048 = 2048 bytes   [call 2204]
+   2209    126.231     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6690816 +2048 = 2048 bytes   [call 2207]
+   2212    126.232     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6692864 +2048 = 2048 bytes   [call 2210]
+   2215    126.232     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6694912 +2048 = 2048 bytes   [call 2213]
+   2218    126.233     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6696960 +2048 = 2048 bytes   [call 2216]
+   2221    126.234     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6699008 +2048 = 2048 bytes   [call 2219]
+   2224    126.235     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6701056 +2048 = 2048 bytes   [call 2222]
+   2227    126.235     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6703104 +2048 = 2048 bytes   [call 2225]
+   2230    126.237     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6705152 +2048 = 2048 bytes   [call 2228]
+   2233    126.237     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6707200 +2048 = 2048 bytes   [call 2231]
+   2236    126.239     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6709248 +2048 = 2048 bytes   [call 2234]
+   2239    126.239     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6711296 +2048 = 2048 bytes   [call 2237]
+   2242    126.240     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6713344 +2048 = 2048 bytes   [call 2240]
+   2245    126.240     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6715392 +2048 = 2048 bytes   [call 2243]
+   2248    126.242     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6717440 +2048 = 2048 bytes   [call 2246]
+   2251    126.242     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @6719488 +2048 = 2048 bytes   [call 2249]
+   2257    126.264     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12582325 +6731 = 6731 bytes   [call 2252]
+   2258    126.270     P1>P2    status usb=empty sd=empty link=true track P2 usb type=1 id=58 play=Some(2) flags=0x84 bpm=175.01 browse=Some(141)
+   2260    126.273     P1>P2    db get_metadata txn=0x3800046 [0x01050301=D1/M5/S3/T1, 0x3a]
+   2267    126.276     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @316008 +7576 = 7576 bytes   [call 2259]
+   2268    126.279     P2>P1    db success txn=0x3800046 [0x2002, 0xd]
+   2276    126.283     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @323584 +8192 = 8192 bytes   [call 2270]
+   2277    126.284     P1>P2    db render_menu txn=0x3800047 [0x01050301=D1/M5/S3/T1, 0x0, 0x1, 0x0, 0xd, 0x0]
+   2285    126.287     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @331776 +8192 = 8192 bytes   [call 2279]
+   2292    126.293     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @339968 +8192 = 8192 bytes   [call 2286]
+   2293    126.294     P2>P1    db menu_header txn=0x3800047 [0x1, 0x0]
+   2293    126.294     P2>P1    db menu_item id=58 type=0x0004 (title) label1="AM FM" label2="" arg0=0x1 flags=0x1000000 artwork=58 pos=0 key=0
+   2293    126.294     P2>P1    db menu_footer txn=0x3800047 []
+   2301    126.299     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @348160 +8192 = 8192 bytes   [call 2295]
+   2303    126.304     P1>P2    db get_waveform_detail txn=0x3800048 [0x01010301=D1/M1/S3/T1, 0x3a, 0x0]
+   2310    126.306     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @356352 +8192 = 8192 bytes   [call 2302]
+   2317    126.312     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @364544 +8192 = 8192 bytes   [call 2311]
+   2334    126.317     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @372736 +8192 = 8192 bytes   [call 2328]
+   2318    126.314     P2>P1    db waveform_detail txn=0x3800048 [0x2904, 0x0, 0x26e5, blob[9957] d126000001000000d12600009600000030aa0806e0e0e0e0e0e0e0e1c1e2c1e2...e1e1c3c2c2c2a2a2c5c2c3c180e0e0e0 (20 zero bytes)]
+   2347    126.323     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @380928 +8192 = 8192 bytes   [call 2341]
+   2354    126.329     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @389120 +8192 = 8192 bytes   [call 2348]
+   2361    126.335     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @397312 +8192 = 8192 bytes   [call 2355]
+   2362    126.339     P1>P2    status usb=empty sd=empty link=true track P2 usb type=1 id=58 play=Some(3) flags=0xe4 bpm=175.01 browse=Some(141)
+   2369    126.341     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @405504 +8192 = 8192 bytes   [call 2363]
+   2376    126.347     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @413696 +8192 = 8192 bytes   [call 2370]
+   2383    126.353     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @421888 +8192 = 8192 bytes   [call 2377]
+   2390    126.359     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @430080 +8192 = 8192 bytes   [call 2384]
+   2397    126.365     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @438272 +8192 = 8192 bytes   [call 2391]
+   2404    126.371     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @446464 +8192 = 8192 bytes   [call 2398]
+   2411    126.378     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @454656 +8192 = 8192 bytes   [call 2405]
+   2418    126.383     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @462848 +8192 = 8192 bytes   [call 2412]
+   2425    126.390     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @471040 +8192 = 8192 bytes   [call 2419]
+   2432    126.395     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @479232 +8192 = 8192 bytes   [call 2426]
+   2439    126.401     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @487424 +8192 = 8192 bytes   [call 2433]
+   2446    126.407     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @495616 +8192 = 8192 bytes   [call 2440]
+   2453    126.413     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @503808 +8192 = 8192 bytes   [call 2447]
+   2460    126.419     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @512000 +8192 = 8192 bytes   [call 2454]
+   2467    126.425     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @520192 +8192 = 8192 bytes   [call 2461]
+   2474    126.431     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @528384 +8192 = 8192 bytes   [call 2468]
+   2481    126.437     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @536576 +8192 = 8192 bytes   [call 2475]
+   2489    126.443     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @544768 +8192 = 8192 bytes   [call 2482]
+   2496    126.449     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @552960 +8192 = 8192 bytes   [call 2490]
+   2503    126.455     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @561152 +8192 = 8192 bytes   [call 2497]
+   2510    126.461     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @569344 +8192 = 8192 bytes   [call 2504]
+   2517    126.467     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @577536 +8192 = 8192 bytes   [call 2511]
+   2524    126.473     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @585728 +8192 = 8192 bytes   [call 2518]
+   2531    126.480     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @593920 +8192 = 8192 bytes   [call 2525]
+   2538    126.485     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @602112 +8192 = 8192 bytes   [call 2532]
+   2545    126.491     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @610304 +8192 = 8192 bytes   [call 2539]
+   2552    126.497     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @618496 +8192 = 8192 bytes   [call 2546]
+   2559    126.503     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @626688 +8192 = 8192 bytes   [call 2553]
+   2566    126.509     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @634880 +8192 = 8192 bytes   [call 2560]
+   2573    126.515     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @643072 +8192 = 8192 bytes   [call 2567]
+   2581    126.521     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @651264 +8192 = 8192 bytes   [call 2575]
+   2588    126.527     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @659456 +8192 = 8192 bytes   [call 2582]
+   2595    126.533     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @667648 +8192 = 8192 bytes   [call 2589]
+   2603    126.539     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @675840 +8192 = 8192 bytes   [call 2596]
+   2610    126.545     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @684032 +8192 = 8192 bytes   [call 2604]
+   2617    126.551     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @692224 +8192 = 8192 bytes   [call 2611]
+   2624    126.557     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @700416 +8192 = 8192 bytes   [call 2618]
+   2631    126.563     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @708608 +8192 = 8192 bytes   [call 2625]
+   2638    126.569     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @716800 +8192 = 8192 bytes   [call 2632]
+   2645    126.575     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @724992 +8192 = 8192 bytes   [call 2639]
+   2652    126.581     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @733184 +8192 = 8192 bytes   [call 2646]
+   2659    126.587     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @741376 +8192 = 8192 bytes   [call 2653]
+   2666    126.593     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @749568 +8192 = 8192 bytes   [call 2660]
+   2673    126.599     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @757760 +8192 = 8192 bytes   [call 2667]
+   2680    126.605     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @765952 +8192 = 8192 bytes   [call 2674]
+   2687    126.611     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @774144 +8192 = 8192 bytes   [call 2681]
+   2694    126.617     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @782336 +8192 = 8192 bytes   [call 2688]
+   2702    126.623     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @790528 +8192 = 8192 bytes   [call 2695]
+   2709    126.629     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @798720 +8192 = 8192 bytes   [call 2703]
+   2716    126.635     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @806912 +8192 = 8192 bytes   [call 2710]
+   2723    126.642     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @815104 +8192 = 8192 bytes   [call 2717]
+   2730    126.647     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @823296 +8192 = 8192 bytes   [call 2724]
+   2737    126.653     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @831488 +8192 = 8192 bytes   [call 2731]
+   2744    126.659     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @839680 +8192 = 8192 bytes   [call 2738]
+   2752    126.665     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @847872 +8192 = 8192 bytes   [call 2746]
+   2760    126.671     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @856064 +8192 = 8192 bytes   [call 2754]
+   2767    126.677     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @864256 +8192 = 8192 bytes   [call 2761]
+   2774    126.683     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @872448 +8192 = 8192 bytes   [call 2768]
+   2781    126.689     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @880640 +8192 = 8192 bytes   [call 2775]
+   2788    126.695     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @888832 +8192 = 8192 bytes   [call 2782]
+   2795    126.701     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @897024 +8192 = 8192 bytes   [call 2789]
+   2802    126.707     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @905216 +8192 = 8192 bytes   [call 2796]
+   2809    126.713     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @913408 +8192 = 8192 bytes   [call 2803]
+   2816    126.719     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @921600 +8192 = 8192 bytes   [call 2810]
+   2823    126.725     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @929792 +8192 = 8192 bytes   [call 2817]
+   2831    126.731     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @937984 +8192 = 8192 bytes   [call 2824]
+   2838    126.737     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @946176 +8192 = 8192 bytes   [call 2832]
+   2839    126.739     P1>P2    db get_metadata txn=0x3800049 [0x01010301=D1/M1/S3/T1, 0x3a]
+   2847    126.743     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @954368 +8192 = 8192 bytes   [call 2841]
+   2848    126.744     P2>P1    db success txn=0x3800049 [0x2002, 0xd]
+   2856    126.749     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @962560 +8192 = 8192 bytes   [call 2850]
+   2858    126.754     P1>P2    db render_menu txn=0x380004a [0x01010301=D1/M1/S3/T1, 0x0, 0xd, 0x0, 0xd, 0x0]
+   2865    126.756     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @970752 +8192 = 8192 bytes   [call 2857]
+   2866    126.759     P2>P1    db menu_header txn=0x380004a [0x1, 0x0]
+   2866    126.759     P2>P1    db menu_item id=58 type=0x0004 (title) label1="AM FM" label2="" arg0=0x1 flags=0x1000000 artwork=58 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=8 type=0x0007 (artist) label1="Vertigoaway" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=9 type=0x0002 (album) label1="Agaki Home Radio" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=1 type=0x000f (key) label1="2A" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=0 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=0 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=3 type=0x0006 (genre) label1="Breakcore" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=58 type=0x002e (date added) label1="2026-09-29" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=320 type=0x0010 (bitrate) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_item id=0 type=0x000e (label) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   2866    126.759     P2>P1    db menu_footer txn=0x380004a []
+   2874    126.761     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @978944 +8192 = 8192 bytes   [call 2868]
+   2881    126.767     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @987136 +8192 = 8192 bytes   [call 2875]
+   2888    126.772     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @995328 +8192 = 8192 bytes   [call 2882]
+   2895    126.776     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1003520 +8192 = 8192 bytes   [call 2889]
+   2902    126.782     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1011712 +8192 = 8192 bytes   [call 2896]
+   2909    126.788     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1019904 +8192 = 8192 bytes   [call 2903]
+   2916    126.794     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1028096 +8192 = 8192 bytes   [call 2910]
+   2923    126.800     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1036288 +8192 = 8192 bytes   [call 2917]
+   2930    126.806     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1044480 +8192 = 8192 bytes   [call 2924]
+   2937    126.812     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1052672 +8192 = 8192 bytes   [call 2931]
+   2944    126.818     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1060864 +8192 = 8192 bytes   [call 2938]
+   2952    126.824     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1069056 +8192 = 8192 bytes   [call 2946]
+   2959    126.830     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1077248 +8192 = 8192 bytes   [call 2953]
+   2966    126.836     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1085440 +8192 = 8192 bytes   [call 2960]
+   2973    126.842     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1093632 +8192 = 8192 bytes   [call 2967]
+   2980    126.848     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1101824 +8192 = 8192 bytes   [call 2974]
+   2987    126.854     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1110016 +8192 = 8192 bytes   [call 2981]
+   2994    126.860     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1118208 +8192 = 8192 bytes   [call 2988]
+   3001    126.867     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1126400 +8192 = 8192 bytes   [call 2995]
+   3008    126.872     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1134592 +8192 = 8192 bytes   [call 3002]
+   3015    126.878     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1142784 +8192 = 8192 bytes   [call 3009]
+   3022    126.884     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1150976 +8192 = 8192 bytes   [call 3016]
+   3029    126.890     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1159168 +8192 = 8192 bytes   [call 3023]
+   3036    126.896     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1167360 +8192 = 8192 bytes   [call 3030]
+   3043    126.902     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1175552 +8192 = 8192 bytes   [call 3037]
+   3050    126.908     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1183744 +8192 = 8192 bytes   [call 3044]
+   3057    126.914     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1191936 +8192 = 8192 bytes   [call 3051]
+   3064    126.920     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1200128 +8192 = 8192 bytes   [call 3058]
+   3071    126.926     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1208320 +8192 = 8192 bytes   [call 3065]
+   3079    126.932     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1216512 +8192 = 8192 bytes   [call 3073]
+   3086    126.938     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1224704 +8192 = 8192 bytes   [call 3080]
+   3093    126.944     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1232896 +8192 = 8192 bytes   [call 3087]
+   3100    126.950     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1241088 +8192 = 8192 bytes   [call 3094]
+   3107    126.956     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1249280 +8192 = 8192 bytes   [call 3101]
+   3114    126.962     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1257472 +8192 = 8192 bytes   [call 3108]
+   3121    126.968     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1265664 +8192 = 8192 bytes   [call 3115]
+   3128    126.974     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1273856 +8192 = 8192 bytes   [call 3122]
+   3135    126.980     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1282048 +8192 = 8192 bytes   [call 3129]
+   3142    126.986     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1290240 +8192 = 8192 bytes   [call 3136]
+   3149    126.992     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1298432 +8192 = 8192 bytes   [call 3143]
+   3156    126.999     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1306624 +8192 = 8192 bytes   [call 3150]
+   3163    127.004     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1314816 +8192 = 8192 bytes   [call 3157]
+   3171    127.010     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1323008 +8192 = 8192 bytes   [call 3165]
+   3179    127.016     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1331200 +8192 = 8192 bytes   [call 3173]
+   3187    127.022     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1339392 +8192 = 8192 bytes   [call 3180]
+   3194    127.028     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1347584 +8192 = 8192 bytes   [call 3188]
+   3201    127.034     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1355776 +8192 = 8192 bytes   [call 3195]
+   3208    127.040     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1363968 +8192 = 8192 bytes   [call 3202]
+   3215    127.046     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1372160 +8192 = 8192 bytes   [call 3209]
+   3222    127.052     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1380352 +8192 = 8192 bytes   [call 3216]
+   3229    127.058     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1388544 +8192 = 8192 bytes   [call 3223]
+   3236    127.064     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1396736 +8192 = 8192 bytes   [call 3230]
+   3243    127.070     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1404928 +8192 = 8192 bytes   [call 3237]
+   3250    127.076     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1413120 +8192 = 8192 bytes   [call 3244]
+   3257    127.082     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1421312 +8192 = 8192 bytes   [call 3251]
+   3264    127.088     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1429504 +8192 = 8192 bytes   [call 3258]
+   3271    127.094     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1437696 +8192 = 8192 bytes   [call 3265]
+   3278    127.100     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1445888 +8192 = 8192 bytes   [call 3272]
+   3285    127.106     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1454080 +8192 = 8192 bytes   [call 3279]
+   3292    127.112     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1462272 +8192 = 8192 bytes   [call 3286]
+   3299    127.118     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1470464 +8192 = 8192 bytes   [call 3293]
+   3306    127.124     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1478656 +8192 = 8192 bytes   [call 3300]
+   3314    127.130     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1486848 +8192 = 8192 bytes   [call 3308]
+   3321    127.156     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12501867 +7317 = 7317 bytes   [call 3315]
+   3327    127.177     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12422455 +6857 = 6857 bytes   [call 3322]
+   3334    127.180     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12429312 +8192 = 8192 bytes   [call 3328]
+   3341    127.184     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12437504 +8192 = 8192 bytes   [call 3335]
+   3348    127.190     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12445696 +8192 = 8192 bytes   [call 3342]
+   3355    127.196     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12453888 +8192 = 8192 bytes   [call 3349]
+   3362    127.202     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12462080 +8192 = 8192 bytes   [call 3356]
+   3369    127.208     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12470272 +8192 = 8192 bytes   [call 3363]
+   3377    127.214     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12478464 +8192 = 8192 bytes   [call 3371]
+   3384    127.220     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12486656 +8192 = 8192 bytes   [call 3378]
+   3391    127.226     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12494848 +8192 = 8192 bytes   [call 3385]
+   3398    127.232     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12503040 +8192 = 8192 bytes   [call 3392]
+   3405    127.238     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12511232 +8192 = 8192 bytes   [call 3399]
+   3412    127.244     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12519424 +8192 = 8192 bytes   [call 3406]
+   3419    127.250     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12527616 +8192 = 8192 bytes   [call 3413]
+   3426    127.256     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12535808 +8192 = 8192 bytes   [call 3420]
+   3433    127.262     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12544000 +8192 = 8192 bytes   [call 3427]
+   3440    127.268     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12552192 +8192 = 8192 bytes   [call 3434]
+   3447    127.274     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12560384 +8192 = 8192 bytes   [call 3441]
+   3454    127.280     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12568576 +8192 = 8192 bytes   [call 3448]
+   3461    127.286     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12576768 +8192 = 8192 bytes   [call 3455]
+   3468    127.310     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12341998 +7442 = 7442 bytes   [call 3462]
+   3475    127.316     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12349440 +8192 = 8192 bytes   [call 3469]
+   3482    127.322     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12357632 +8192 = 8192 bytes   [call 3476]
+   3490    127.328     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12365824 +8192 = 8192 bytes   [call 3484]
+   3497    127.334     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12374016 +8192 = 8192 bytes   [call 3491]
+   3504    127.340     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12382208 +8192 = 8192 bytes   [call 3498]
+   3511    127.346     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12390400 +8192 = 8192 bytes   [call 3505]
+   3519    127.352     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12398592 +8192 = 8192 bytes   [call 3513]
+   3527    127.358     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12406784 +8192 = 8192 bytes   [call 3521]
+   3534    127.364     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12414976 +8192 = 8192 bytes   [call 3528]
+   3540    127.389     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12262586 +6982 = 6982 bytes   [call 3535]
+   3547    127.393     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12269568 +8192 = 8192 bytes   [call 3541]
+   3554    127.397     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12277760 +8192 = 8192 bytes   [call 3548]
+   3561    127.403     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12285952 +8192 = 8192 bytes   [call 3555]
+   3568    127.409     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12294144 +8192 = 8192 bytes   [call 3562]
+   3575    127.415     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12302336 +8192 = 8192 bytes   [call 3569]
+   3582    127.421     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12310528 +8192 = 8192 bytes   [call 3576]
+   3589    127.427     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12318720 +8192 = 8192 bytes   [call 3583]
+   3596    127.433     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12326912 +8192 = 8192 bytes   [call 3590]
+   3603    127.439     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12335104 +8192 = 8192 bytes   [call 3597]
+   3610    127.463     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12182129 +7567 = 7567 bytes   [call 3604]
+   3617    127.468     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12189696 +8192 = 8192 bytes   [call 3611]
+   3624    127.472     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12197888 +8192 = 8192 bytes   [call 3618]
+   3631    127.478     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12206080 +8192 = 8192 bytes   [call 3625]
+   3638    127.484     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12214272 +8192 = 8192 bytes   [call 3632]
+   3645    127.490     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12222464 +8192 = 8192 bytes   [call 3639]
+   3652    127.496     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12230656 +8192 = 8192 bytes   [call 3646]
+   3659    127.502     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12238848 +8192 = 8192 bytes   [call 3653]
+   3666    127.508     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12247040 +8192 = 8192 bytes   [call 3660]
+   3673    127.533     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12102716 +7108 = 7108 bytes   [call 3667]
+   3680    127.538     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12109824 +8192 = 8192 bytes   [call 3674]
+   3687    127.544     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12118016 +8192 = 8192 bytes   [call 3681]
+   3694    127.550     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12126208 +8192 = 8192 bytes   [call 3688]
+   3702    127.556     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12134400 +8192 = 8192 bytes   [call 3696]
+   3709    127.562     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12142592 +8192 = 8192 bytes   [call 3703]
+   3716    127.568     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12150784 +8192 = 8192 bytes   [call 3710]
+   3723    127.574     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12158976 +8192 = 8192 bytes   [call 3717]
+   3730    127.580     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12167168 +8192 = 8192 bytes   [call 3724]
+   3737    127.586     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12175360 +8192 = 8192 bytes   [call 3731]
+   3744    127.609     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12022259 +7693 = 7693 bytes   [call 3738]
+   3751    127.613     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12029952 +8192 = 8192 bytes   [call 3745]
+   3758    127.619     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12038144 +8192 = 8192 bytes   [call 3752]
+   3766    127.625     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12046336 +8192 = 8192 bytes   [call 3760]
+   3773    127.631     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12054528 +8192 = 8192 bytes   [call 3767]
+   3780    127.637     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12062720 +8192 = 8192 bytes   [call 3774]
+   3787    127.643     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12070912 +8192 = 8192 bytes   [call 3781]
+   3794    127.649     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12079104 +8192 = 8192 bytes   [call 3788]
+   3801    127.655     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12087296 +8192 = 8192 bytes   [call 3795]
+   3808    127.661     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12095488 +8192 = 8192 bytes   [call 3802]
+   3814    127.685     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11942847 +7233 = 7233 bytes   [call 3809]
+   3821    127.691     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11950080 +8192 = 8192 bytes   [call 3815]
+   3829    127.697     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11958272 +8192 = 8192 bytes   [call 3823]
+   3837    127.703     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11966464 +8192 = 8192 bytes   [call 3831]
+   3844    127.709     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11974656 +8192 = 8192 bytes   [call 3838]
+   3851    127.716     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11982848 +8192 = 8192 bytes   [call 3845]
+   3858    127.721     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11991040 +8192 = 8192 bytes   [call 3852]
+   3865    127.727     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11999232 +8192 = 8192 bytes   [call 3859]
+   3872    127.733     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12007424 +8192 = 8192 bytes   [call 3866]
+   3879    127.739     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @12015616 +8192 = 8192 bytes   [call 3873]
+   3886    127.763     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11862390 +7818 = 7818 bytes   [call 3880]
+   3893    127.768     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11870208 +8192 = 8192 bytes   [call 3887]
+   3900    127.772     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11878400 +8192 = 8192 bytes   [call 3894]
+   3907    127.778     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11886592 +8192 = 8192 bytes   [call 3901]
+   3914    127.784     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11894784 +8192 = 8192 bytes   [call 3908]
+   3921    127.790     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11902976 +8192 = 8192 bytes   [call 3915]
+   3928    127.796     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11911168 +8192 = 8192 bytes   [call 3922]
+   3935    127.802     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11919360 +8192 = 8192 bytes   [call 3929]
+   3942    127.808     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11927552 +8192 = 8192 bytes   [call 3936]
+   3949    127.832     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11781933 +6355 = 6355 bytes   [call 3943]
+   3956    127.837     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11788288 +8192 = 8192 bytes   [call 3950]
+   3963    127.841     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11796480 +8192 = 8192 bytes   [call 3957]
+   3970    127.847     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11804672 +8192 = 8192 bytes   [call 3964]
+   3977    127.853     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11812864 +8192 = 8192 bytes   [call 3971]
+   3984    127.859     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11821056 +8192 = 8192 bytes   [call 3978]
+   3991    127.865     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11829248 +8192 = 8192 bytes   [call 3985]
+   3998    127.871     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11837440 +8192 = 8192 bytes   [call 3992]
+   4005    127.877     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11845632 +8192 = 8192 bytes   [call 3999]
+   4012    127.883     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11853824 +8192 = 8192 bytes   [call 4006]
+   4020    127.907     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11702520 +7944 = 7944 bytes   [call 4013]
+   4027    127.913     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11710464 +8192 = 8192 bytes   [call 4021]
+   4034    127.919     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11718656 +8192 = 8192 bytes   [call 4028]
+   4041    127.925     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11726848 +8192 = 8192 bytes   [call 4035]
+   4048    127.931     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11735040 +8192 = 8192 bytes   [call 4042]
+   4055    127.937     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11743232 +8192 = 8192 bytes   [call 4049]
+   4062    127.943     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11751424 +8192 = 8192 bytes   [call 4056]
+   4069    127.949     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11759616 +8192 = 8192 bytes   [call 4063]
+   4076    127.955     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11767808 +8192 = 8192 bytes   [call 4070]
+   4083    127.961     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11776000 +8192 = 8192 bytes   [call 4077]
+   4089    127.985     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11622063 +6481 = 6481 bytes   [call 4084]
+   4096    127.991     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11628544 +8192 = 8192 bytes   [call 4090]
+   4103    127.997     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11636736 +8192 = 8192 bytes   [call 4097]
+   4111    128.003     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11644928 +8192 = 8192 bytes   [call 4105]
+   4118    128.009     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11653120 +8192 = 8192 bytes   [call 4112]
+   4125    128.015     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11661312 +8192 = 8192 bytes   [call 4119]
+   4132    128.021     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11669504 +8192 = 8192 bytes   [call 4126]
+   4140    128.027     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11677696 +8192 = 8192 bytes   [call 4134]
+   4148    128.033     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11685888 +8192 = 8192 bytes   [call 4141]
+   4155    128.039     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11694080 +8192 = 8192 bytes   [call 4149]
+   4163    128.062     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11542651 +8069 = 8069 bytes   [call 4157]
+   4170    128.066     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11550720 +8192 = 8192 bytes   [call 4164]
+   4177    128.072     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11558912 +8192 = 8192 bytes   [call 4171]
+   4184    128.078     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11567104 +8192 = 8192 bytes   [call 4178]
+   4191    128.084     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11575296 +8192 = 8192 bytes   [call 4185]
+   4198    128.090     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11583488 +8192 = 8192 bytes   [call 4192]
+   4205    128.096     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11591680 +8192 = 8192 bytes   [call 4199]
+   4212    128.102     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11599872 +8192 = 8192 bytes   [call 4206]
+   4219    128.108     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11608064 +8192 = 8192 bytes   [call 4213]
+   4226    128.132     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11462194 +6606 = 6606 bytes   [call 4220]
+   4233    128.138     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11468800 +8192 = 8192 bytes   [call 4227]
+   4240    128.141     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11476992 +8192 = 8192 bytes   [call 4234]
+   4247    128.147     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11485184 +8192 = 8192 bytes   [call 4241]
+   4254    128.153     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11493376 +8192 = 8192 bytes   [call 4248]
+   4261    128.159     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11501568 +8192 = 8192 bytes   [call 4255]
+   4268    128.165     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11509760 +8192 = 8192 bytes   [call 4262]
+   4275    128.171     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11517952 +8192 = 8192 bytes   [call 4269]
+   4282    128.177     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11526144 +8192 = 8192 bytes   [call 4276]
+   4289    128.183     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11534336 +8192 = 8192 bytes   [call 4283]
+   4295    128.207     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11382782 +6146 = 6146 bytes   [call 4290]
+   4302    128.212     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11388928 +8192 = 8192 bytes   [call 4296]
+   4309    128.216     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11397120 +8192 = 8192 bytes   [call 4303]
+   4316    128.222     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11405312 +8192 = 8192 bytes   [call 4310]
+   4323    128.228     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11413504 +8192 = 8192 bytes   [call 4317]
+   4330    128.234     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11421696 +8192 = 8192 bytes   [call 4324]
+   4337    128.240     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11429888 +8192 = 8192 bytes   [call 4331]
+   4345    128.246     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11438080 +8192 = 8192 bytes   [call 4339]
+   4352    128.252     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11446272 +8192 = 8192 bytes   [call 4346]
+   4359    128.258     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11454464 +8192 = 8192 bytes   [call 4353]
+   4365    128.280     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11302325 +6731 = 6731 bytes   [call 4360]
+   4372    128.284     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11309056 +8192 = 8192 bytes   [call 4366]
+   4379    128.288     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11317248 +8192 = 8192 bytes   [call 4373]
+   4386    128.294     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11325440 +8192 = 8192 bytes   [call 4380]
+   4393    128.300     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11333632 +8192 = 8192 bytes   [call 4387]
+   4400    128.306     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11341824 +8192 = 8192 bytes   [call 4394]
+   4407    128.312     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11350016 +8192 = 8192 bytes   [call 4401]
+   4414    128.318     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11358208 +8192 = 8192 bytes   [call 4408]
+   4421    128.324     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11366400 +8192 = 8192 bytes   [call 4415]
+   4429    128.330     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11374592 +8192 = 8192 bytes   [call 4423]
+   4436    128.354     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11221867 +7317 = 7317 bytes   [call 4430]
+   4443    128.359     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11229184 +8192 = 8192 bytes   [call 4437]
+   4450    128.363     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11237376 +8192 = 8192 bytes   [call 4444]
+   4457    128.369     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11245568 +8192 = 8192 bytes   [call 4451]
+   4464    128.375     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11253760 +8192 = 8192 bytes   [call 4458]
+   4472    128.381     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11261952 +8192 = 8192 bytes   [call 4466]
+   4480    128.387     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11270144 +8192 = 8192 bytes   [call 4473]
+   4487    128.393     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11278336 +8192 = 8192 bytes   [call 4481]
+   4494    128.399     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11286528 +8192 = 8192 bytes   [call 4488]
+   4501    128.405     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11294720 +8192 = 8192 bytes   [call 4495]
+   4507    128.427     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11142455 +6857 = 6857 bytes   [call 4502]
+   4514    128.431     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11149312 +8192 = 8192 bytes   [call 4508]
+   4521    128.435     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11157504 +8192 = 8192 bytes   [call 4515]
+   4528    128.441     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11165696 +8192 = 8192 bytes   [call 4522]
+   4536    128.447     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11173888 +8192 = 8192 bytes   [call 4530]
+   4543    128.453     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11182080 +8192 = 8192 bytes   [call 4537]
+   4550    128.459     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11190272 +8192 = 8192 bytes   [call 4544]
+   4557    128.465     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11198464 +8192 = 8192 bytes   [call 4551]
+   4564    128.471     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11206656 +8192 = 8192 bytes   [call 4558]
+   4571    128.494     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11061998 +7442 = 7442 bytes   [call 4565]
+   4578    128.498     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11069440 +8192 = 8192 bytes   [call 4572]
+   4585    128.504     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11077632 +8192 = 8192 bytes   [call 4579]
+   4592    128.510     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11085824 +8192 = 8192 bytes   [call 4586]
+   4599    128.516     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11094016 +8192 = 8192 bytes   [call 4593]
+   4606    128.522     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11102208 +8192 = 8192 bytes   [call 4600]
+   4614    128.528     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11110400 +8192 = 8192 bytes   [call 4608]
+   4621    128.534     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11118592 +8192 = 8192 bytes   [call 4615]
+   4628    128.540     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11126784 +8192 = 8192 bytes   [call 4622]
+   4635    128.546     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11134976 +8192 = 8192 bytes   [call 4629]
+   4641    128.568     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10982586 +6982 = 6982 bytes   [call 4636]
+   4648    128.572     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10989568 +8192 = 8192 bytes   [call 4642]
+   4655    128.576     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10997760 +8192 = 8192 bytes   [call 4649]
+   4662    128.582     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11005952 +8192 = 8192 bytes   [call 4656]
+   4670    128.588     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11014144 +8192 = 8192 bytes   [call 4664]
+   4677    128.594     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11022336 +8192 = 8192 bytes   [call 4671]
+   4684    128.600     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11030528 +8192 = 8192 bytes   [call 4678]
+   4691    128.606     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11038720 +8192 = 8192 bytes   [call 4685]
+   4698    128.612     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11046912 +8192 = 8192 bytes   [call 4692]
+   4705    128.618     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @11055104 +8192 = 8192 bytes   [call 4699]
+   4713    128.641     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10902129 +7567 = 7567 bytes   [call 4706]
+   4720    128.644     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10909696 +8192 = 8192 bytes   [call 4714]
+   4727    128.648     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10917888 +8192 = 8192 bytes   [call 4721]
+   4734    128.654     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10926080 +8192 = 8192 bytes   [call 4728]
+   4741    128.660     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10934272 +8192 = 8192 bytes   [call 4735]
+   4748    128.666     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10942464 +8192 = 8192 bytes   [call 4742]
+   4755    128.672     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10950656 +8192 = 8192 bytes   [call 4749]
+   4762    128.678     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10958848 +8192 = 8192 bytes   [call 4756]
+   4769    128.684     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10967040 +8192 = 8192 bytes   [call 4763]
+   4776    128.690     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10975232 +8192 = 8192 bytes   [call 4770]
+   4782    128.712     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10822716 +7108 = 7108 bytes   [call 4777]
+   4789    128.717     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10829824 +8192 = 8192 bytes   [call 4783]
+   4797    128.723     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10838016 +8192 = 8192 bytes   [call 4791]
+   4804    128.729     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10846208 +8192 = 8192 bytes   [call 4798]
+   4812    128.735     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10854400 +8192 = 8192 bytes   [call 4806]
+   4819    128.741     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10862592 +8192 = 8192 bytes   [call 4813]
+   4826    128.747     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10870784 +8192 = 8192 bytes   [call 4820]
+   4833    128.753     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10878976 +8192 = 8192 bytes   [call 4827]
+   4840    128.759     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10887168 +8192 = 8192 bytes   [call 4834]
+   4847    128.781     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10742259 +7693 = 7693 bytes   [call 4841]
+   4854    128.785     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10749952 +8192 = 8192 bytes   [call 4848]
+   4861    128.789     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10758144 +8192 = 8192 bytes   [call 4855]
+   4868    128.795     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10766336 +8192 = 8192 bytes   [call 4862]
+   4875    128.801     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10774528 +8192 = 8192 bytes   [call 4869]
+   4882    128.807     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10782720 +8192 = 8192 bytes   [call 4876]
+   4889    128.813     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10790912 +8192 = 8192 bytes   [call 4883]
+   4896    128.819     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10799104 +8192 = 8192 bytes   [call 4890]
+   4903    128.825     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10807296 +8192 = 8192 bytes   [call 4897]
+   4911    128.831     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10815488 +8192 = 8192 bytes   [call 4904]
+   4917    128.852     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10662847 +7233 = 7233 bytes   [call 4912]
+   4924    128.857     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10670080 +8192 = 8192 bytes   [call 4918]
+   4931    128.860     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10678272 +8192 = 8192 bytes   [call 4925]
+   4938    128.864     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10686464 +8192 = 8192 bytes   [call 4932]
+   4945    128.870     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10694656 +8192 = 8192 bytes   [call 4939]
+   4952    128.876     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10702848 +8192 = 8192 bytes   [call 4946]
+   4959    128.882     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10711040 +8192 = 8192 bytes   [call 4953]
+   4966    128.888     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10719232 +8192 = 8192 bytes   [call 4960]
+   4973    128.894     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10727424 +8192 = 8192 bytes   [call 4967]
+   4980    128.900     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10735616 +8192 = 8192 bytes   [call 4974]
+   4987    128.922     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10582390 +7818 = 7818 bytes   [call 4981]
+   4994    128.928     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10590208 +8192 = 8192 bytes   [call 4988]
+   5002    128.933     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10598400 +8192 = 8192 bytes   [call 4996]
+   5009    128.939     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10606592 +8192 = 8192 bytes   [call 5003]
+   5016    128.945     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10614784 +8192 = 8192 bytes   [call 5010]
+   5023    128.951     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10622976 +8192 = 8192 bytes   [call 5017]
+   5030    128.957     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10631168 +8192 = 8192 bytes   [call 5024]
+   5037    128.963     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10639360 +8192 = 8192 bytes   [call 5031]
+   5044    128.969     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10647552 +8192 = 8192 bytes   [call 5038]
+   5051    128.975     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10655744 +8192 = 8192 bytes   [call 5045]
+   5057    128.997     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10501933 +6355 = 6355 bytes   [call 5052]
+   5064    129.001     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10508288 +8192 = 8192 bytes   [call 5058]
+   5071    129.005     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10516480 +8192 = 8192 bytes   [call 5065]
+   5078    129.011     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10524672 +8192 = 8192 bytes   [call 5072]
+   5085    129.017     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10532864 +8192 = 8192 bytes   [call 5079]
+   5092    129.023     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10541056 +8192 = 8192 bytes   [call 5086]
+   5099    129.029     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10549248 +8192 = 8192 bytes   [call 5093]
+   5107    129.035     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10557440 +8192 = 8192 bytes   [call 5101]
+   5114    129.041     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10565632 +8192 = 8192 bytes   [call 5108]
+   5122    129.063     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10422520 +7944 = 7944 bytes   [call 5115]
+   5130    129.068     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10430464 +8192 = 8192 bytes   [call 5124]
+   5137    129.074     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10438656 +8192 = 8192 bytes   [call 5131]
+   5144    129.080     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10446848 +8192 = 8192 bytes   [call 5138]
+   5151    129.086     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10455040 +8192 = 8192 bytes   [call 5145]
+   5158    129.092     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10463232 +8192 = 8192 bytes   [call 5152]
+   5165    129.098     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10471424 +8192 = 8192 bytes   [call 5159]
+   5172    129.104     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10479616 +8192 = 8192 bytes   [call 5166]
+   5179    129.110     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10487808 +8192 = 8192 bytes   [call 5173]
+   5186    129.116     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10496000 +8192 = 8192 bytes   [call 5180]
+   5194    129.138     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10342063 +6481 = 6481 bytes   [call 5187]
+   5201    129.143     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10348544 +8192 = 8192 bytes   [call 5195]
+   5208    129.149     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10356736 +8192 = 8192 bytes   [call 5202]
+   5215    129.155     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10364928 +8192 = 8192 bytes   [call 5209]
+   5222    129.161     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10373120 +8192 = 8192 bytes   [call 5216]
+   5229    129.167     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10381312 +8192 = 8192 bytes   [call 5223]
+   5236    129.173     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10389504 +8192 = 8192 bytes   [call 5230]
+   5243    129.179     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10397696 +8192 = 8192 bytes   [call 5237]
+   5250    129.185     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10405888 +8192 = 8192 bytes   [call 5244]
+   5257    129.191     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10414080 +8192 = 8192 bytes   [call 5251]
+   5264    129.212     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10262651 +8069 = 8069 bytes   [call 5258]
+   5271    129.218     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10270720 +8192 = 8192 bytes   [call 5265]
+   5278    129.224     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10278912 +8192 = 8192 bytes   [call 5272]
+   5285    129.230     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10287104 +8192 = 8192 bytes   [call 5279]
+   5292    129.236     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10295296 +8192 = 8192 bytes   [call 5286]
+   5299    129.242     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10303488 +8192 = 8192 bytes   [call 5293]
+   5306    129.248     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10311680 +8192 = 8192 bytes   [call 5300]
+   5313    129.254     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10319872 +8192 = 8192 bytes   [call 5307]
+   5320    129.260     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10328064 +8192 = 8192 bytes   [call 5314]
+   5327    129.266     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10336256 +8192 = 8192 bytes   [call 5321]
+   5333    129.287     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10182194 +6606 = 6606 bytes   [call 5328]
+   5340    129.293     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10188800 +8192 = 8192 bytes   [call 5334]
+   5347    129.300     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10196992 +8192 = 8192 bytes   [call 5341]
+   5354    129.305     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10205184 +8192 = 8192 bytes   [call 5348]
+   5361    129.311     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10213376 +8192 = 8192 bytes   [call 5355]
+   5368    129.317     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10221568 +8192 = 8192 bytes   [call 5362]
+   5375    129.323     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10229760 +8192 = 8192 bytes   [call 5369]
+   5383    129.329     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10237952 +8192 = 8192 bytes   [call 5377]
+   5391    129.335     P1>P2    nfs READ "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3" @10246144 +8192 = 8192 bytes   [call 5385]
+   5398    129.347     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1489429 +7659 = 7659 bytes   [call 5392]
+   5405    129.353     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1497088 +8192 = 8192 bytes   [call 5399]
+   5412    129.359     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1505280 +8192 = 8192 bytes   [call 5406]
+   5419    129.365     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1513472 +8192 = 8192 bytes   [call 5413]
+   5426    129.371     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1521664 +8192 = 8192 bytes   [call 5420]
+   5433    129.377     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1529856 +8192 = 8192 bytes   [call 5427]
+   5440    129.383     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1538048 +8192 = 8192 bytes   [call 5434]
+   5447    129.389     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1546240 +8192 = 8192 bytes   [call 5441]
+   5454    129.395     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1554432 +8192 = 8192 bytes   [call 5448]
+   5461    129.401     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1562624 +8192 = 8192 bytes   [call 5455]
+   5469    129.407     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1570816 +8192 = 8192 bytes   [call 5463]
+   5477    129.413     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1579008 +8192 = 8192 bytes   [call 5471]
+   5484    129.419     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1587200 +8192 = 8192 bytes   [call 5478]
+   5491    129.425     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1595392 +8192 = 8192 bytes   [call 5485]
+   5498    129.431     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1603584 +8192 = 8192 bytes   [call 5492]
+   5505    129.437     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1611776 +8192 = 8192 bytes   [call 5499]
+   5512    129.443     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1619968 +8192 = 8192 bytes   [call 5506]
+   5519    129.449     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1628160 +8192 = 8192 bytes   [call 5513]
+   5526    129.455     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1636352 +8192 = 8192 bytes   [call 5520]
+   5533    129.461     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1644544 +8192 = 8192 bytes   [call 5527]
+   5540    129.467     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1652736 +8192 = 8192 bytes   [call 5534]
+   5547    129.473     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1660928 +8192 = 8192 bytes   [call 5541]
+   5554    129.479     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1669120 +8192 = 8192 bytes   [call 5548]
+   5561    129.485     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1677312 +8192 = 8192 bytes   [call 5555]
+   5568    129.491     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1685504 +8192 = 8192 bytes   [call 5562]
+   5575    129.497     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1693696 +8192 = 8192 bytes   [call 5569]
+   5582    129.503     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1701888 +8192 = 8192 bytes   [call 5576]
+   5589    129.509     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1710080 +8192 = 8192 bytes   [call 5583]
+   5596    129.515     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1718272 +8192 = 8192 bytes   [call 5590]
+   5603    129.521     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1726464 +8192 = 8192 bytes   [call 5597]
+   5611    129.527     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1734656 +8192 = 8192 bytes   [call 5604]
+   5618    129.533     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1742848 +8192 = 8192 bytes   [call 5612]
+   5712    134.942     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1751040 +8192 = 8192 bytes   [call 5706]
+   5719    134.948     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1759232 +8192 = 8192 bytes   [call 5713]
+   5726    134.954     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1767424 +8192 = 8192 bytes   [call 5720]
+   5733    134.960     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1775616 +8192 = 8192 bytes   [call 5727]
+   5740    134.966     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1783808 +8192 = 8192 bytes   [call 5734]
+   5747    134.972     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1792000 +8192 = 8192 bytes   [call 5741]
+   5754    134.978     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1800192 +8192 = 8192 bytes   [call 5748]
+   5761    134.984     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1808384 +8192 = 8192 bytes   [call 5755]
+   5768    134.990     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1816576 +8192 = 8192 bytes   [call 5762]
+   5775    134.996     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1824768 +8192 = 8192 bytes   [call 5769]
+   5782    135.002     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1832960 +8192 = 8192 bytes   [call 5776]
+   5789    135.008     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1841152 +8192 = 8192 bytes   [call 5783]
+   5796    135.014     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1849344 +8192 = 8192 bytes   [call 5790]
+   5803    135.020     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1857536 +8192 = 8192 bytes   [call 5797]
+   5810    135.026     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1865728 +8192 = 8192 bytes   [call 5804]
+   5817    135.032     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1873920 +8192 = 8192 bytes   [call 5811]
+   5825    135.038     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1882112 +8192 = 8192 bytes   [call 5818]
+   5832    135.044     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1890304 +8192 = 8192 bytes   [call 5826]
+   5839    135.050     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1898496 +8192 = 8192 bytes   [call 5833]
+   5846    135.056     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1906688 +8192 = 8192 bytes   [call 5840]
+   5853    135.062     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1914880 +8192 = 8192 bytes   [call 5847]
+   5860    135.068     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1923072 +8192 = 8192 bytes   [call 5854]
+   5867    135.074     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1931264 +8192 = 8192 bytes   [call 5861]
+   5874    135.080     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1939456 +8192 = 8192 bytes   [call 5868]
+   5881    135.086     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1947648 +8192 = 8192 bytes   [call 5875]
+   5888    135.092     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1955840 +8192 = 8192 bytes   [call 5882]
+   5982    140.305     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1964032 +8192 = 8192 bytes   [call 5976]
+   5989    140.308     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1972224 +8192 = 8192 bytes   [call 5983]
+   5996    140.311     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1980416 +8192 = 8192 bytes   [call 5990]
+   6003    140.315     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1988608 +8192 = 8192 bytes   [call 5997]
+   6010    140.321     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @1996800 +8192 = 8192 bytes   [call 6004]
+   6017    140.327     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2004992 +8192 = 8192 bytes   [call 6011]
+   6024    140.333     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2013184 +8192 = 8192 bytes   [call 6018]
+   6031    140.339     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2021376 +8192 = 8192 bytes   [call 6025]
+   6038    140.347     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2029568 +8192 = 8192 bytes   [call 6032]
+   6046    140.351     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2037760 +8192 = 8192 bytes   [call 6039]
+   6053    140.357     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2045952 +8192 = 8192 bytes   [call 6047]
+   6060    140.363     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2054144 +8192 = 8192 bytes   [call 6054]
+   6067    140.369     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2062336 +8192 = 8192 bytes   [call 6061]
+   6074    140.375     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2070528 +8192 = 8192 bytes   [call 6068]
+   6082    140.381     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2078720 +8192 = 8192 bytes   [call 6076]
+   6090    140.389     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2086912 +8192 = 8192 bytes   [call 6083]
+   6097    140.392     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2095104 +8192 = 8192 bytes   [call 6091]
+   6104    140.396     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2103296 +8192 = 8192 bytes   [call 6098]
+   6111    140.402     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2111488 +8192 = 8192 bytes   [call 6105]
+   6118    140.408     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2119680 +8192 = 8192 bytes   [call 6112]
+   6125    140.414     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2127872 +8192 = 8192 bytes   [call 6119]
+   6132    140.420     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2136064 +8192 = 8192 bytes   [call 6126]
+   6139    140.426     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2144256 +8192 = 8192 bytes   [call 6133]
+   6146    140.432     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2152448 +8192 = 8192 bytes   [call 6140]
+   6153    140.438     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2160640 +8192 = 8192 bytes   [call 6147]
+   6161    140.444     P1>P2    nfs READ "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3" @2168832 +8192 = 8192 bytes   [call 6155]
+   6167    140.795     P1>P2    status usb=empty sd=empty link=true track P2 usb type=1 id=58 play=Some(5) flags=0xa4 bpm=175.01 browse=Some(141)
+   6204    143.945     P1>P2    db menu_track txn=0x380004b [0x01010301=D1/M1/S3/T1, 0x0]
+   6206    143.954     P2>P1    db success txn=0x380004b [0x1004, 0x8d]
+   6208    143.960     P1>P2    db unknown_3d03 txn=0x380004c [0x01010301=D1/M1/S3/T1, 0x3a]
+   6210    143.969     P2>P1    db success txn=0x380004c [0x3d03, 0x3]
+   6212    143.975     P1>P2    db render_menu txn=0x380004d [0x01010301=D1/M1/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0xc]
+   6214    143.984     P2>P1    db menu_header txn=0x380004d [0x1, 0x0]
+   6214    143.984     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=17
+   6214    143.984     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=3
+   6214    143.984     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=11
+   6214    143.984     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=1
+   6214    143.984     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=5
+   6214    143.984     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=11
+   6214    143.984     P2>P1    db menu_footer txn=0x380004d []
+   6218    144.025     P1>P2    db get_artwork txn=0x380004e [0x01080301=D1/M8/S3/T1, 0x2]
+   6220    144.034     P2>P1    db artwork txn=0x380004e [0x2003, 0x0, 0xbad, blob[2989] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...a63fb15db50c7556bc2f3122733fffd9 (81 zero bytes)]
+   6225    144.115     P1>P2    db get_artwork txn=0x380004f [0x01080301=D1/M8/S3/T1, 0x3a]
+   6227    144.124     P2>P1    db artwork txn=0x380004f [0x2003, 0x0, 0xb2d, blob[2861] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...6e318e08e4dffdc14660639b70bfffd9 (87 zero bytes)]
+   6232    144.205     P1>P2    db get_artwork txn=0x3800050 [0x01080301=D1/M8/S3/T1, 0x1f]
+   6234    144.214     P2>P1    db artwork txn=0x3800050 [0x2003, 0x0, 0x7ca, blob[1994] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...c88ecc01565200390324853db469ffd9 (85 zero bytes)]
+   6237    144.295     P1>P2    db get_artwork txn=0x3800051 [0x01080301=D1/M8/S3/T1, 0x33]
+   6239    144.304     P2>P1    db artwork txn=0x3800051 [0x2003, 0x0, 0x439, blob[1081] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...37f293cf46bb6d3a1d21b1cd415fffd9 (72 zero bytes)]
+   6242    144.370     P1>P2    db get_artwork txn=0x3800052 [0x01080301=D1/M8/S3/T1, 0x39]
+   6244    144.379     P2>P1    db artwork txn=0x3800052 [0x2003, 0x0, 0xbaf, blob[2991] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...d2ee090cc7d4d9fb1fc69b5d275fffd9 (90 zero bytes)]
+   6250    144.455     P1>P2    db get_artwork txn=0x3800053 [0x01080301=D1/M8/S3/T1, 0x4c]
+   6252    144.464     P2>P1    db artwork txn=0x3800053 [0x2003, 0x0, 0x954, blob[2388] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...151d555b28cb086267207e43568fffd9 (90 zero bytes)]
+   6275    146.155     P1>P2    db menu_track txn=0x3800054 [0x01010301=D1/M1/S3/T1, 0x0]
+   6278    146.164     P2>P1    db success txn=0x3800054 [0x1004, 0x8d]
+   6280    146.170     P1>P2    db render_menu txn=0x3800055 [0x01010301=D1/M1/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0xc]
+   6282    146.179     P2>P1    db menu_header txn=0x3800055 [0x1, 0x0]
+   6282    146.179     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=17
+   6282    146.179     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=3
+   6282    146.179     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=11
+   6282    146.179     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=1
+   6282    146.179     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=5
+   6282    146.179     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=11
+   6282    146.179     P2>P1    db menu_footer txn=0x3800055 []
+   6285    146.200     P1>P2    db menu_track txn=0x3800056 [0x01010301=D1/M1/S3/T1, 0x0]
+   6287    146.209     P2>P1    db success txn=0x3800056 [0x1004, 0x8d]
+   6289    146.215     P1>P2    db render_menu txn=0x3800057 [0x01010301=D1/M1/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0xc]
+   6291    146.224     P2>P1    db menu_header txn=0x3800057 [0x1, 0x0]
+   6291    146.224     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=17
+   6291    146.224     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=3
+   6291    146.224     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=11
+   6291    146.224     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=1
+   6291    146.224     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=5
+   6291    146.224     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=11
+   6291    146.224     P2>P1    db menu_footer txn=0x3800057 []
+   6293    146.245     P1>P2    db get_metadata txn=0x3800058 [0x01020301=D1/M2/S3/T1, 0x3a]
+   6295    146.254     P2>P1    db success txn=0x3800058 [0x2002, 0xd]
+   6297    146.260     P1>P2    db render_menu txn=0x3800059 [0x01020301=D1/M2/S3/T1, 0x0, 0x9, 0x0, 0xd, 0x0]
+   6299    146.269     P2>P1    db menu_header txn=0x3800059 [0x1, 0x0]
+   6299    146.269     P2>P1    db menu_item id=58 type=0x0004 (title) label1="AM FM" label2="" arg0=0x1 flags=0x1000000 artwork=58 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=8 type=0x0007 (artist) label1="Vertigoaway" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=9 type=0x0002 (album) label1="Agaki Home Radio" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=66 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=17501 type=0x000d (tempo) label1="" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=58 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=1 type=0x000f (key) label1="2A" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=0 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_item id=0 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   6299    146.269     P2>P1    db menu_footer txn=0x3800059 []
+   6301    146.290     P1>P2    db get_artwork txn=0x380005a [0x01080301=D1/M8/S3/T1, 0x3a]
+   6303    146.299     P2>P1    db artwork txn=0x380005a [0x2003, 0x0, 0xb2d, blob[2861] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...6e318e08e4dffdc14660639b70bfffd9 (87 zero bytes)]
+   6344    149.430     P1>P2    db menu_track txn=0x380005b [0x01010301=D1/M1/S3/T1, 0x0]
+   6346    149.439     P2>P1    db success txn=0x380005b [0x1004, 0x8d]
+   6348    149.445     P1>P2    db render_menu txn=0x380005c [0x01010301=D1/M1/S3/T1, 0x0, 0x6, 0x0, 0x8d, 0xc]
+   6350    149.454     P2>P1    db menu_header txn=0x380005c [0x1, 0x0]
+   6350    149.454     P2>P1    db menu_item id=2 type=0x0704 (track row) label1="Aaron2" label2="Venetian Snares" arg0=0x1 flags=0x1000000 artwork=2 pos=3 key=17
+   6350    149.454     P2>P1    db menu_item id=58 type=0x0704 (track row) label1="AM FM" label2="Vertigoaway" arg0=0x8 flags=0x1000000 artwork=58 pos=1 key=3
+   6350    149.454     P2>P1    db menu_item id=31 type=0x0704 (track row) label1="and when the tides change nothing will be left" label2="Blksmiith" arg0=0x4 flags=0x1000000 artwork=31 pos=13 key=11
+   6350    149.454     P2>P1    db menu_item id=51 type=0x0704 (track row) label1="Beautiful" label2="Hekt" arg0=0x9 flags=0x1000000 artwork=51 pos=5 key=1
+   6350    149.454     P2>P1    db menu_item id=57 type=0x0704 (track row) label1="Beep Street" label2="Squarepusher" arg0=0xa flags=0x1000000 artwork=57 pos=2 key=5
+   6350    149.454     P2>P1    db menu_item id=77 type=0x0704 (track row) label1="Benefit of the Doubt" label2="Kosh" arg0=0x21 flags=0x1000000 artwork=76 pos=4 key=11
+   6350    149.454     P2>P1    db menu_footer txn=0x380005c []
+   6352    149.540     P1>P2    db get_artwork txn=0x380005d [0x01080301=D1/M8/S3/T1, 0x2]
+   6354    149.549     P2>P1    db artwork txn=0x380005d [0x2003, 0x0, 0xbad, blob[2989] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...a63fb15db50c7556bc2f3122733fffd9 (81 zero bytes)]
+   6360    149.630     P1>P2    db get_artwork txn=0x380005e [0x01080301=D1/M8/S3/T1, 0x3a]
+   6362    149.639     P2>P1    db artwork txn=0x380005e [0x2003, 0x0, 0xb2d, blob[2861] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...6e318e08e4dffdc14660639b70bfffd9 (87 zero bytes)]
+   6366    149.720     P1>P2    db get_artwork txn=0x380005f [0x01080301=D1/M8/S3/T1, 0x1f]
+   6368    149.729     P2>P1    db artwork txn=0x380005f [0x2003, 0x0, 0x7ca, blob[1994] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...c88ecc01565200390324853db469ffd9 (85 zero bytes)]
+   6372    149.815     P1>P2    db get_artwork txn=0x3800060 [0x01080301=D1/M8/S3/T1, 0x33]
+   6374    149.824     P2>P1    db artwork txn=0x3800060 [0x2003, 0x0, 0x439, blob[1081] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...37f293cf46bb6d3a1d21b1cd415fffd9 (72 zero bytes)]
+   6377    149.900     P1>P2    db get_artwork txn=0x3800061 [0x01080301=D1/M8/S3/T1, 0x39]
+   6379    149.909     P2>P1    db artwork txn=0x3800061 [0x2003, 0x0, 0xbaf, blob[2991] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...d2ee090cc7d4d9fb1fc69b5d275fffd9 (90 zero bytes)]
+   6383    149.990     P1>P2    db get_artwork txn=0x3800062 [0x01080301=D1/M8/S3/T1, 0x4c]
+   6387    149.999     P2>P1    db artwork txn=0x3800062 [0x2003, 0x0, 0x954, blob[2388] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...151d555b28cb086267207e43568fffd9 (90 zero bytes)]
+
+keep-alives: P1 78, P2 68
+beat packets: P1 43
+status packets: P1 783, P2 819
+NFS reads of "/C/Contents/Venetian Snares/My So-Called Life/03 Aaron2.mp3": 365 reads, 2529204 bytes, offsets 0..12673241
+NFS reads of "/C/Contents/Vertigoaway/Agaki Home Radio/01 AM FM.mp3": 299 reads, 2062770 bytes, offsets 0..2912589

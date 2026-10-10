@@ -1,0 +1,48 @@
+#!/bin/sh
+# E11-link-browse: B browses A's plain stick over LINK, every folder of it:
+# the root row by row, Order and its subfolder, Sort, Unicode, Formats, Many paged
+# through, Only Docs, Empty, and Deep last, down its first row level after
+# level. The cursor rests a second on each row of the root, Order, Sort, Unicode,
+# Formats and the first ten of Many, as a DJ's would, so B fetches what it
+# shows beside the list for that row; through the rest of Many it moves a
+# row every 0.4 s.
+#
+# Run from emu-captures/E11-link-browse/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=plainmp3.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up --dsp-model
+sleep 4
+key $B link 2;      shot $B E11-01-link       # LINK: A's USB, the only source on the link
+sleep 14;           shot $B E11-02-link-later # the "rekordbox Database not found!" notice gone
+key $B enter 2;     shot $B E11-03-root       # [FOLDER]: the stick's root
+move $B 14 1;       shot $B E11-04-root-end   # rows 0-14, a second on each
+move $B -9;         key $B enter 2; shot $B E11-05-order      # row 5: Order
+move $B 5 1;        shot $B E11-06-order-end
+move $B -5;         key $B enter 2; shot $B E11-07-m-folder   # Order/M folder
+key $B back 2
+key $B back 2;      shot $B E11-08-back-at-order
+move $B 1;          key $B enter 2; shot $B E11-09-sort       # row 6: Sort
+move $B 25 1;       shot $B E11-09-sort-end
+key $B back 2
+move $B 1;          key $B enter 2; shot $B E11-09-unicode    # row 7: Unicode
+move $B 2 1;        shot $B E11-10-unicode-end
+key $B back 2
+move $B -5;         key $B enter 2; shot $B E11-11-formats    # row 2: Formats
+move $B 8 1;        shot $B E11-12-formats-end
+key $B back 2
+move $B 1;          key $B enter 2; shot $B E11-13-many       # row 3: Many
+move $B 10 1
+move $B 139;        shot $B E11-14-many-end
+key $B back 2
+move $B 1;          key $B enter 2; shot $B E11-15-only-docs  # row 4: Only Docs
+key $B back 2
+move $B -3;         key $B enter 2; shot $B E11-16-empty      # row 1: Empty
+key $B back 2
+move $B -1;         key $B enter 2; shot $B E11-17-deep       # row 0: Deep, then its first row,
+for level in 01 02 03 04 05 06 07 08 09 10; do                # level after level
+    key $B enter 2; shot $B E11-18-deep-$level
+done
+sleep 2
+rig_down

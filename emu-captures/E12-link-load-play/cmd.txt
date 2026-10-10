@@ -1,0 +1,26 @@
+#!/bin/sh
+# E12-link-load-play: B loads 01 Full v23.mp3 (full ID3v2.3 tags, a JPEG
+# cover) from A's plain stick over LINK, plays it, pauses, and shows INFO.
+# B runs the emulator's behavioural DSP, which plays a track the moment it
+# loads, where a real NXS cues and waits: the play state at load is the
+# emulator's, the requests are the firmware's.
+#
+# Run from emu-captures/E12-link-load-play/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=plainmp3.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up --dsp-model
+sleep 4
+key $B link 2
+sleep 14;           shot $B E12-01-link
+key $B enter 2;     shot $B E12-02-root
+move $B 10;         sleep 2; shot $B E12-03-on-01-full-v23   # root row 10
+key $B enter 4;     shot $B E12-04-loaded     # loaded over LINK, and playing at once
+sleep 15;           shot $B E12-05-playing
+key $B play 3;      shot $B E12-06-paused
+key $B browse 2;    shot $B E12-07-player
+key $B info 3;      shot $B E12-08-info
+key $B info 2
+sleep 3
+rig_down

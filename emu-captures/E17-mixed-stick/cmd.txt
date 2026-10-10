@@ -1,0 +1,37 @@
+#!/bin/sh
+# E17-mixed-stick: A holds a rekordbox stick with loose files beside its
+# export -- SAM1's PIONEER/ and Contents/ as they are, plus Loose/ (three
+# MP3s of PLAINMP3) and Loose root.mp3 (PLAINMP3's 03 ID3v1 only.mp3) that
+# rekordbox never saw -- and B browses it over LINK: the root menu, FOLDER,
+# the loose files, a load of one, then TRACK.
+#
+# The stick, from links to the files (make_sd_image follows them):
+#   mkdir -p tree/Loose && cd tree
+#   ln -s SAM1/Contents Contents; ln -s SAM1/PIONEER PIONEER
+#   ln -s "PLAINMP3/01 Full v23.mp3" "PLAINMP3/04 No tags.mp3" "PLAINMP3/Order/Track 2.mp3" Loose/
+#   ln -s "PLAINMP3/03 ID3v1 only.mp3" "Loose root.mp3"
+#   python -m tools.cdj_main.make_sd_image tree mixed-usb.img --size 4G   # in cdj2000-emulator/
+#
+# These commands were run one at a time, each after a look at B's screen.
+# Run from emu-captures/E17-mixed-stick/, with plain-stick/ beside it:
+#   PQ=pi-qemu STICK=mixed-usb.img SHOTS=/tmp sh cmd.txt
+set -eu
+. ../plain-stick/rig.sh
+
+rig_up --dsp-model
+sleep 4
+key $B link 2
+sleep 14;           shot $B E17-01-link
+move $B 9 1;        shot $B E17-02-on-folder        # root menu row 9: FOLDER
+key $B enter 2;     shot $B E17-03-folder-root
+# FOLDER lists Loose and Loose root.mp3 only: not Contents/, not PIONEER/.
+key $B enter 2;     shot $B E17-04-loose               # Loose
+move $B 2 1;        shot $B E17-05-loose-end
+move $B -1 1;       key $B enter 5; shot $B E17-06-loaded  # its row 1: 01 Full v23.mp3
+sleep 8
+key $B play 3
+key $B back 2
+key $B back 2;      shot $B E17-07-back-at-root-menu
+move $B -3 1;       key $B enter 2; shot $B E17-08-track   # row 6: TRACK
+sleep 3
+rig_down

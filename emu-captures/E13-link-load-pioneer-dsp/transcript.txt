@@ -1,0 +1,743 @@
+      1      0.000     P1>169.254.255.255 keep-alive: player 1 is 169.254.209.145, "CDJ-2000nexus"
+      4      5.745  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      6      6.744  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      8      8.744  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+     15     14.746  169.254.173.12>169.254.255.255 hello
+     16     15.044  169.254.173.12>169.254.255.255 hello
+     17     15.344  169.254.173.12>169.254.255.255 hello
+     18     15.644  169.254.173.12>169.254.255.255 claim_mac
+     19     15.944  169.254.173.12>169.254.255.255 claim_mac
+     21     16.244  169.254.173.12>169.254.255.255 claim_mac
+     22     16.544  169.254.173.12>169.254.255.255 claim_ip number=1 ip=169.254.173.12
+     25     16.546     P1>169.254.173.12 mixer_assign
+     26     16.546  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     27     16.844  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     28     17.144  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     29     17.444  169.254.173.12>169.254.255.255 claim_number number=2
+     30     17.445     P1>169.254.173.12 number_in_use number=1
+     31     17.446     P2>169.254.255.255 keep-alive: player 2 is 169.254.173.12, "CDJ-2000nexus"
+     32     17.453     P1>P2    status usb=empty sd=empty link=false no track play=Some(0) flags=0x84 bpm=- browse=None
+     38     18.060     P2>P1    status usb=loaded sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     45     18.452     P1>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 44]
+     47     18.453     P1>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 46]
+     49     18.455     P1>P2    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 48]
+     50     18.468     P1>P2    media_query: P1 (169.254.209.145) asks about P2 usb
+     51     18.469     P2>P1    media_response: P2 usb name="PLAINMP3" created="" tracks=0 playlists=0 total=Some(1070579712) free=Some(1040375808)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 03 00 50 00 4c
+                         0030  00 41 00 49 00 4e 00 4d 00 50 00 33 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0080  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00
+                         00b0  00 00 00 00 3f cf c0 00 00 00 00 00 3e 02 e0 00
+     54     18.474     P1>P2    port query (0000000f52656d6f7465444253657276657200)
+     55     18.474     P2>P1    port reply: dbserver on 1051
+     60     18.476     P1>P2    status usb=empty sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     61     18.477     P1>P2    dbserver preamble 11 00 00 00 01
+     62     18.478     P2>P1    dbserver preamble 11 00 00 00 01
+     63     18.479     P1>P2    db introduce txn=0xfffffffe [0x1]
+     64     18.481     P2>P1    db success txn=0xfffffffe [0x0, 0x2]
+     66     18.488     P1>P2    db unknown_3e03 txn=0x3800001 [0x01010301=D1/M1/S3/T1]
+     68     18.494     P2>P1    db unknown_4b02 txn=0x3800001 [0x3e03, 0x0, 0x2, ""]
+    115     21.638     P1>P2    db menu_root txn=0x3800002 [0x01010302=D1/M1/S3/T2, 0x0, 0xffffff]
+    117     21.644     P2>P1    db success txn=0x3800002 [0x1000, 0x1]
+    119     21.653     P1>P2    db render_menu txn=0x3800003 [0x01010302=D1/M1/S3/T2, 0x0, 0x1, 0x0, 0x1, 0x0]
+    121     21.659     P2>P1    db menu_header txn=0x3800003 [0x1, 0x0]
+    121     21.659     P2>P1    db menu_item id=17 type=0x0090 (FOLDER menu) label1="⟦FOLDER⟧" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    121     21.659     P2>P1    db menu_footer txn=0x3800003 []
+    123     21.683     P1>P2    db menu_folder txn=0x3800004 [0x01020302=D1/M2/S3/T2, 0x0, 0xffffffff, 0x0]
+    127     21.759     P2>P1    db success txn=0x3800004 [0x2006, 0xf]
+    129     21.767     P1>P2    db render_menu txn=0x3800005 [0x01020302=D1/M2/S3/T2, 0x0, 0x6, 0x0, 0xf, 0x0]
+    131     21.774     P2>P1    db menu_header txn=0x3800005 [0x1, 0x0]
+    131     21.774     P2>P1    db menu_item id=1156 type=0x0001 (folder) label1="Deep" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    131     21.774     P2>P1    db menu_item id=1157 type=0x0001 (folder) label1="Empty" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+    131     21.774     P2>P1    db menu_item id=1276 type=0x0001 (folder) label1="Formats" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    131     21.774     P2>P1    db menu_item id=1277 type=0x0001 (folder) label1="Many" label2="" arg0=0x3 flags=0x0 artwork=0 pos=0 key=0
+    131     21.774     P2>P1    db menu_item id=1278 type=0x0001 (folder) label1="Only Docs" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    131     21.774     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    131     21.774     P2>P1    db menu_footer txn=0x3800005 []
+    367     38.072     P1>P2    db menu_folder txn=0x3800006 [0x01010302=D1/M1/S3/T2, 0x0, 0xffffffff, 0x0]
+    369     38.079     P2>P1    db success txn=0x3800006 [0x2006, 0xf]
+    371     38.087     P1>P2    db render_menu txn=0x3800007 [0x01010302=D1/M1/S3/T2, 0x0, 0x6, 0x0, 0xf, 0x0]
+    373     38.094     P2>P1    db menu_header txn=0x3800007 [0x1, 0x0]
+    373     38.094     P2>P1    db menu_item id=1156 type=0x0001 (folder) label1="Deep" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    373     38.094     P2>P1    db menu_item id=1157 type=0x0001 (folder) label1="Empty" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+    373     38.094     P2>P1    db menu_item id=1276 type=0x0001 (folder) label1="Formats" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    373     38.094     P2>P1    db menu_item id=1277 type=0x0001 (folder) label1="Many" label2="" arg0=0x3 flags=0x0 artwork=0 pos=0 key=0
+    373     38.094     P2>P1    db menu_item id=1278 type=0x0001 (folder) label1="Only Docs" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    373     38.094     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    373     38.094     P2>P1    db menu_footer txn=0x3800007 []
+    379     38.367     P1>P2    db menu_folder txn=0x3800008 [0x01020302=D1/M2/S3/T2, 0x0, 0x484, 0x0]
+    381     38.384     P2>P1    db success txn=0x3800008 [0x2006, 0x1]
+    383     38.392     P1>P2    db render_menu txn=0x3800009 [0x01020302=D1/M2/S3/T2, 0x0, 0x1, 0x0, 0x1, 0x0]
+    385     38.399     P2>P1    db menu_header txn=0x3800009 [0x1, 0x0]
+    385     38.399     P2>P1    db menu_item id=1405 type=0x0001 (folder) label1="L01" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    385     38.399     P2>P1    db menu_footer txn=0x3800009 []
+    413     40.239     P1>P2    db menu_folder txn=0x380000a [0x01020302=D1/M2/S3/T2, 0x0, 0x485, 0x0]
+    415     40.246     P2>P1    db success txn=0x380000a [0x2006, 0x0]
+    426     40.774     P1>P2    db menu_folder txn=0x380000b [0x01020302=D1/M2/S3/T2, 0x0, 0x4fc, 0x0]
+    428     40.812     P2>P1    db success txn=0x380000b [0x2006, 0x8]
+    430     40.819     P1>P2    db render_menu txn=0x380000c [0x01020302=D1/M2/S3/T2, 0x0, 0x6, 0x0, 0x8, 0x0]
+    432     40.827     P2>P1    db menu_header txn=0x380000c [0x1, 0x0]
+    432     40.827     P2>P1    db menu_item id=2005 type=0x0004 (title) label1="AAC.m4a" label2="" arg0=0x0 flags=0x2000000 artwork=2005 pos=0 key=0
+    432     40.827     P2>P1    db menu_item id=2015 type=0x0004 (title) label1="AIFF PCM.aiff" label2="" arg0=0x1 flags=0x2000000 artwork=2015 pos=0 key=0
+    432     40.827     P2>P1    db menu_item id=2662 type=0x0004 (title) label1="CBR no Info tag.mp3" label2="" arg0=0x2 flags=0x2000000 artwork=2662 pos=0 key=0
+    432     40.827     P2>P1    db menu_item id=2780 type=0x0004 (title) label1="Corrupt.mp3" label2="" arg0=0x3 flags=0x2000000 artwork=2780 pos=0 key=0
+    432     40.827     P2>P1    db menu_item id=2796 type=0x0004 (title) label1="FLAC.flac" label2="" arg0=0x4 flags=0x2000000 artwork=2796 pos=0 key=0
+    432     40.827     P2>P1    db menu_item id=2805 type=0x0004 (title) label1="MPEG2 22k.mp3" label2="" arg0=0x5 flags=0x2000000 artwork=2805 pos=0 key=0
+    432     40.827     P2>P1    db menu_footer txn=0x380000c []
+    441     41.304     P1>P2    db menu_folder txn=0x380000d [0x01020302=D1/M2/S3/T2, 0x0, 0x4fd, 0x0]
+    450     41.804     P2>P1    db success txn=0x380000d [0x2006, 0x96]
+    452     41.809     P1>P2    db render_menu txn=0x380000e [0x01020302=D1/M2/S3/T2, 0x0, 0x6, 0x0, 0x96, 0x0]
+    454     41.820     P2>P1    db menu_header txn=0x380000e [0x1, 0x0]
+    454     41.820     P2>P1    db menu_item id=3535 type=0x0004 (title) label1="Many 001.mp3" label2="" arg0=0x0 flags=0x2000000 artwork=3535 pos=0 key=0
+    454     41.820     P2>P1    db menu_item id=3551 type=0x0004 (title) label1="Many 002.mp3" label2="" arg0=0x1 flags=0x2000000 artwork=3551 pos=0 key=0
+    454     41.820     P2>P1    db menu_item id=3567 type=0x0004 (title) label1="Many 003.mp3" label2="" arg0=0x2 flags=0x2000000 artwork=3567 pos=0 key=0
+    454     41.820     P2>P1    db menu_item id=3583 type=0x0004 (title) label1="Many 004.mp3" label2="" arg0=0x3 flags=0x2000000 artwork=3583 pos=0 key=0
+    454     41.820     P2>P1    db menu_item id=3599 type=0x0004 (title) label1="Many 005.mp3" label2="" arg0=0x4 flags=0x2000000 artwork=3599 pos=0 key=0
+    454     41.820     P2>P1    db menu_item id=3615 type=0x0004 (title) label1="Many 006.mp3" label2="" arg0=0x5 flags=0x2000000 artwork=3615 pos=0 key=0
+    454     41.820     P2>P1    db menu_footer txn=0x380000e []
+    456     41.850     P1>P2    db menu_folder txn=0x380000f [0x01020302=D1/M2/S3/T2, 0x0, 0x4fe, 0x0]
+    458     41.859     P2>P1    db success txn=0x380000f [0x2006, 0x0]
+    467     42.375     P1>P2    db menu_folder txn=0x3800010 [0x01020302=D1/M2/S3/T2, 0x0, 0x4ff, 0x0]
+    471     42.409     P2>P1    db success txn=0x3800010 [0x2006, 0x6]
+    473     42.415     P1>P2    db render_menu txn=0x3800011 [0x01020302=D1/M2/S3/T2, 0x0, 0x6, 0x0, 0x6, 0x0]
+    475     42.425     P2>P1    db menu_header txn=0x3800011 [0x1, 0x0]
+    475     42.425     P2>P1    db menu_item id=6056 type=0x0001 (folder) label1="M folder" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    475     42.425     P2>P1    db menu_item id=6293 type=0x0004 (title) label1="a lower.mp3" label2="" arg0=0x1 flags=0x2000000 artwork=6293 pos=0 key=0
+    475     42.425     P2>P1    db menu_item id=5938 type=0x0004 (title) label1="B upper.mp3" label2="" arg0=0x2 flags=0x2000000 artwork=5938 pos=0 key=0
+    475     42.425     P2>P1    db menu_item id=6057 type=0x0004 (title) label1="Track 10.mp3" label2="" arg0=0x3 flags=0x2000000 artwork=6057 pos=0 key=0
+    475     42.425     P2>P1    db menu_item id=6175 type=0x0004 (title) label1="Track 2.mp3" label2="" arg0=0x4 flags=0x2000000 artwork=6175 pos=0 key=0
+    475     42.425     P2>P1    db menu_item id=6411 type=0x0004 (title) label1="Ä umlaut.mp3" label2="" arg0=0x5 flags=0x2000000 artwork=6411 pos=0 key=0
+    475     42.425     P2>P1    db menu_footer txn=0x3800011 []
+    484     42.916     P1>P2    db render_menu txn=0x3800012 [0x01010302=D1/M1/S3/T2, 0x1, 0x6, 0x0, 0xf, 0x0]
+    486     42.925     P2>P1    db menu_header txn=0x3800012 [0x1, 0x1]
+    486     42.925     P2>P1    db menu_item id=1157 type=0x0001 (folder) label1="Empty" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+    486     42.925     P2>P1    db menu_item id=1276 type=0x0001 (folder) label1="Formats" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    486     42.925     P2>P1    db menu_item id=1277 type=0x0001 (folder) label1="Many" label2="" arg0=0x3 flags=0x0 artwork=0 pos=0 key=0
+    486     42.925     P2>P1    db menu_item id=1278 type=0x0001 (folder) label1="Only Docs" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    486     42.925     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    486     42.925     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+    486     42.925     P2>P1    db menu_footer txn=0x3800012 []
+    488     42.942     P1>P2    db menu_folder txn=0x3800013 [0x01020302=D1/M2/S3/T2, 0x0, 0x576, 0x0]
+    492     43.039     P2>P1    db success txn=0x3800013 [0x2006, 0x1a]
+    494     43.048     P1>P2    db render_menu txn=0x3800014 [0x01020302=D1/M2/S3/T2, 0x0, 0x6, 0x0, 0x1a, 0x0]
+    496     43.055     P2>P1    db menu_header txn=0x3800014 [0x1, 0x0]
+    496     43.055     P2>P1    db menu_item id=6758 type=0x0001 (folder) label1="a folder" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    496     43.055     P2>P1    db menu_item id=6738 type=0x0001 (folder) label1="B folder" label2="" arg0=0x1 flags=0x0 artwork=0 pos=0 key=0
+    496     43.055     P2>P1    db menu_item id=6701 type=0x0001 (folder) label1="1 folder" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    496     43.055     P2>P1    db menu_item id=6748 type=0x0001 (folder) label1="_ folder" label2="" arg0=0x3 flags=0x0 artwork=0 pos=0 key=0
+    496     43.055     P2>P1    db menu_item id=6786 type=0x0001 (folder) label1="Ä folder" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    496     43.055     P2>P1    db menu_item id=6759 type=0x0004 (title) label1="aardvark.mp3" label2="" arg0=0x5 flags=0x2000000 artwork=6759 pos=0 key=0
+    496     43.055     P2>P1    db menu_footer txn=0x3800014 []
+    503     43.464     P1>P2    db render_menu txn=0x3800015 [0x01010302=D1/M1/S3/T2, 0x2, 0x6, 0x0, 0xf, 0x0]
+    505     43.471     P2>P1    db menu_header txn=0x3800015 [0x1, 0x2]
+    505     43.471     P2>P1    db menu_item id=1276 type=0x0001 (folder) label1="Formats" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    505     43.471     P2>P1    db menu_item id=1277 type=0x0001 (folder) label1="Many" label2="" arg0=0x3 flags=0x0 artwork=0 pos=0 key=0
+    505     43.471     P2>P1    db menu_item id=1278 type=0x0001 (folder) label1="Only Docs" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    505     43.471     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    505     43.471     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+    505     43.471     P2>P1    db menu_item id=1400 type=0x0001 (folder) label1="Unicode" label2="" arg0=0x7 flags=0x0 artwork=0 pos=0 key=0
+    505     43.471     P2>P1    db menu_footer txn=0x3800015 []
+    507     43.495     P1>P2    db menu_folder txn=0x3800016 [0x01020302=D1/M2/S3/T2, 0x0, 0x578, 0x0]
+    510     43.521     P2>P1    db success txn=0x3800016 [0x2006, 0x3]
+    512     43.530     P1>P2    db render_menu txn=0x3800017 [0x01020302=D1/M2/S3/T2, 0x0, 0x3, 0x0, 0x3, 0x0]
+    514     43.541     P2>P1    db menu_header txn=0x3800017 [0x1, 0x0]
+    514     43.541     P2>P1    db menu_item id=6842 type=0x0004 (title) label1="Cafe\u{301} Cre\u{300}me NFD name.mp3" label2="" arg0=0x0 flags=0x2000000 artwork=6842 pos=0 key=0
+    514     43.541     P2>P1    db menu_item id=7019 type=0x0004 (title) label1="Emoji 🎧 name.mp3" label2="" arg0=0x1 flags=0x2000000 artwork=7019 pos=0 key=0
+    514     43.541     P2>P1    db menu_item id=7196 type=0x0004 (title) label1="Ünïcødé Ελληνικά Кириллица 日本語の曲名 — a long name that runs well past sixty-four characters to see where the screen and the protocol cut it.mp3" label2="" arg0=0x2 flags=0x2000000 artwork=7196 pos=0 key=0
+    514     43.541     P2>P1    db menu_footer txn=0x3800017 []
+    522     44.001     P1>P2    db render_menu txn=0x3800018 [0x01010302=D1/M1/S3/T2, 0x3, 0x6, 0x0, 0xf, 0x0]
+    524     44.011     P2>P1    db menu_header txn=0x3800018 [0x1, 0x3]
+    524     44.011     P2>P1    db menu_item id=1277 type=0x0001 (folder) label1="Many" label2="" arg0=0x3 flags=0x0 artwork=0 pos=0 key=0
+    524     44.011     P2>P1    db menu_item id=1278 type=0x0001 (folder) label1="Only Docs" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    524     44.011     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    524     44.011     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+    524     44.011     P2>P1    db menu_item id=1400 type=0x0001 (folder) label1="Unicode" label2="" arg0=0x7 flags=0x0 artwork=0 pos=0 key=0
+    524     44.011     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="Filename Artist - Filename Title.mp3" label2="" arg0=0x8 flags=0x2000000 artwork=1158 pos=0 key=0
+    524     44.011     P2>P1    db menu_footer txn=0x3800018 []
+    528     44.035     P1>P2    db get_generic_metadata txn=0x3800019 [0x01020302=D1/M2/S3/T2, 0x486]
+    530     44.065     P2>P1    db success txn=0x3800019 [0x2202, 0xa]
+    532     44.076     P1>P2    db render_menu txn=0x380001a [0x01020302=D1/M2/S3/T2, 0x0, 0x9, 0x0, 0xa, 0x0]
+    534     44.086     P2>P1    db menu_header txn=0x380001a [0x1, 0x0]
+    534     44.086     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="Filename Artist - Filename Title.mp3" label2="" arg0=0x0 flags=0x2000000 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=1158 type=0x0007 (artist) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=1158 type=0x0002 (album) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=1158 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=1158 type=0x0006 (genre) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=4294967295 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_item id=255 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=1158 pos=0 key=0
+    534     44.086     P2>P1    db menu_footer txn=0x380001a []
+    536     44.101     P1>P2    db get_artwork txn=0x380001b [0x01080302=D1/M8/S3/T2, 0x486]
+    539     44.110     P2>P1    db artwork txn=0x380001b [0x2003, 0x0, 0x246e, blob[9326] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...800a28a2800a28a2800a28a2803fffd9 (156 zero bytes)]
+    555     44.541     P1>P2    db render_menu txn=0x380001c [0x01010302=D1/M1/S3/T2, 0x4, 0x6, 0x0, 0xf, 0x0]
+    557     44.551     P2>P1    db menu_header txn=0x380001c [0x1, 0x4]
+    557     44.551     P2>P1    db menu_item id=1278 type=0x0001 (folder) label1="Only Docs" label2="" arg0=0x4 flags=0x0 artwork=0 pos=0 key=0
+    557     44.551     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    557     44.551     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+    557     44.551     P2>P1    db menu_item id=1400 type=0x0001 (folder) label1="Unicode" label2="" arg0=0x7 flags=0x0 artwork=0 pos=0 key=0
+    557     44.551     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="Filename Artist - Filename Title.mp3" label2="" arg0=0x8 flags=0x2000000 artwork=1158 pos=0 key=0
+    557     44.551     P2>P1    db menu_item id=1280 type=0x0004 (title) label1="SHORT.MP3" label2="" arg0=0x9 flags=0x2000000 artwork=1280 pos=0 key=0
+    557     44.551     P2>P1    db menu_footer txn=0x380001c []
+    559     44.589     P1>P2    db get_generic_metadata txn=0x380001d [0x01020302=D1/M2/S3/T2, 0x500]
+    561     44.611     P2>P1    db success txn=0x380001d [0x2202, 0xa]
+    563     44.619     P1>P2    db render_menu txn=0x380001e [0x01020302=D1/M2/S3/T2, 0x0, 0x9, 0x0, 0xa, 0x0]
+    566     44.626     P2>P1    db menu_header txn=0x380001e [0x1, 0x0]
+    566     44.626     P2>P1    db menu_item id=1280 type=0x0004 (title) label1="SHORT.MP3" label2="" arg0=0x0 flags=0x2000000 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=1280 type=0x0007 (artist) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=1280 type=0x0002 (album) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=1280 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=1280 type=0x0006 (genre) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=4294967295 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_item id=255 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=1280 pos=0 key=0
+    566     44.626     P2>P1    db menu_footer txn=0x380001e []
+    573     44.985     P1>P2    db get_artwork txn=0x380001f [0x01080302=D1/M8/S3/T2, 0x500]
+    575     44.996     P2>P1    db artwork txn=0x380001f [0x2003, 0x0, 0x246e, blob[9326] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...800a28a2800a28a2800a28a2803fffd9 (156 zero bytes)]
+    589     45.070     P1>P2    db render_menu txn=0x3800020 [0x01010302=D1/M1/S3/T2, 0x5, 0x6, 0x0, 0xf, 0x0]
+    591     45.078     P2>P1    db menu_header txn=0x3800020 [0x1, 0x5]
+    591     45.078     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    591     45.078     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+    591     45.078     P2>P1    db menu_item id=1400 type=0x0001 (folder) label1="Unicode" label2="" arg0=0x7 flags=0x0 artwork=0 pos=0 key=0
+    591     45.078     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="Filename Artist - Filename Title.mp3" label2="" arg0=0x8 flags=0x2000000 artwork=1158 pos=0 key=0
+    591     45.078     P2>P1    db menu_item id=1280 type=0x0004 (title) label1="SHORT.MP3" label2="" arg0=0x9 flags=0x2000000 artwork=1280 pos=0 key=0
+    591     45.078     P2>P1    db menu_item id=6 type=0x0004 (title) label1="01 Full v23.mp3" label2="" arg0=0xa flags=0x2000000 artwork=6 pos=0 key=0
+    591     45.078     P2>P1    db menu_footer txn=0x3800020 []
+    593     45.101     P1>P2    db get_generic_metadata txn=0x3800021 [0x01020302=D1/M2/S3/T2, 0x6]
+    597     45.132     P2>P1    db success txn=0x3800021 [0x2202, 0xa]
+    599     45.141     P1>P2    db render_menu txn=0x3800022 [0x01020302=D1/M2/S3/T2, 0x0, 0x9, 0x0, 0xa, 0x0]
+    601     45.148     P2>P1    db menu_header txn=0x3800022 [0x1, 0x0]
+    601     45.148     P2>P1    db menu_item id=6 type=0x0004 (title) label1="Title Tag v23" label2="" arg0=0x0 flags=0x2000000 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=6 type=0x0007 (artist) label1="Artist Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=6 type=0x0002 (album) label1="Album Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=6 type=0x0006 (genre) label1="Genre Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=4294967295 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_item id=255 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    601     45.148     P2>P1    db menu_footer txn=0x3800022 []
+    603     45.168     P1>P2    db get_artwork txn=0x3800023 [0x01080302=D1/M8/S3/T2, 0x6]
+    605     45.177     P2>P1    db artwork txn=0x3800023 [0x2003, 0x0, 0x2e3e, blob[11838] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...a0028a28a0028a28a0028a28a00fffd9 (625 zero bytes)]
+    657     47.851     P1>P2    db menu_folder txn=0x3800024 [0x01030302=D1/M3/S3/T2, 0x0, 0xffffffff, 0x1]
+    660     47.859     P2>P1    db success txn=0x3800024 [0x2006, 0x7]
+    662     47.865     P1>P2    db menu_folder txn=0x3800025 [0x01040302=D1/M4/S3/T2, 0x0, 0xffffffff, 0x0]
+    664     47.873     P2>P1    db success txn=0x3800025 [0x2006, 0xf]
+    666     47.880     P1>P2    db render_menu txn=0x3800026 [0x01040302=D1/M4/S3/T2, 0xa, 0x1, 0x0, 0xf, 0x0]
+    668     47.888     P2>P1    db menu_header txn=0x3800026 [0x1, 0xa]
+    668     47.888     P2>P1    db menu_item id=6 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x2000000 artwork=0 pos=0 key=0
+    668     47.888     P2>P1    db menu_footer txn=0x3800026 []
+    670     47.895     P1>P2    db unknown_3100 txn=0x3800027 [0x01030302=D1/M3/S3/T2, 0x6, 0x0, 0x0]
+    672     47.903     P2>P1    db success txn=0x3800027 [0x3100, 0x2]
+    674     47.910     P1>P2    db get_track_info txn=0x3800028 [0x01080302=D1/M8/S3/T2, 0x6]
+    676     47.918     P2>P1    db success txn=0x3800028 [0x2102, 0x5]
+    679     47.925     P1>P2    db render_menu txn=0x3800029 [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+    681     47.934     P2>P1    db menu_header txn=0x3800029 [0x1, 0x0]
+    681     47.934     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    681     47.934     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    681     47.934     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    681     47.934     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    681     47.934     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x162df0 flags=0x0 artwork=0 pos=0 key=0
+    681     47.934     P2>P1    db menu_footer txn=0x3800029 []
+    683     47.949     P1>P2    db get_waveform_preview txn=0x380002a [0x01080302=D1/M8/S3/T2, 0x3, 0x6, 0x0, blob[0]]
+    685     47.958     P2>P1    db waveform_preview txn=0x380002a [0x2004, 0x0, 0x384, blob[900] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (900 zero bytes)]
+    687     47.969     P1>P2    db menu_folder txn=0x380002b [0x01010302=D1/M1/S3/T2, 0x0, 0xffffffff, 0x0]
+    689     47.979     P2>P1    db success txn=0x380002b [0x2006, 0xf]
+    691     47.985     P1>P2    status usb=empty sd=empty link=true track P2 usb type=2 id=6 play=Some(2) flags=0x84 bpm=- browse=Some(7)
+    692     47.985     P1>P2    db render_menu txn=0x380002c [0x01010302=D1/M1/S3/T2, 0x5, 0x6, 0x0, 0xf, 0x0]
+    694     47.994     P2>P1    db menu_header txn=0x380002c [0x1, 0x5]
+    694     47.994     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    694     47.994     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+    694     47.994     P2>P1    db menu_item id=1400 type=0x0001 (folder) label1="Unicode" label2="" arg0=0x7 flags=0x0 artwork=0 pos=0 key=0
+    694     47.994     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="Filename Artist - Filename Title.mp3" label2="" arg0=0x8 flags=0x2000000 artwork=1158 pos=0 key=0
+    694     47.994     P2>P1    db menu_item id=1280 type=0x0004 (title) label1="SHORT.MP3" label2="" arg0=0x9 flags=0x2000000 artwork=1280 pos=0 key=0
+    694     47.994     P2>P1    db menu_item id=6 type=0x0004 (title) label1="01 Full v23.mp3" label2="" arg0=0xa flags=0x2000000 artwork=6 pos=0 key=0
+    694     47.994     P2>P1    db menu_footer txn=0x380002c []
+    697     48.004     P1>P2    db get_cue_points txn=0x380002d [0x01080302=D1/M8/S3/T2, 0x6]
+    699     48.014     P2>P1    db cue_points txn=0x380002d [0x2104, 0x0, 0x0, blob[0], 0x24, 0x0, 0x0, 0x0, blob[0]]
+    702     48.024     P1>P2    db get_track_info txn=0x380002e [0x01080302=D1/M8/S3/T2, 0x6]
+    704     48.033     P2>P1    db success txn=0x380002e [0x2102, 0x5]
+    706     48.045     P1>P2    db render_menu txn=0x380002f [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+    709     48.054     P2>P1    db menu_header txn=0x380002f [0x1, 0x0]
+    709     48.054     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    709     48.054     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    709     48.054     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    709     48.054     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    709     48.054     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x162df0 flags=0x0 artwork=0 pos=0 key=0
+    709     48.054     P2>P1    db menu_footer txn=0x380002f []
+    712     48.072     P1>P2    db get_generic_metadata txn=0x3800030 [0x01020302=D1/M2/S3/T2, 0x6]
+    713     48.082     P1>P2    nfs LOOKUP "/C/?\0D 2 5" (name bytes 3f004420322035; dir fh tail 0301000000001b58000000000203020000000006) = NFREG size=1453552 fileid=19864900 fh:012f1d44012538a8012538a80000000000000000000000000000000000000000   [call 711]
+    715     48.085     P2>P1    db success txn=0x3800030 [0x2202, 0xa]
+    717     48.094     P1>P2    db render_menu txn=0x3800031 [0x01020302=D1/M2/S3/T2, 0x0, 0x9, 0x0, 0xa, 0x0]
+    719     48.100     P2>P1    db menu_header txn=0x3800031 [0x1, 0x0]
+    719     48.100     P2>P1    db menu_item id=6 type=0x0004 (title) label1="Title Tag v23" label2="" arg0=0x0 flags=0x2000000 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=6 type=0x0007 (artist) label1="Artist Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=6 type=0x0002 (album) label1="Album Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=6 type=0x0006 (genre) label1="Genre Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=4294967295 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_item id=255 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+    719     48.100     P2>P1    db menu_footer txn=0x3800031 []
+    721     48.108     P1>P2    db unknown_3100 txn=0x3800032 [0x01030302=D1/M3/S3/T2, 0x6, 0x0, 0x0]
+    723     48.115     P2>P1    db success txn=0x3800032 [0x3100, 0x2]
+    725     48.124     P1>P2    db get_track_info txn=0x3800033 [0x01080302=D1/M8/S3/T2, 0x6]
+    727     48.130     P2>P1    db success txn=0x3800033 [0x2102, 0x5]
+    729     48.139     P1>P2    db render_menu txn=0x3800034 [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+    731     48.145     P2>P1    db menu_header txn=0x3800034 [0x1, 0x0]
+    731     48.145     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    731     48.145     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+    731     48.145     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    731     48.145     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    731     48.145     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x162df0 flags=0x0 artwork=0 pos=0 key=0
+    731     48.145     P2>P1    db menu_footer txn=0x3800034 []
+    733     48.154     P1>P2    db get_vbr_index txn=0x3800035 [0x01080302=D1/M8/S3/T2, 0x6]
+    735     48.160     P2>P1    db vbr_index txn=0x3800035 [0x2504, 0x0, 0x644, blob[1604] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (1604 zero bytes)]
+    739     48.169     P1>P2    db get_waveform_preview txn=0x3800036 [0x01080302=D1/M8/S3/T2, 0x3, 0x6, 0x0, blob[0]]
+    741     48.175     P2>P1    db waveform_preview txn=0x3800036 [0x2004, 0x0, 0x384, blob[900] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (900 zero bytes)]
+    744     48.181     P1>P2    nfs GETATTR "/C/?\0D 2 5" = NFREG size=1453552 fileid=19864900   [call 743]
+    746     48.183     P1>P2    db get_artwork txn=0x3800037 [0x01080302=D1/M8/S3/T2, 0x6]
+    748     48.185     P1>P2    nfs READ "/C/?\0D 2 5" @1453392 +160 = 160 bytes   [call 745]
+    751     48.189     P1>P2    nfs READ "/C/?\0D 2 5" @0 +2048 = 2048 bytes   [call 749]
+    752     48.190     P2>P1    db artwork txn=0x3800037 [0x2003, 0x0, 0x2e3e, blob[11838] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...a0028a28a0028a28a0028a28a00fffd9 (625 zero bytes)]
+    769     48.196     P1>P2    nfs READ "/C/?\0D 2 5" @383 +8192 = 8192 bytes   [call 758]
+    773     48.198     P1>P2    nfs READ "/C/?\0D 2 5" @12221 +2048 = 2048 bytes   [call 770]
+    776     48.201     P1>P2    nfs READ "/C/?\0D 2 5" @12221 +2048 = 2048 bytes   [call 774]
+    779     48.204     P1>P2    nfs READ "/C/?\0D 2 5" @12221 +2048 = 2048 bytes   [call 777]
+    781     48.206     P1>P2    nfs READ "/C/?\0D 2 5" @12221 +67 = 67 bytes   [call 780]
+    784     48.207     P1>P2    nfs READ "/C/?\0D 2 5" @12288 +2048 = 2048 bytes   [call 782]
+    787     48.208     P1>P2    nfs READ "/C/?\0D 2 5" @14336 +2048 = 2048 bytes   [call 785]
+    790     48.209     P1>P2    nfs READ "/C/?\0D 2 5" @16384 +2048 = 2048 bytes   [call 788]
+    793     48.209     P1>P2    nfs READ "/C/?\0D 2 5" @18432 +2048 = 2048 bytes   [call 791]
+    796     48.212     P1>P2    nfs READ "/C/?\0D 2 5" @20480 +2048 = 2048 bytes   [call 794]
+    799     48.213     P1>P2    nfs READ "/C/?\0D 2 5" @22528 +2048 = 2048 bytes   [call 797]
+    802     48.214     P1>P2    nfs READ "/C/?\0D 2 5" @24576 +2048 = 2048 bytes   [call 800]
+    805     48.215     P1>P2    nfs READ "/C/?\0D 2 5" @26624 +2048 = 2048 bytes   [call 803]
+    808     48.216     P1>P2    nfs READ "/C/?\0D 2 5" @28672 +2048 = 2048 bytes   [call 806]
+    811     48.217     P1>P2    nfs READ "/C/?\0D 2 5" @30720 +2048 = 2048 bytes   [call 809]
+    814     48.218     P1>P2    nfs READ "/C/?\0D 2 5" @32768 +2048 = 2048 bytes   [call 812]
+    817     48.220     P1>P2    nfs READ "/C/?\0D 2 5" @34816 +2048 = 2048 bytes   [call 815]
+    820     48.221     P1>P2    nfs READ "/C/?\0D 2 5" @36864 +2048 = 2048 bytes   [call 818]
+    823     48.222     P1>P2    nfs READ "/C/?\0D 2 5" @38912 +2048 = 2048 bytes   [call 821]
+    826     48.224     P1>P2    nfs READ "/C/?\0D 2 5" @40960 +2048 = 2048 bytes   [call 824]
+    829     48.224     P1>P2    nfs READ "/C/?\0D 2 5" @43008 +2048 = 2048 bytes   [call 827]
+    832     48.228     P1>P2    nfs READ "/C/?\0D 2 5" @732886 +2048 = 2048 bytes   [call 830]
+    835     48.229     P1>P2    nfs READ "/C/?\0D 2 5" @733199 +2033 = 2033 bytes   [call 833]
+    838     48.230     P1>P2    nfs READ "/C/?\0D 2 5" @735232 +2048 = 2048 bytes   [call 836]
+    841     48.231     P1>P2    nfs READ "/C/?\0D 2 5" @737280 +2048 = 2048 bytes   [call 839]
+    844     48.231     P1>P2    nfs READ "/C/?\0D 2 5" @739328 +2048 = 2048 bytes   [call 842]
+    847     48.232     P1>P2    nfs READ "/C/?\0D 2 5" @741376 +2048 = 2048 bytes   [call 845]
+    850     48.233     P1>P2    nfs READ "/C/?\0D 2 5" @743424 +2048 = 2048 bytes   [call 848]
+    853     48.234     P1>P2    nfs READ "/C/?\0D 2 5" @745472 +2048 = 2048 bytes   [call 851]
+    856     48.235     P1>P2    nfs READ "/C/?\0D 2 5" @747520 +2048 = 2048 bytes   [call 854]
+    859     48.236     P1>P2    nfs READ "/C/?\0D 2 5" @749568 +2048 = 2048 bytes   [call 857]
+    862     48.238     P1>P2    nfs READ "/C/?\0D 2 5" @751616 +2048 = 2048 bytes   [call 860]
+    865     48.239     P1>P2    nfs READ "/C/?\0D 2 5" @753664 +2048 = 2048 bytes   [call 863]
+    868     48.240     P1>P2    nfs READ "/C/?\0D 2 5" @755712 +2048 = 2048 bytes   [call 866]
+    871     48.242     P1>P2    nfs READ "/C/?\0D 2 5" @757760 +2048 = 2048 bytes   [call 869]
+    874     48.242     P1>P2    nfs READ "/C/?\0D 2 5" @759808 +2048 = 2048 bytes   [call 872]
+    877     48.244     P1>P2    nfs READ "/C/?\0D 2 5" @761856 +2048 = 2048 bytes   [call 875]
+    880     48.245     P1>P2    nfs READ "/C/?\0D 2 5" @763904 +2048 = 2048 bytes   [call 878]
+    887     48.254     P1>P2    nfs READ "/C/?\0D 2 5" @12221 +6211 = 6211 bytes   [call 881]
+    894     48.298     P1>P2    nfs READ "/C/?\0D 2 5" @18432 +8192 = 8192 bytes   [call 888]
+    905     48.538     P1>P2    nfs READ "/C/?\0D 2 5" @26624 +8192 = 8192 bytes   [call 899]
+    918     48.915     P1>P2    nfs READ "/C/?\0D 2 5" @34816 +8192 = 8192 bytes   [call 912]
+    930     49.294     P1>P2    nfs READ "/C/?\0D 2 5" @43008 +8192 = 8192 bytes   [call 924]
+    941     49.666     P1>P2    nfs READ "/C/?\0D 2 5" @51200 +8192 = 8192 bytes   [call 935]
+    954     50.026     P1>P2    nfs READ "/C/?\0D 2 5" @59392 +8192 = 8192 bytes   [call 948]
+    957     50.093     P1>P2    nfs LOOKUP "/C/?\0D 2 5" (name bytes 3f004420322035; dir fh tail 0301000000001b58000000000203020000000006) = NFREG size=1453552 fileid=19864900 fh:012f1d44012538a8012538a80000000000000000000000000000000000000000   [call 956]
+    958     50.101     P1>P2    db render_menu txn=0x3800038 [0x01030302=D1/M3/S3/T2, 0x1, 0x1, 0x0, 0x7, 0x0]
+    960     50.108     P2>P1    db menu_header txn=0x3800038 [0x1, 0x1]
+    960     50.108     P2>P1    db menu_item id=1280 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x2000000 artwork=0 pos=0 key=0
+    960     50.108     P2>P1    db menu_footer txn=0x3800038 []
+    963     50.116     P1>P2    db get_track_info txn=0x3800039 [0x01080302=D1/M8/S3/T2, 0x500]
+    965     50.123     P2>P1    db success txn=0x3800039 [0x2102, 0x5]
+    967     50.131     P1>P2    db render_menu txn=0x380003a [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+    969     50.138     P2>P1    db menu_header txn=0x380003a [0x1, 0x0]
+    969     50.138     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    969     50.138     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x21 flags=0x0 artwork=0 pos=0 key=0
+    969     50.138     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    969     50.138     P2>P1    db menu_item id=1280 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    969     50.138     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x758d0 flags=0x0 artwork=0 pos=0 key=0
+    969     50.138     P2>P1    db menu_footer txn=0x380003a []
+    971     50.146     P1>P2    db get_track_info txn=0x380003b [0x01080302=D1/M8/S3/T2, 0x500]
+    973     50.153     P2>P1    db success txn=0x380003b [0x2102, 0x5]
+    975     50.161     P1>P2    db render_menu txn=0x380003c [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+    977     50.168     P2>P1    db menu_header txn=0x380003c [0x1, 0x0]
+    977     50.168     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    977     50.168     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x21 flags=0x0 artwork=0 pos=0 key=0
+    977     50.168     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    977     50.168     P2>P1    db menu_item id=1280 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    977     50.168     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x758d0 flags=0x0 artwork=0 pos=0 key=0
+    977     50.168     P2>P1    db menu_footer txn=0x380003c []
+    980     50.173     P1>P2    nfs LOOKUP "/C/?\0D 2 21" (name bytes 3f00442032203231; dir fh tail 0301000000001b58000000000203020000000500) = NFREG size=481488 fileid=19250604 fh:0125bdac012538a8012538a80000000000000000000000000000000000000000   [call 979]
+    981     50.176     P1>P2    db unknown_3100 txn=0x380003d [0x01030302=D1/M3/S3/T2, 0x500, 0x0, 0x0]
+    983     50.183     P2>P1    db success txn=0x380003d [0x3100, 0x1]
+    985     50.191     P1>P2    db get_track_info txn=0x380003e [0x01080302=D1/M8/S3/T2, 0x500]
+    987     50.198     P2>P1    db success txn=0x380003e [0x2102, 0x5]
+    989     50.206     P1>P2    db render_menu txn=0x380003f [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+    991     50.213     P2>P1    db menu_header txn=0x380003f [0x1, 0x0]
+    991     50.213     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+    991     50.213     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x21 flags=0x0 artwork=0 pos=0 key=0
+    991     50.213     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    991     50.213     P2>P1    db menu_item id=1280 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+    991     50.213     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x758d0 flags=0x0 artwork=0 pos=0 key=0
+    991     50.213     P2>P1    db menu_footer txn=0x380003f []
+    993     50.221     P1>P2    db get_vbr_index txn=0x3800040 [0x01080302=D1/M8/S3/T2, 0x500]
+    995     50.228     P2>P1    db vbr_index txn=0x3800040 [0x2504, 0x0, 0x644, blob[1604] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (1604 zero bytes)]
+    998     50.236     P1>P2    db get_waveform_preview txn=0x3800041 [0x01080302=D1/M8/S3/T2, 0x3, 0x500, 0x0, blob[0]]
+   1000     50.243     P2>P1    db waveform_preview txn=0x3800041 [0x2004, 0x0, 0x384, blob[900] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (900 zero bytes)]
+   1003     50.248     P1>P2    nfs GETATTR "/C/?\0D 2 21" = NFREG size=481488 fileid=19250604   [call 1002]
+   1005     50.251     P1>P2    nfs READ "/C/?\0D 2 21" @481328 +160 = 160 bytes   [call 1004]
+   1009     50.252     P1>P2    nfs READ "/C/?\0D 2 21" @0 +2048 = 2048 bytes   [call 1007]
+   1012     50.253     P1>P2    nfs READ "/C/?\0D 2 21" @0 +2048 = 2048 bytes   [call 1010]
+   1015     50.254     P1>P2    nfs READ "/C/?\0D 2 21" @0 +2048 = 2048 bytes   [call 1013]
+   1018     50.254     P1>P2    nfs READ "/C/?\0D 2 21" @0 +2048 = 2048 bytes   [call 1016]
+   1021     50.255     P1>P2    nfs READ "/C/?\0D 2 21" @2048 +2048 = 2048 bytes   [call 1019]
+   1024     50.256     P1>P2    nfs READ "/C/?\0D 2 21" @4096 +2048 = 2048 bytes   [call 1022]
+   1027     50.257     P1>P2    nfs READ "/C/?\0D 2 21" @6144 +2048 = 2048 bytes   [call 1025]
+   1030     50.258     P1>P2    nfs READ "/C/?\0D 2 21" @8192 +2048 = 2048 bytes   [call 1028]
+   1033     50.259     P1>P2    nfs READ "/C/?\0D 2 21" @10240 +2048 = 2048 bytes   [call 1031]
+   1036     50.261     P1>P2    nfs READ "/C/?\0D 2 21" @12288 +2048 = 2048 bytes   [call 1034]
+   1039     50.261     P1>P2    nfs READ "/C/?\0D 2 21" @14336 +2048 = 2048 bytes   [call 1037]
+   1042     50.263     P1>P2    nfs READ "/C/?\0D 2 21" @16384 +2048 = 2048 bytes   [call 1040]
+   1045     50.263     P1>P2    nfs READ "/C/?\0D 2 21" @18432 +2048 = 2048 bytes   [call 1043]
+   1048     50.264     P1>P2    nfs READ "/C/?\0D 2 21" @20480 +2048 = 2048 bytes   [call 1046]
+   1051     50.265     P1>P2    nfs READ "/C/?\0D 2 21" @22528 +2048 = 2048 bytes   [call 1049]
+   1054     50.267     P1>P2    nfs READ "/C/?\0D 2 21" @24576 +2048 = 2048 bytes   [call 1052]
+   1057     50.267     P1>P2    nfs READ "/C/?\0D 2 21" @26624 +2048 = 2048 bytes   [call 1055]
+   1060     50.268     P1>P2    nfs READ "/C/?\0D 2 21" @28672 +2048 = 2048 bytes   [call 1058]
+   1063     50.269     P1>P2    nfs READ "/C/?\0D 2 21" @30720 +2048 = 2048 bytes   [call 1061]
+   1066     50.272     P1>P2    nfs READ "/C/?\0D 2 21" @240744 +2048 = 2048 bytes   [call 1064]
+   1068     50.273     P1>P2    nfs READ "/C/?\0D 2 21" @241370 +294 = 294 bytes   [call 1067]
+   1071     50.275     P1>P2    nfs READ "/C/?\0D 2 21" @241664 +2048 = 2048 bytes   [call 1069]
+   1074     50.275     P1>P2    nfs READ "/C/?\0D 2 21" @243712 +2048 = 2048 bytes   [call 1072]
+   1077     50.277     P1>P2    nfs READ "/C/?\0D 2 21" @245760 +2048 = 2048 bytes   [call 1075]
+   1080     50.278     P1>P2    nfs READ "/C/?\0D 2 21" @247808 +2048 = 2048 bytes   [call 1078]
+   1083     50.279     P1>P2    nfs READ "/C/?\0D 2 21" @249856 +2048 = 2048 bytes   [call 1081]
+   1086     50.280     P1>P2    nfs READ "/C/?\0D 2 21" @251904 +2048 = 2048 bytes   [call 1084]
+   1089     50.281     P1>P2    nfs READ "/C/?\0D 2 21" @253952 +2048 = 2048 bytes   [call 1087]
+   1092     50.282     P1>P2    nfs READ "/C/?\0D 2 21" @256000 +2048 = 2048 bytes   [call 1090]
+   1095     50.283     P1>P2    nfs READ "/C/?\0D 2 21" @258048 +2048 = 2048 bytes   [call 1093]
+   1098     50.284     P1>P2    nfs READ "/C/?\0D 2 21" @260096 +2048 = 2048 bytes   [call 1096]
+   1101     50.285     P1>P2    nfs READ "/C/?\0D 2 21" @262144 +2048 = 2048 bytes   [call 1099]
+   1104     50.286     P1>P2    nfs READ "/C/?\0D 2 21" @264192 +2048 = 2048 bytes   [call 1102]
+   1107     50.288     P1>P2    nfs READ "/C/?\0D 2 21" @266240 +2048 = 2048 bytes   [call 1105]
+   1110     50.289     P1>P2    nfs READ "/C/?\0D 2 21" @268288 +2048 = 2048 bytes   [call 1108]
+   1113     50.290     P1>P2    nfs READ "/C/?\0D 2 21" @270336 +2048 = 2048 bytes   [call 1111]
+   1116     50.291     P1>P2    nfs READ "/C/?\0D 2 21" @272384 +2048 = 2048 bytes   [call 1114]
+   1122     50.297     P1>P2    nfs READ "/C/?\0D 2 21" @426935 +7241 = 7241 bytes   [call 1117]
+   1131     50.356     P1>P2    nfs READ "/C/?\0D 2 21" @434176 +8192 = 8192 bytes   [call 1125]
+   1140     50.488     P1>P2    nfs READ "/C/?\0D 2 21" @442368 +8192 = 8192 bytes   [call 1134]
+   1152     50.753     P1>P2    nfs READ "/C/?\0D 2 21" @450560 +8192 = 8192 bytes   [call 1145]
+   1162     50.990     P1>P2    nfs READ "/C/?\0D 2 21" @458752 +8192 = 8192 bytes   [call 1156]
+   1172     51.242     P1>P2    nfs READ "/C/?\0D 2 21" @466944 +8192 = 8192 bytes   [call 1166]
+   1181     51.495     P1>P2    nfs READ "/C/?\0D 2 21" @475136 +6352 = 6352 bytes   [call 1176]
+   1194     51.942     P1>P2    nfs READ "/C/?\0D 2 5" @44184 +7016 = 7016 bytes   [call 1189]
+   1198     52.118     P1>P2    status usb=empty sd=empty link=true track P2 usb type=2 id=6 play=Some(3) flags=0x84 bpm=- browse=Some(7)
+   1205     52.123     P1>P2    nfs READ "/C/?\0D 2 5" @51200 +8192 = 8192 bytes   [call 1199]
+   1206     52.141     P1>P2    db get_generic_metadata txn=0x3800042 [0x01050302=D1/M5/S3/T2, 0x6]
+   1208     52.148     P2>P1    db success txn=0x3800042 [0x2202, 0xa]
+   1215     52.231     P1>P2    nfs READ "/C/?\0D 2 5" @59392 +8192 = 8192 bytes   [call 1209]
+   1221     52.599     P1>P2    db render_menu txn=0x3800043 [0x01050302=D1/M5/S3/T2, 0x0, 0xa, 0x0, 0xa, 0x0]
+   1228     52.601     P1>P2    nfs READ "/C/?\0D 2 5" @67584 +8192 = 8192 bytes   [call 1220]
+   1229     52.609     P2>P1    db menu_header txn=0x3800043 [0x1, 0x0]
+   1229     52.609     P2>P1    db menu_item id=6 type=0x0004 (title) label1="Title Tag v23" label2="" arg0=0x0 flags=0x2000000 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=6 type=0x0007 (artist) label1="Artist Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=6 type=0x0002 (album) label1="Album Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=6 type=0x0006 (genre) label1="Genre Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=4294967295 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=255 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_item id=192 type=0x0010 (bitrate) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1229     52.609     P2>P1    db menu_footer txn=0x3800043 []
+   1245     53.639     P1>P2    db get_generic_metadata txn=0x3800044 [0x01050302=D1/M5/S3/T2, 0x6]
+   1253     53.644     P1>P2    nfs READ "/C/?\0D 2 5" @75776 +8192 = 8192 bytes   [call 1247]
+   1254     53.649     P2>P1    db success txn=0x3800044 [0x2202, 0xa]
+   1257     53.832     P1>P2    db render_menu txn=0x3800045 [0x01050302=D1/M5/S3/T2, 0x0, 0x1, 0x0, 0xa, 0x0]
+   1264     53.834     P1>P2    nfs READ "/C/?\0D 2 5" @83968 +8192 = 8192 bytes   [call 1256]
+   1266     53.839     P2>P1    db menu_header txn=0x3800045 [0x1, 0x0]
+   1266     53.839     P2>P1    db menu_item id=6 type=0x0004 (title) label1="Title Tag v23" label2="" arg0=0x0 flags=0x2000000 artwork=6 pos=0 key=0
+   1266     53.839     P2>P1    db menu_footer txn=0x3800045 []
+   1279     54.356     P1>P2    nfs READ "/C/?\0D 2 5" @92160 +8192 = 8192 bytes   [call 1273]
+   1293     55.184     P1>P2    db menu_folder txn=0x3800046 [0x01010302=D1/M1/S3/T2, 0x0, 0xffffffff, 0x0]
+   1300     55.186     P1>P2    nfs READ "/C/?\0D 2 5" @100352 +8192 = 8192 bytes   [call 1292]
+   1301     55.189     P2>P1    db success txn=0x3800046 [0x2006, 0xf]
+   1309     55.210     P1>P2    nfs READ "/C/?\0D 2 5" @108544 +8192 = 8192 bytes   [call 1302]
+   1312     55.416     P1>P2    db render_menu txn=0x3800047 [0x01010302=D1/M1/S3/T2, 0x5, 0x6, 0x0, 0xf, 0x0]
+   1314     55.425     P2>P1    db menu_header txn=0x3800047 [0x1, 0x5]
+   1314     55.425     P2>P1    db menu_item id=1279 type=0x0001 (folder) label1="Order" label2="" arg0=0x5 flags=0x0 artwork=0 pos=0 key=0
+   1314     55.425     P2>P1    db menu_item id=1398 type=0x0001 (folder) label1="Sort" label2="" arg0=0x6 flags=0x0 artwork=0 pos=0 key=0
+   1314     55.425     P2>P1    db menu_item id=1400 type=0x0001 (folder) label1="Unicode" label2="" arg0=0x7 flags=0x0 artwork=0 pos=0 key=0
+   1314     55.425     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="Filename Artist - Filename Title.mp3" label2="" arg0=0x8 flags=0x2000000 artwork=1158 pos=0 key=0
+   1314     55.425     P2>P1    db menu_item id=1280 type=0x0004 (title) label1="SHORT.MP3" label2="" arg0=0x9 flags=0x2000000 artwork=1280 pos=0 key=0
+   1314     55.425     P2>P1    db menu_item id=6 type=0x0004 (title) label1="01 Full v23.mp3" label2="" arg0=0xa flags=0x2000000 artwork=6 pos=0 key=0
+   1314     55.425     P2>P1    db menu_footer txn=0x3800047 []
+   1329     56.463     P1>P2    db get_generic_metadata txn=0x3800048 [0x01020302=D1/M2/S3/T2, 0x6]
+   1336     56.465     P1>P2    nfs READ "/C/?\0D 2 5" @116736 +8192 = 8192 bytes   [call 1328]
+   1337     56.469     P2>P1    db success txn=0x3800048 [0x2202, 0xa]
+   1345     56.495     P1>P2    nfs READ "/C/?\0D 2 5" @124928 +8192 = 8192 bytes   [call 1338]
+   1353     57.011     P1>P2    db render_menu txn=0x3800049 [0x01020302=D1/M2/S3/T2, 0x0, 0x9, 0x0, 0xa, 0x0]
+   1355     57.020     P2>P1    db menu_header txn=0x3800049 [0x1, 0x0]
+   1355     57.020     P2>P1    db menu_item id=6 type=0x0004 (title) label1="Title Tag v23" label2="" arg0=0x0 flags=0x2000000 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=6 type=0x0007 (artist) label1="Artist Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=6 type=0x0002 (album) label1="Album Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=60 type=0x000b (duration) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=12500 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=6 type=0x0023 (comment) label1="Comment tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=6 type=0x0006 (genre) label1="Genre Tag v23" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=4294967295 type=0x000a (rating) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_item id=255 type=0x0013 (colour) label1="" label2="" arg0=0x0 flags=0x0 artwork=6 pos=0 key=0
+   1355     57.020     P2>P1    db menu_footer txn=0x3800049 []
+   1366     57.266     P1>P2    nfs READ "/C/?\0D 2 5" @133120 +8192 = 8192 bytes   [call 1359]
+   1377     57.584     P1>P2    nfs READ "/C/?\0D 2 5" @141312 +8192 = 8192 bytes   [call 1371]
+   1389     58.122     P1>P2    nfs READ "/C/?\0D 2 5" @149504 +8192 = 8192 bytes   [call 1383]
+   1401     59.028     P1>P2    db get_artwork txn=0x380004a [0x01080302=D1/M8/S3/T2, 0x6]
+   1408     59.031     P1>P2    nfs READ "/C/?\0D 2 5" @157696 +8192 = 8192 bytes   [call 1400]
+   1425     59.237     P1>P2    nfs READ "/C/?\0D 2 5" @165888 +8192 = 8192 bytes   [call 1414]
+   1438     59.789     P1>P2    nfs READ "/C/?\0D 2 5" @174080 +8192 = 8192 bytes   [call 1431]
+   1409     59.035     P2>P1    db artwork txn=0x380004a [0x2003, 0x0, 0x2e3e, blob[11838] ffd8ffe000104a46494600010100000100010000ffdb00430005030404040305...a0028a28a0028a28a0028a28a00fffd9 (625 zero bytes)]
+   1454     60.303     P1>P2    nfs READ "/C/?\0D 2 5" @182272 +8192 = 8192 bytes   [call 1448]
+   1472     61.130     P1>P2    nfs READ "/C/?\0D 2 5" @190464 +8192 = 8192 bytes   [call 1466]
+   1479     61.154     P1>P2    nfs READ "/C/?\0D 2 5" @198656 +8192 = 8192 bytes   [call 1473]
+   1494     61.798     P1>P2    nfs READ "/C/?\0D 2 5" @206848 +8192 = 8192 bytes   [call 1488]
+   1506     62.377     P1>P2    nfs READ "/C/?\0D 2 5" @215040 +8192 = 8192 bytes   [call 1500]
+   1520     62.921     P1>P2    nfs READ "/C/?\0D 2 5" @223232 +8192 = 8192 bytes   [call 1514]
+   1537     63.779     P1>P2    nfs READ "/C/?\0D 2 5" @231424 +8192 = 8192 bytes   [call 1531]
+   1544     63.800     P1>P2    nfs READ "/C/?\0D 2 5" @239616 +8192 = 8192 bytes   [call 1538]
+   1556     64.249     P1>P2    nfs READ "/C/?\0D 2 5" @247808 +8192 = 8192 bytes   [call 1550]
+   1574     65.197     P1>P2    nfs READ "/C/?\0D 2 5" @256000 +8192 = 8192 bytes   [call 1568]
+   1582     65.261     P1>P2    nfs READ "/C/?\0D 2 5" @264192 +8192 = 8192 bytes   [call 1576]
+   1593     65.665     P1>P2    nfs READ "/C/?\0D 2 5" @272384 +8192 = 8192 bytes   [call 1587]
+   1610     66.631     P1>P2    nfs READ "/C/?\0D 2 5" @280576 +8192 = 8192 bytes   [call 1604]
+   1623     67.114     P1>P2    nfs READ "/C/?\0D 2 5" @288768 +8192 = 8192 bytes   [call 1616]
+   1633     67.496     P1>P2    nfs READ "/C/?\0D 2 5" @296960 +8192 = 8192 bytes   [call 1627]
+   1647     68.101     P1>P2    nfs READ "/C/?\0D 2 5" @305152 +8192 = 8192 bytes   [call 1641]
+   1659     68.595     P1>P2    nfs READ "/C/?\0D 2 5" @313344 +8192 = 8192 bytes   [call 1652]
+   1671     69.066     P1>P2    nfs READ "/C/?\0D 2 5" @321536 +8192 = 8192 bytes   [call 1665]
+   1684     69.591     P1>P2    nfs READ "/C/?\0D 2 5" @329728 +8192 = 8192 bytes   [call 1677]
+   1693     69.807     P1>P2    nfs READ "/C/?\0D 2 5" @337920 +8192 = 8192 bytes   [call 1687]
+   1710     70.519     P1>P2    nfs READ "/C/?\0D 2 5" @346112 +8192 = 8192 bytes   [call 1703]
+   1724     71.021     P1>P2    nfs READ "/C/?\0D 2 5" @354304 +8192 = 8192 bytes   [call 1718]
+   1732     71.242     P1>P2    nfs READ "/C/?\0D 2 5" @362496 +8192 = 8192 bytes   [call 1726]
+   1748     71.961     P1>P2    nfs READ "/C/?\0D 2 5" @370688 +8192 = 8192 bytes   [call 1742]
+   1757     72.051     P1>P2    nfs READ "/C/?\0D 2 5" @378880 +8192 = 8192 bytes   [call 1751]
+   1760     72.427     P1>P2    status usb=empty sd=empty link=true track P2 usb type=2 id=6 play=Some(5) flags=0x84 bpm=- browse=Some(7)
+   1772     72.790     P1>P2    nfs READ "/C/?\0D 2 5" @387072 +8192 = 8192 bytes   [call 1766]
+   1785     73.366     P1>P2    nfs READ "/C/?\0D 2 5" @395264 +8192 = 8192 bytes   [call 1779]
+   1794     73.524     P1>P2    nfs READ "/C/?\0D 2 21" @379287 +7785 = 7785 bytes   [call 1788]
+   1805     73.737     P1>P2    nfs READ "/C/?\0D 2 21" @387072 +8192 = 8192 bytes   [call 1799]
+   1815     74.013     P1>P2    nfs READ "/C/?\0D 2 21" @395264 +8192 = 8192 bytes   [call 1809]
+   1825     74.328     P1>P2    nfs READ "/C/?\0D 2 21" @403456 +8192 = 8192 bytes   [call 1819]
+   1836     74.641     P1>P2    nfs READ "/C/?\0D 2 21" @411648 +8192 = 8192 bytes   [call 1830]
+   1844     74.674     P1>P2    nfs READ "/C/?\0D 2 21" @419840 +8192 = 8192 bytes   [call 1838]
+   1858     75.232     P1>P2    nfs READ "/C/?\0D 2 21" @428032 +8192 = 8192 bytes   [call 1851]
+   1867     75.484     P1>P2    nfs READ "/C/?\0D 2 21" @436224 +8192 = 8192 bytes   [call 1860]
+   1874     75.536     P1>P2    nfs READ "/C/?\0D 2 21" @331013 +6907 = 6907 bytes   [call 1869]
+   1883     75.583     P1>P2    nfs READ "/C/?\0D 2 21" @337920 +8192 = 8192 bytes   [call 1877]
+   1894     75.969     P1>P2    nfs READ "/C/?\0D 2 21" @346112 +8192 = 8192 bytes   [call 1888]
+   1904     76.252     P1>P2    nfs READ "/C/?\0D 2 21" @354304 +8192 = 8192 bytes   [call 1898]
+   1911     76.269     P1>P2    nfs READ "/C/?\0D 2 21" @362496 +8192 = 8192 bytes   [call 1905]
+   1925     76.841     P1>P2    nfs READ "/C/?\0D 2 21" @370688 +8192 = 8192 bytes   [call 1918]
+   1936     77.179     P1>P2    nfs READ "/C/?\0D 2 21" @378880 +8192 = 8192 bytes   [call 1930]
+   1946     77.476     P1>P2    nfs READ "/C/?\0D 2 21" @282739 +8077 = 8077 bytes   [call 1940]
+   1957     77.674     P1>P2    nfs READ "/C/?\0D 2 21" @290816 +8192 = 8192 bytes   [call 1951]
+   1964     77.800     P1>P2    nfs READ "/C/?\0D 2 21" @299008 +8192 = 8192 bytes   [call 1958]
+   1976     78.223     P1>P2    nfs READ "/C/?\0D 2 21" @307200 +8192 = 8192 bytes   [call 1969]
+   1983     78.240     P1>P2    nfs READ "/C/?\0D 2 21" @315392 +8192 = 8192 bytes   [call 1977]
+   1998     78.804     P1>P2    nfs READ "/C/?\0D 2 21" @323584 +8192 = 8192 bytes   [call 1992]
+   2008     79.099     P1>P2    nfs READ "/C/?\0D 2 21" @331776 +8192 = 8192 bytes   [call 2002]
+   2017     79.390     P1>P2    nfs READ "/C/?\0D 2 21" @235092 +6572 = 6572 bytes   [call 2012]
+   2027     79.598     P1>P2    nfs READ "/C/?\0D 2 21" @241664 +8192 = 8192 bytes   [call 2021]
+   2040     79.871     P1>P2    nfs READ "/C/?\0D 2 21" @249856 +8192 = 8192 bytes   [call 2034]
+   2050     80.150     P1>P2    nfs READ "/C/?\0D 2 21" @258048 +8192 = 8192 bytes   [call 2043]
+   2057     80.167     P1>P2    nfs READ "/C/?\0D 2 21" @266240 +8192 = 8192 bytes   [call 2051]
+   2072     80.723     P1>P2    nfs READ "/C/?\0D 2 21" @274432 +8192 = 8192 bytes   [call 2063]
+   2083     81.013     P1>P2    nfs READ "/C/?\0D 2 21" @282624 +8192 = 8192 bytes   [call 2077]
+   2093     81.315     P1>P2    nfs READ "/C/?\0D 2 21" @186817 +7743 = 7743 bytes   [call 2087]
+   2101     81.368     P1>P2    nfs READ "/C/?\0D 2 21" @194560 +8192 = 8192 bytes   [call 2095]
+   2114     81.791     P1>P2    nfs READ "/C/?\0D 2 21" @202752 +8192 = 8192 bytes   [call 2108]
+   2125     82.093     P1>P2    nfs READ "/C/?\0D 2 21" @210944 +8192 = 8192 bytes   [call 2119]
+   2134     82.375     P1>P2    nfs READ "/C/?\0D 2 21" @219136 +8192 = 8192 bytes   [call 2128]
+   2145     82.676     P1>P2    nfs READ "/C/?\0D 2 21" @227328 +8192 = 8192 bytes   [call 2139]
+   2156     82.972     P1>P2    nfs READ "/C/?\0D 2 21" @235520 +8192 = 8192 bytes   [call 2149]
+   2166     83.283     P1>P2    nfs READ "/C/?\0D 2 21" @139170 +6238 = 6238 bytes   [call 2161]
+   2173     83.327     P1>P2    nfs READ "/C/?\0D 2 21" @145408 +8192 = 8192 bytes   [call 2167]
+   2184     83.690     P1>P2    nfs READ "/C/?\0D 2 21" @153600 +8192 = 8192 bytes   [call 2178]
+   2191     83.707     P1>P2    nfs READ "/C/?\0D 2 21" @161792 +8192 = 8192 bytes   [call 2185]
+   2204     84.095     P1>P2    nfs READ "/C/?\0D 2 21" @169984 +8192 = 8192 bytes   [call 2197]
+   2212     84.257     P1>P2    nfs READ "/C/?\0D 2 21" @178176 +8192 = 8192 bytes   [call 2206]
+   2226     84.810     P1>P2    nfs READ "/C/?\0D 2 21" @186368 +8192 = 8192 bytes   [call 2220]
+   2237     85.133     P1>P2    nfs READ "/C/?\0D 2 21" @90896 +7408 = 7408 bytes   [call 2231]
+   2246     85.328     P1>P2    nfs READ "/C/?\0D 2 21" @98304 +8192 = 8192 bytes   [call 2240]
+   2256     85.597     P1>P2    nfs READ "/C/?\0D 2 21" @106496 +8192 = 8192 bytes   [call 2250]
+   2263     85.615     P1>P2    nfs READ "/C/?\0D 2 21" @114688 +8192 = 8192 bytes   [call 2257]
+   2277     86.164     P1>P2    nfs READ "/C/?\0D 2 21" @122880 +8192 = 8192 bytes   [call 2271]
+   2287     86.447     P1>P2    nfs READ "/C/?\0D 2 21" @131072 +8192 = 8192 bytes   [call 2281]
+   2297     86.736     P1>P2    nfs READ "/C/?\0D 2 21" @139264 +8192 = 8192 bytes   [call 2291]
+   2308     87.048     P1>P2    nfs READ "/C/?\0D 2 21" @43248 +7952 = 7952 bytes   [call 2302]
+   2317     87.242     P1>P2    nfs READ "/C/?\0D 2 21" @51200 +8192 = 8192 bytes   [call 2311]
+   2327     87.521     P1>P2    nfs READ "/C/?\0D 2 21" @59392 +8192 = 8192 bytes   [call 2320]
+   2334     87.541     P1>P2    nfs READ "/C/?\0D 2 21" @67584 +8192 = 8192 bytes   [call 2328]
+   2348     88.073     P1>P2    nfs READ "/C/?\0D 2 21" @75776 +8192 = 8192 bytes   [call 2342]
+   2356     88.090     P1>P2    nfs READ "/C/?\0D 2 21" @83968 +8192 = 8192 bytes   [call 2350]
+   2369     88.646     P1>P2    nfs READ "/C/?\0D 2 21" @92160 +8192 = 8192 bytes   [call 2363]
+   2378     88.898     P1>P2    nfs READ "/C/?\0D 2 21" @100352 +8192 = 8192 bytes   [call 2372]
+   2387     88.958     P1>P2    nfs READ "/C/?\0D 2 21" @0 +8192 = 8192 bytes   [call 2381]
+   2397     89.224     P1>P2    nfs READ "/C/?\0D 2 21" @8192 +8192 = 8192 bytes   [call 2391]
+   2405     89.507     P1>P2    nfs READ "/C/?\0D 2 21" @16384 +8192 = 8192 bytes   [call 2399]
+   2414     89.524     P1>P2    nfs READ "/C/?\0D 2 21" @24576 +8192 = 8192 bytes   [call 2408]
+   2424     89.803     P1>P2    nfs READ "/C/?\0D 2 21" @32768 +8192 = 8192 bytes   [call 2418]
+   2440     90.361     P1>P2    nfs READ "/C/?\0D 2 21" @40960 +8192 = 8192 bytes   [call 2434]
+   2451     90.653     P1>P2    nfs READ "/C/?\0D 2 21" @49152 +8192 = 8192 bytes   [call 2445]
+   2458     90.672     P1>P2    nfs READ "/C/?\0D 2 21" @57344 +8192 = 8192 bytes   [call 2452]
+   2469     90.804     P1>P2    nfs READ "/C/?\0D 2 21" @0 +8192 = 8192 bytes   [call 2461]
+   2477     90.926     P1>P2    nfs READ "/C/?\0D 2 21" @8192 +8192 = 8192 bytes   [call 2471]
+   2479     90.987     P1>P2    db render_menu txn=0x380004b [0x01030302=D1/M3/S3/T2, 0x0, 0x1, 0x0, 0x7, 0x0]
+   2481     90.994     P2>P1    db menu_header txn=0x380004b [0x1, 0x0]
+   2481     90.994     P2>P1    db menu_item id=1158 type=0x0004 (title) label1="" label2="" arg0=0x0 flags=0x2000000 artwork=0 pos=0 key=0
+   2481     90.994     P2>P1    db menu_footer txn=0x380004b []
+   2483     91.005     P1>P2    db get_track_info txn=0x380004c [0x01080302=D1/M8/S3/T2, 0x486]
+   2485     91.014     P2>P1    db success txn=0x380004c [0x2102, 0x5]
+   2487     91.023     P1>P2    db render_menu txn=0x380004d [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+   2489     91.029     P2>P1    db menu_header txn=0x380004d [0x1, 0x0]
+   2489     91.029     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+   2489     91.029     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x15 flags=0x0 artwork=0 pos=0 key=0
+   2489     91.029     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2489     91.029     P2>P1    db menu_item id=1158 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2489     91.029     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x758d0 flags=0x0 artwork=0 pos=0 key=0
+   2489     91.029     P2>P1    db menu_footer txn=0x380004d []
+   2492     91.041     P1>P2    db get_track_info txn=0x380004e [0x01080302=D1/M8/S3/T2, 0x486]
+   2494     91.049     P2>P1    db success txn=0x380004e [0x2102, 0x5]
+   2497     91.059     P1>P2    db render_menu txn=0x380004f [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+   2499     91.064     P2>P1    db menu_header txn=0x380004f [0x1, 0x0]
+   2499     91.064     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+   2499     91.064     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x15 flags=0x0 artwork=0 pos=0 key=0
+   2499     91.064     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2499     91.064     P2>P1    db menu_item id=1158 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2499     91.064     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x758d0 flags=0x0 artwork=0 pos=0 key=0
+   2499     91.064     P2>P1    db menu_footer txn=0x380004f []
+   2502     91.069     P1>P2    nfs LOOKUP "/C/?\0D 2 15" (name bytes 3f00442032203135; dir fh tail 0301000000001b58000000000203020000000486) = NFREG size=481488 fileid=19243536 fh:0125a210012538a8012538a80000000000000000000000000000000000000000   [call 2500]
+   2503     91.077     P1>P2    db unknown_3100 txn=0x3800050 [0x01030302=D1/M3/S3/T2, 0x486, 0x0, 0x0]
+   2505     91.084     P2>P1    db success txn=0x3800050 [0x3100, 0x0]
+   2507     91.095     P1>P2    db get_track_info txn=0x3800051 [0x01080302=D1/M8/S3/T2, 0x486]
+   2510     91.104     P2>P1    db success txn=0x3800051 [0x2102, 0x5]
+   2512     91.113     P1>P2    db render_menu txn=0x3800052 [0x01080302=D1/M8/S3/T2, 0x0, 0x5, 0x0, 0x5, 0x0]
+   2514     91.119     P2>P1    db menu_header txn=0x3800052 [0x1, 0x0]
+   2514     91.119     P2>P1    db menu_item id=1 type=0x0004 (title) label1="" label2="" arg0=0x2 flags=0x0 artwork=0 pos=0 key=0
+   2514     91.119     P2>P1    db menu_item id=20 type=0x000b (duration) label1="" label2="" arg0=0x15 flags=0x0 artwork=0 pos=0 key=0
+   2514     91.119     P2>P1    db menu_item id=0 type=0x000d (tempo) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2514     91.119     P2>P1    db menu_item id=1158 type=0x0023 (comment) label1="" label2="" arg0=0x0 flags=0x0 artwork=0 pos=0 key=0
+   2514     91.119     P2>P1    db menu_item id=0 type=0x0000 (path) label1="" label2="" arg0=0x758d0 flags=0x0 artwork=0 pos=0 key=0
+   2514     91.119     P2>P1    db menu_footer txn=0x3800052 []
+   2516     91.131     P1>P2    db get_vbr_index txn=0x3800053 [0x01080302=D1/M8/S3/T2, 0x486]
+   2518     91.139     P2>P1    db vbr_index txn=0x3800053 [0x2504, 0x0, 0x644, blob[1604] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (1604 zero bytes)]
+   2521     91.149     P1>P2    db get_waveform_preview txn=0x3800054 [0x01080302=D1/M8/S3/T2, 0x3, 0x486, 0x0, blob[0]]
+   2523     91.154     P2>P1    db waveform_preview txn=0x3800054 [0x2004, 0x0, 0x384, blob[900] 0000000000000000000000000000000000000000000000000000000000000000...00000000000000000000000000000000 (900 zero bytes)]
+   2526     91.156     P1>P2    nfs GETATTR "/C/?\0D 2 15" = NFREG size=481488 fileid=19243536   [call 2524]
+   2528     91.160     P1>P2    nfs READ "/C/?\0D 2 15" @481328 +160 = 160 bytes   [call 2527]
+   2531     91.162     P1>P2    nfs READ "/C/?\0D 2 15" @0 +2048 = 2048 bytes   [call 2529]
+   2534     91.165     P1>P2    nfs READ "/C/?\0D 2 15" @0 +2048 = 2048 bytes   [call 2532]
+   2537     91.167     P1>P2    nfs READ "/C/?\0D 2 15" @0 +2048 = 2048 bytes   [call 2535]
+   2540     91.170     P1>P2    nfs READ "/C/?\0D 2 15" @0 +2048 = 2048 bytes   [call 2538]
+   2543     91.173     P1>P2    nfs READ "/C/?\0D 2 15" @2048 +2048 = 2048 bytes   [call 2541]
+   2546     91.177     P1>P2    nfs READ "/C/?\0D 2 15" @4096 +2048 = 2048 bytes   [call 2544]
+   2549     91.179     P1>P2    nfs READ "/C/?\0D 2 15" @6144 +2048 = 2048 bytes   [call 2547]
+   2552     91.183     P1>P2    nfs READ "/C/?\0D 2 15" @8192 +2048 = 2048 bytes   [call 2550]
+   2555     91.185     P1>P2    nfs READ "/C/?\0D 2 15" @10240 +2048 = 2048 bytes   [call 2553]
+   2558     91.189     P1>P2    nfs READ "/C/?\0D 2 15" @12288 +2048 = 2048 bytes   [call 2556]
+   2561     91.191     P1>P2    nfs READ "/C/?\0D 2 15" @14336 +2048 = 2048 bytes   [call 2559]
+   2564     91.195     P1>P2    nfs READ "/C/?\0D 2 15" @16384 +2048 = 2048 bytes   [call 2562]
+   2567     91.197     P1>P2    nfs READ "/C/?\0D 2 15" @18432 +2048 = 2048 bytes   [call 2565]
+   2570     91.201     P1>P2    nfs READ "/C/?\0D 2 15" @20480 +2048 = 2048 bytes   [call 2568]
+   2573     91.203     P1>P2    nfs READ "/C/?\0D 2 15" @22528 +2048 = 2048 bytes   [call 2571]
+   2576     91.207     P1>P2    nfs READ "/C/?\0D 2 15" @24576 +2048 = 2048 bytes   [call 2574]
+   2579     91.209     P1>P2    nfs READ "/C/?\0D 2 15" @26624 +2048 = 2048 bytes   [call 2577]
+   2582     91.213     P1>P2    nfs READ "/C/?\0D 2 15" @28672 +2048 = 2048 bytes   [call 2580]
+   2585     91.216     P1>P2    nfs READ "/C/?\0D 2 15" @30720 +2048 = 2048 bytes   [call 2583]
+   2588     91.221     P1>P2    nfs READ "/C/?\0D 2 15" @240744 +2048 = 2048 bytes   [call 2586]
+   2590     91.223     P1>P2    nfs READ "/C/?\0D 2 15" @241370 +294 = 294 bytes   [call 2589]
+   2593     91.225     P1>P2    nfs READ "/C/?\0D 2 15" @241664 +2048 = 2048 bytes   [call 2591]
+   2596     91.227     P1>P2    nfs READ "/C/?\0D 2 15" @243712 +2048 = 2048 bytes   [call 2594]
+   2599     91.231     P1>P2    nfs READ "/C/?\0D 2 15" @245760 +2048 = 2048 bytes   [call 2597]
+   2602     91.233     P1>P2    nfs READ "/C/?\0D 2 15" @247808 +2048 = 2048 bytes   [call 2600]
+   2605     91.236     P1>P2    nfs READ "/C/?\0D 2 15" @249856 +2048 = 2048 bytes   [call 2603]
+   2608     91.239     P1>P2    nfs READ "/C/?\0D 2 15" @251904 +2048 = 2048 bytes   [call 2606]
+   2611     91.242     P1>P2    nfs READ "/C/?\0D 2 15" @253952 +2048 = 2048 bytes   [call 2609]
+   2614     91.245     P1>P2    nfs READ "/C/?\0D 2 15" @256000 +2048 = 2048 bytes   [call 2612]
+   2617     91.249     P1>P2    nfs READ "/C/?\0D 2 15" @258048 +2048 = 2048 bytes   [call 2615]
+   2620     91.251     P1>P2    nfs READ "/C/?\0D 2 15" @260096 +2048 = 2048 bytes   [call 2618]
+   2623     91.255     P1>P2    nfs READ "/C/?\0D 2 15" @262144 +2048 = 2048 bytes   [call 2621]
+   2626     91.257     P1>P2    nfs READ "/C/?\0D 2 15" @264192 +2048 = 2048 bytes   [call 2624]
+   2630     91.261     P1>P2    nfs READ "/C/?\0D 2 15" @266240 +2048 = 2048 bytes   [call 2628]
+   2633     91.263     P1>P2    nfs READ "/C/?\0D 2 15" @268288 +2048 = 2048 bytes   [call 2631]
+   2636     91.267     P1>P2    nfs READ "/C/?\0D 2 15" @270336 +2048 = 2048 bytes   [call 2634]
+   2639     91.269     P1>P2    nfs READ "/C/?\0D 2 15" @272384 +2048 = 2048 bytes   [call 2637]
+   2645     91.281     P1>P2    nfs READ "/C/?\0D 2 15" @426935 +7241 = 7241 bytes   [call 2640]
+   2653     91.325     P1>P2    nfs READ "/C/?\0D 2 15" @434176 +8192 = 8192 bytes   [call 2647]
+   2662     91.490     P1>P2    nfs READ "/C/?\0D 2 15" @442368 +8192 = 8192 bytes   [call 2656]
+   2676     91.996     P1>P2    nfs READ "/C/?\0D 2 15" @450560 +8192 = 8192 bytes   [call 2669]
+   2683     92.014     P1>P2    nfs READ "/C/?\0D 2 15" @458752 +8192 = 8192 bytes   [call 2677]
+   2697     92.563     P1>P2    nfs READ "/C/?\0D 2 15" @466944 +8192 = 8192 bytes   [call 2691]
+   2707     92.857     P1>P2    nfs READ "/C/?\0D 2 15" @475136 +6352 = 6352 bytes   [call 2702]
+   2717     93.138     P1>P2    nfs READ "/C/?\0D 2 15" @379287 +7785 = 7785 bytes   [call 2711]
+   2725     93.197     P1>P2    nfs READ "/C/?\0D 2 15" @387072 +8192 = 8192 bytes   [call 2719]
+   2734     93.368     P1>P2    nfs READ "/C/?\0D 2 15" @395264 +8192 = 8192 bytes   [call 2728]
+   2744     93.632     P1>P2    nfs READ "/C/?\0D 2 15" @403456 +8192 = 8192 bytes   [call 2738]
+   2756     94.148     P1>P2    nfs READ "/C/?\0D 2 15" @411648 +8192 = 8192 bytes   [call 2749]
+   2766     94.459     P1>P2    nfs READ "/C/?\0D 2 15" @419840 +8192 = 8192 bytes   [call 2760]
+   2774     94.581     P1>P2    nfs READ "/C/?\0D 2 15" @428032 +8192 = 8192 bytes   [call 2768]
+   2786     95.016     P1>P2    nfs READ "/C/?\0D 2 15" @331013 +6907 = 6907 bytes   [call 2781]
+   2793     95.066     P1>P2    nfs READ "/C/?\0D 2 15" @337920 +8192 = 8192 bytes   [call 2787]
+   2802     95.210     P1>P2    nfs READ "/C/?\0D 2 15" @346112 +8192 = 8192 bytes   [call 2796]
+   2814     95.743     P1>P2    nfs READ "/C/?\0D 2 15" @354304 +8192 = 8192 bytes   [call 2808]
+   2821     95.761     P1>P2    nfs READ "/C/?\0D 2 15" @362496 +8192 = 8192 bytes   [call 2815]
+   2834     96.304     P1>P2    nfs READ "/C/?\0D 2 15" @370688 +8192 = 8192 bytes   [call 2828]
+   2844     96.595     P1>P2    nfs READ "/C/?\0D 2 15" @378880 +8192 = 8192 bytes   [call 2838]
+   2855     96.917     P1>P2    nfs READ "/C/?\0D 2 15" @282739 +8077 = 8077 bytes   [call 2849]
+   2862     96.973     P1>P2    nfs READ "/C/?\0D 2 15" @290816 +8192 = 8192 bytes   [call 2856]
+   2874     97.393     P1>P2    nfs READ "/C/?\0D 2 15" @299008 +8192 = 8192 bytes   [call 2867]
+   2884     97.679     P1>P2    nfs READ "/C/?\0D 2 15" @307200 +8192 = 8192 bytes   [call 2877]
+   2891     97.696     P1>P2    nfs READ "/C/?\0D 2 15" @315392 +8192 = 8192 bytes   [call 2885]
+   2903     98.231     P1>P2    nfs READ "/C/?\0D 2 15" @323584 +8192 = 8192 bytes   [call 2897]
+   2914     98.530     P1>P2    nfs READ "/C/?\0D 2 15" @331776 +8192 = 8192 bytes   [call 2908]
+   2924     98.814     P1>P2    nfs READ "/C/?\0D 2 15" @235092 +6572 = 6572 bytes   [call 2919]
+   2931     98.876     P1>P2    nfs READ "/C/?\0D 2 15" @241664 +8192 = 8192 bytes   [call 2925]
+   2940     99.038     P1>P2    nfs READ "/C/?\0D 2 15" @249856 +8192 = 8192 bytes   [call 2934]
+   2950     99.402     P1>P2    nfs READ "/C/?\0D 2 15" @258048 +8192 = 8192 bytes   [call 2944]
+   2962     99.870     P1>P2    nfs READ "/C/?\0D 2 15" @266240 +8192 = 8192 bytes   [call 2955]
+   2972    100.169     P1>P2    nfs READ "/C/?\0D 2 15" @274432 +8192 = 8192 bytes   [call 2966]
+   2979    100.188     P1>P2    nfs READ "/C/?\0D 2 15" @282624 +8192 = 8192 bytes   [call 2973]
+   3047    105.589     P1>P2    status usb=empty sd=empty link=true track P2 usb type=2 id=6 play=Some(3) flags=0x84 bpm=- browse=Some(7)
+   3055    105.709     P1>P2    nfs READ "/C/?\0D 2 5" @389628 +7684 = 7684 bytes   [call 3049]
+   3064    105.901     P1>P2    nfs READ "/C/?\0D 2 5" @397312 +8192 = 8192 bytes   [call 3058]
+   3075    106.345     P1>P2    nfs READ "/C/?\0D 2 5" @405504 +8192 = 8192 bytes   [call 3069]
+   3086    106.654     P1>P2    nfs READ "/C/?\0D 2 5" @413696 +8192 = 8192 bytes   [call 3080]
+   3099    107.311     P1>P2    nfs READ "/C/?\0D 2 5" @421888 +8192 = 8192 bytes   [call 3093]
+   3108    107.575     P1>P2    nfs READ "/C/?\0D 2 5" @430080 +8192 = 8192 bytes   [call 3102]
+   3117    107.787     P1>P2    nfs READ "/C/?\0D 2 5" @438272 +8192 = 8192 bytes   [call 3111]
+   3134    108.714     P1>P2    nfs READ "/C/?\0D 2 5" @446464 +8192 = 8192 bytes   [call 3128]
+   3143    108.868     P1>P2    nfs READ "/C/?\0D 2 5" @454656 +8192 = 8192 bytes   [call 3137]
+   3156    109.626     P1>P2    nfs READ "/C/?\0D 2 5" @462848 +8192 = 8192 bytes   [call 3150]
+   3168    110.150     P1>P2    nfs READ "/C/?\0D 2 5" @471040 +8192 = 8192 bytes   [call 3162]
+   3176    110.349     P1>P2    nfs READ "/C/?\0D 2 5" @479232 +8192 = 8192 bytes   [call 3170]
+   3191    111.093     P1>P2    nfs READ "/C/?\0D 2 5" @487424 +8192 = 8192 bytes   [call 3185]
+   3206    111.555     P1>P2    nfs READ "/C/?\0D 2 5" @495616 +8192 = 8192 bytes   [call 3198]
+
+keep-alives: P1 55, P2 48
+beat packets: none
+status packets: P1 422, P2 648
+NFS reads of "/C/?\0D 2 15": 73 reads, 354684 bytes, offsets 0..481488
+NFS reads of "/C/?\0D 2 21": 113 reads, 678937 bytes, offsets 0..481488
+NFS reads of "/C/?\0D 2 5": 105 reads, 612995 bytes, offsets 0..1453552

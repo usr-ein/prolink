@@ -18,6 +18,9 @@ E03-master-handoff-playing/
 └── NOTES.md    what was done, when, what came of it, and against the hardware
 ```
 
+E10-E19 also carry `transcript.txt`, `tools/emudump`'s reading of `run.pcap`
+("Reading them"), and their `cmd.txt` is the shell script that ran the session.
+
 ## The rig
 
 Shared by every emu-capture.
@@ -38,8 +41,8 @@ Shared by every emu-capture.
   clock. In these captures: keep-alives every 2.000 s (median; a real NXS
   2.003 s), status packets every 0.2 s with extra ones on changes, on ~64 ms
   ticks, as on real decks. The Mac (an M2 Pro, twelve cores) was shared with
-  other emulated CDJs and agents: each NOTES.md gives its load averages, and
-  its keep-alives as the check that the players kept time.
+  other emulated CDJs and agents: each NOTES.md gives its keep-alives as the
+  check that the players kept time, and E01-E09's their load averages too.
 - **The link** is `pi-qemu link`, a software switch: every frame reaches every
   member, nothing is lost, and `pi-qemu link capture` records each frame
   once. So there are no bridge copies to fold, unlike the `pktap` captures
@@ -244,6 +247,69 @@ emulator alone):
    player alone on the link sends none, and when E07's master leaves, the
    other player's status goes unseen until a peer comes back.
 
+## E10-E19: a stick without rekordbox
+
+What a CDJ does with a USB stick of music files that rekordbox never saw, on
+its own and shared over LINK. What the sessions show is written up in
+[`PLAIN-STICKS.md`](PLAIN-STICKS.md); the stick is `plain-stick/`, whose
+`make_stick.py` remakes it.
+
+Two NXSs on link `emu-captures-usb-net`:
+
+| | player | address | MAC | media |
+| --- | --- | --- | --- | --- |
+| A | 2 | 169.254.173.12 | 02:43:44:bc:ad:0c | the session's stick, in USB |
+| B | 1 | 169.254.209.145 | 02:43:44:d2:d1:91 | none: it reaches A's stick over LINK |
+
+- **The stick:** PLAINMP3, a 1 GiB FAT32 image of generated files with tags
+  chosen for the purpose and no `PIONEER/` (`plain-stick/README.md`). E16
+  puts SAM1 in its place, the rekordbox stick of E01-E09, and E17 SAM1 with
+  loose MP3s beside its export. A's writes go to an overlay that is thrown
+  away.
+- **The DSP:** `--dsp-model` on both players, but B in E13, which runs
+  Pioneer's DSP code, interpreted (~0.04x). With the model a loaded track
+  plays at once, as in E01-E09 ("A load plays at once"). The dbserver and NFS
+  requests of a load are the same with either (E12, E13).
+
+### Before every session
+
+`cmd.txt` is the script that ran it, and `plain-stick/rig.sh` the rig it
+sources:
+
+1. **Both players booted fresh:** B first, so its AUTO number is 1; then the
+   capture; then A with the stick.
+2. **Each TEMPO slider centred** through the emulator's panel channel, field 3
+   then field 2 = 32768, as for E01-E09.
+3. **The browse encoder turned one detent at a time:** several sent at once
+   are not all counted.
+
+### Sessions
+
+| Session | Size | What it records |
+| --- | --- | --- |
+| `E10-local-folder-load` | 0.6 MB | A browses its own plain stick and plays from it; B only listens |
+| `E11-link-browse` | 1.8 MB | B browses every folder of A's plain stick over LINK |
+| `E12-link-load-play` | 2.2 MB | B loads a fully tagged MP3 from it over LINK and plays it |
+| `E13-link-load-pioneer-dsp` | 2.3 MB | the same load, B on Pioneer's DSP code |
+| `E14-link-load-formats` | 39 MB | B loads every other kind of file on the stick, one after another |
+| `E15-link-tag-list` | 2.4 MB | B tags files of the stick, browses its tag list, loads from it |
+| `E16-rekordbox-control` | 5.7 MB | the control: SAM1, a rekordbox stick, in A instead |
+| `E17-mixed-stick` | 2.2 MB | SAM1 with loose MP3s beside its export |
+
+E14 is large because a player reads whole files over NFS, and reads the WAV
+and the AIFF again for each load beside them.
+
+### Against the hardware
+
+The corpus has no plain stick. E16 is the same rig with a rekordbox stick,
+set against `../captures/S05`, `S06` and `S20`: the root categories in S20's
+order, thirteen-item metadata, six-item track info with the path, the path
+walked by LOOKUP, the analysis served, beat packets while playing, as the
+real NXSs exchanged them. And S20's real request for FOLDER on a rekordbox
+stick carries the track type, 2, that every request of E11-E15 carries. What
+the emulator cannot show (no audio, so nothing measured from it; the play at
+load; a medium's writes) is in `PLAIN-STICKS.md` §11.
+
 ## What is in the packets
 
 Link-local addresses (169.254.0.0/16), MACs made up from the players' names
@@ -255,6 +321,11 @@ each other about their USB slots, and the answers carry the stick's name
 artwork, file paths or audio: nothing in these sessions browses another
 player's stick or loads from it.
 
+E10-E15 browse and load PLAINMP3, so they carry its made-up names, tags and
+artwork, and the click tracks' audio, read over NFS. E16 and E17 browse and
+load from SAM1: track and artist names, artwork, and the audio of the tracks
+loaded, as the hardware captures carry the author's music.
+
 ## Reading them
 
 `prolink pcap run.pcap` counts what is in a capture. The fields that matter
@@ -265,3 +336,16 @@ state), `0x8c` (pitch, `0x00100000` = 0%), `0x92` (BPM x 100), `0x9e`
 `0x54` (pitch), `0x5a` (BPM x 100), `0x5c` (beat in bar). The NOTES' numbers
 come from those fields, decoded with `prolink-proto`, times from the pcap's
 own timestamps.
+
+E10-E19 come with `transcript.txt`, the output of `tools/emudump`, so nothing
+needs building to read one: a line per event, by frame (Wireshark's
+numbering), with every dbserver message through `prolink-proto`'s own codec,
+every NFS, mount and portmap call with its reply and the path it names, media
+queries and responses, and a player's status whenever it changes. It is a
+crate of its own, outside the workspace, and reads `prolink-proto` and
+`prolink-capture` without changing them:
+
+```sh
+cargo run --release --manifest-path tools/emudump/Cargo.toml -- E11-link-browse/run.pcap
+cargo run --release --manifest-path tools/emudump/Cargo.toml -- --raw-status E12-link-load-play/run.pcap
+```

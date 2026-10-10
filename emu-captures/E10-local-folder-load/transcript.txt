@@ -1,0 +1,53 @@
+      1      0.000     P1>169.254.255.255 keep-alive: player 1 is 169.254.209.145, "CDJ-2000nexus"
+      4      5.732  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      6      6.731  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      8      8.731  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+     15     14.734  169.254.173.12>169.254.255.255 hello
+     16     15.032  169.254.173.12>169.254.255.255 hello
+     17     15.331  169.254.173.12>169.254.255.255 hello
+     18     15.632  169.254.173.12>169.254.255.255 claim_mac
+     19     15.932  169.254.173.12>169.254.255.255 claim_mac
+     21     16.232  169.254.173.12>169.254.255.255 claim_mac
+     22     16.532  169.254.173.12>169.254.255.255 claim_ip number=1 ip=169.254.173.12
+     25     16.534     P1>169.254.173.12 mixer_assign
+     26     16.534  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     27     16.832  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     28     17.132  169.254.173.12>169.254.255.255 claim_ip number=2 ip=169.254.173.12
+     29     17.432  169.254.173.12>169.254.255.255 claim_number number=2
+     30     17.433     P1>169.254.173.12 number_in_use number=1
+     31     17.434     P2>169.254.255.255 keep-alive: player 2 is 169.254.173.12, "CDJ-2000nexus"
+     32     17.453     P1>P2    status usb=empty sd=empty link=false no track play=Some(0) flags=0x84 bpm=- browse=None
+     37     18.048     P2>P1    status usb=loaded sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     45     18.442     P1>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 44]
+     47     18.442     P1>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 46]
+     49     18.444     P1>P2    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 48]
+     50     18.453     P1>P2    media_query: P1 (169.254.209.145) asks about P2 usb
+     51     18.453     P2>P1    media_response: P2 usb name="PLAINMP3" created="" tracks=0 playlists=0 total=Some(1070579712) free=Some(1040375808)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 03 00 50 00 4c
+                         0030  00 41 00 49 00 4e 00 4d 00 50 00 33 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0070  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0080  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00
+                         00b0  00 00 00 00 3f cf c0 00 00 00 00 00 3e 02 e0 00
+     54     18.458     P1>P2    port query (0000000f52656d6f7465444253657276657200)
+     55     18.459     P2>P1    port reply: dbserver on 1051
+     60     18.461     P1>P2    status usb=empty sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     61     18.461     P1>P2    dbserver preamble 11 00 00 00 01
+     62     18.462     P2>P1    dbserver preamble 11 00 00 00 01
+     63     18.463     P1>P2    db introduce txn=0xfffffffe [0x1]
+     64     18.464     P2>P1    db success txn=0xfffffffe [0x0, 0x2]
+     66     18.470     P1>P2    db unknown_3e03 txn=0x3800001 [0x01010301=D1/M1/S3/T1]
+     68     18.477     P2>P1    db unknown_4b02 txn=0x3800001 [0x3e03, 0x0, 0x2, ""]
+   1107     91.511     P2>P1    status usb=loaded sd=empty link=true track P2 usb type=2 id=6 play=Some(2) flags=0x84 bpm=- browse=Some(7)
+   1113     91.903     P2>P1    status usb=loaded sd=empty link=true track P2 usb type=2 id=6 play=Some(3) flags=0x84 bpm=- browse=Some(7)
+   1285    105.679     P2>P1    status usb=loaded sd=empty link=true track P2 usb type=2 id=6 play=Some(5) flags=0x84 bpm=- browse=Some(7)
+
+keep-alives: P1 76, P2 68
+beat packets: none
+status packets: P1 758, P2 847
