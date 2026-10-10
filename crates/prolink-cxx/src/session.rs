@@ -786,7 +786,6 @@ impl Session {
     /// take master at all: it publishes no status, so nobody would see it.
     pub fn take_tempo_master(&self) {
         let generation = self.master_generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let live = Arc::clone(&self.live);
         let found = self.with_live(|held| {
             let Role::Player(_) = &held.role else {
                 tracing::warn!("an observer cannot take tempo master");
@@ -817,6 +816,11 @@ impl Session {
             });
             return;
         };
+        // Listening before asking: a holder answers within 5 ms (S28), and a
+        // grant that came before we listened would only be seen on a recheck.
+        let Some(events) = self.with_live(|held| held.monitor.subscribe()) else {
+            return;
+        };
         if !request_master(&self.live, holder) {
             return;
         }
@@ -824,49 +828,13 @@ impl Session {
         // Then watch the holder's own status, because the `0x27` reply is
         // unicast to a port the monitor holds; see
         // `VirtualCdj::request_tempo_master`.
-        let master_generation = Arc::clone(&self.master_generation);
-        self.runtime.spawn(async move {
-            for poll in 0..MASTER_HANDOVER_POLLS {
-                tokio::time::sleep(MASTER_HANDOVER_POLL).await;
-                if master_generation.load(Ordering::SeqCst) != generation {
-                    // Pressed again, or let go of: this take is over.
-                    return;
-                }
-                let outcome = {
-                    let held = read_live(&live);
-                    let Some(session) = held.as_ref() else {
-                        return;
-                    };
-                    let Some(cdj) = session.role.cdj() else {
-                        return;
-                    };
-                    if cdj.is_tempo_master() {
-                        return;
-                    }
-                    let outcome =
-                        take_outcome(&session.monitor.players(), holder, session.role.number());
-                    if matches!(outcome, TakeOutcome::Granted | TakeOutcome::Vacant) {
-                        cdj.set_tempo_master(true);
-                        tracing::info!(%holder, ?outcome, "took tempo master");
-                    }
-                    outcome
-                };
-                match outcome {
-                    TakeOutcome::Granted | TakeOutcome::Vacant => return,
-                    TakeOutcome::TakenByAnother(other) => {
-                        tracing::info!(%holder, %other, "tempo master went to another deck");
-                        return;
-                    }
-                    // A request lost on the wire is never answered; one more,
-                    // a few status packets in, costs nothing.
-                    TakeOutcome::Waiting if poll == MASTER_REQUEST_RESEND_AFTER => {
-                        request_master(&live, holder);
-                    }
-                    TakeOutcome::Waiting => {}
-                }
-            }
-            tracing::warn!(%holder, "the tempo master never yielded");
-        });
+        self.runtime.spawn(watch_take(
+            Arc::clone(&self.live),
+            holder,
+            generation,
+            Arc::clone(&self.master_generation),
+            events,
+        ));
     }
 
     /// Whether SYNC is engaged here, published as flag bit 4.
@@ -927,16 +895,19 @@ impl Session {
                 held.role
                     .cdj()
                     .is_some_and(|cdj| cdj.offer_tempo_master(successor))
+                    .then(|| held.monitor.subscribe())
             })
-            .unwrap_or(false);
-        if offered {
-            self.runtime.spawn(watch_handover(
-                Arc::clone(&self.live),
-                successor,
-                UnclaimedHandover::KeepIt,
-            ));
-        }
-        offered
+            .flatten();
+        let Some(events) = offered else {
+            return false;
+        };
+        self.runtime.spawn(watch_handover(
+            Arc::clone(&self.live),
+            successor,
+            UnclaimedHandover::KeepIt,
+            events,
+        ));
+        true
     }
 
     /// Give up tempo master, and abandon any take still waiting for a grant.
@@ -1398,11 +1369,13 @@ fn yield_master_to(live: &Arc<RwLock<Option<Live>>>, requester: prolink::DeviceN
     // dropped the claim on the spot, which the requester reads as a refusal
     // rather than a grant, so neither deck ended up master -- and this deck
     // then took its own claim back the next time anything set it.
+    let events = session.monitor.subscribe();
     drop(held);
     tokio::spawn(watch_handover(
         Arc::clone(live),
         requester,
         UnclaimedHandover::StandDown,
+        events,
     ));
 }
 
@@ -1419,13 +1392,19 @@ enum UnclaimedHandover {
 
 /// Watch for *successor* to pick up the mastership we are naming it for, and
 /// let go once it has.
+///
+/// Woken by the monitor's events, so we let go in the packet after its claim
+/// rather than a 100 ms poll later (S28's holders let go 64-127 ms after naming
+/// a successor). The deadline is unchanged: a successor that has not picked it
+/// up after [`MASTER_HANDOVER_TIMEOUT`] is given up on, as `unclaimed` says.
 async fn watch_handover(
     live: Arc<RwLock<Option<Live>>>,
     successor: prolink::DeviceNumber,
     unclaimed: UnclaimedHandover,
+    mut events: broadcast::Receiver<prolink::MonitorEvent>,
 ) {
-    for _ in 0..MASTER_HANDOVER_POLLS {
-        tokio::time::sleep(MASTER_HANDOVER_POLL).await;
+    let started = tokio::time::Instant::now();
+    loop {
         let done = {
             let held = read_live(&live);
             let Some(session) = held.as_ref() else {
@@ -1452,6 +1431,13 @@ async fn watch_handover(
         if done {
             return;
         }
+        let elapsed = started.elapsed();
+        if elapsed >= MASTER_HANDOVER_TIMEOUT {
+            break;
+        }
+        if !wait_for_news(&mut events, idle_wait(elapsed, false)).await {
+            return;
+        }
     }
     let held = read_live(&live);
     if let Some(cdj) = held.as_ref().and_then(|session| session.role.cdj())
@@ -1468,6 +1454,123 @@ async fn watch_handover(
             }
         }
     }
+}
+
+/// Watch the holder we asked for tempo master until it grants it, lets it go,
+/// or gives it to someone else.
+///
+/// Woken by the monitor's events: the grant is the holder's status naming us
+/// at `0x9f`, and we claim in the packet after it, as S28's requesters claimed
+/// 16-73 ms after asking. The deadlines are a 100 ms poll's: the `0x26` once
+/// more after [`MASTER_REQUEST_RESEND_AFTER`] without a grant, since a request
+/// lost on the wire is never answered, and nothing more after
+/// [`MASTER_HANDOVER_TIMEOUT`].
+async fn watch_take(
+    live: Arc<RwLock<Option<Live>>>,
+    holder: prolink::DeviceNumber,
+    generation: u64,
+    master_generation: Arc<AtomicU64>,
+    mut events: broadcast::Receiver<prolink::MonitorEvent>,
+) {
+    let started = tokio::time::Instant::now();
+    let mut resend_pending = true;
+    loop {
+        if master_generation.load(Ordering::SeqCst) != generation {
+            // Pressed again, or let go of: this take is over.
+            return;
+        }
+        let outcome = {
+            let held = read_live(&live);
+            let Some(session) = held.as_ref() else {
+                return;
+            };
+            let Some(cdj) = session.role.cdj() else {
+                return;
+            };
+            if cdj.is_tempo_master() {
+                return;
+            }
+            let outcome = take_outcome(&session.monitor.players(), holder, session.role.number());
+            if matches!(outcome, TakeOutcome::Granted | TakeOutcome::Vacant) {
+                cdj.set_tempo_master(true);
+                tracing::info!(%holder, ?outcome, "took tempo master");
+            }
+            outcome
+        };
+        match outcome {
+            TakeOutcome::Granted | TakeOutcome::Vacant => return,
+            TakeOutcome::TakenByAnother(other) => {
+                tracing::info!(%holder, %other, "tempo master went to another deck");
+                return;
+            }
+            TakeOutcome::Waiting => {}
+        }
+        let elapsed = started.elapsed();
+        match on_idle(elapsed, resend_pending) {
+            Idle::GiveUp => {
+                tracing::warn!(%holder, "the tempo master never yielded");
+                return;
+            }
+            Idle::ResendRequest => {
+                request_master(&live, holder);
+                resend_pending = false;
+            }
+            Idle::Recheck => {}
+        }
+        if !wait_for_news(&mut events, idle_wait(started.elapsed(), resend_pending)).await {
+            return;
+        }
+    }
+}
+
+/// Wait for the monitor's next event, or *wait* at most. False when the
+/// monitor is gone, which is what dropping the session does.
+async fn wait_for_news(
+    events: &mut broadcast::Receiver<prolink::MonitorEvent>,
+    wait: std::time::Duration,
+) -> bool {
+    tokio::select! {
+        received = events.recv() => {
+            // Lagged is news too: whatever was missed, the table has it.
+            !matches!(received, Err(broadcast::error::RecvError::Closed))
+        }
+        () = tokio::time::sleep(wait) => true,
+    }
+}
+
+/// What a hand-over still waiting does once no event has come for a while.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Idle {
+    /// Look again: a deck that goes silent sends no event, and its status
+    /// turns stale on the clock alone.
+    Recheck,
+    /// Send the `0x26` once more.
+    ResendRequest,
+    /// Nothing came of it.
+    GiveUp,
+}
+
+/// Where a hand-over that began *elapsed* ago stands, with or without its one
+/// resend still to come.
+fn on_idle(elapsed: std::time::Duration, resend_pending: bool) -> Idle {
+    if elapsed >= MASTER_HANDOVER_TIMEOUT {
+        Idle::GiveUp
+    } else if resend_pending && elapsed >= MASTER_REQUEST_RESEND_AFTER {
+        Idle::ResendRequest
+    } else {
+        Idle::Recheck
+    }
+}
+
+/// How long a hand-over waits for an event before looking again: until the
+/// next recheck, the resend or the deadline, whichever comes first.
+fn idle_wait(elapsed: std::time::Duration, resend_pending: bool) -> std::time::Duration {
+    let mut until = elapsed + MASTER_HANDOVER_RECHECK;
+    if resend_pending {
+        until = until.min(MASTER_REQUEST_RESEND_AFTER);
+    }
+    until = until.min(MASTER_HANDOVER_TIMEOUT);
+    until.saturating_sub(elapsed)
 }
 
 /// The live session, read even when a writer panicked while holding the lock:
@@ -1533,17 +1636,20 @@ fn player_of(live: &Arc<RwLock<Option<Live>>>) -> Option<Arc<VirtualPlayer>> {
 ///
 /// Five seconds, and two small UDP packets per peer per round. A deck answers
 /// one in about a millisecond.
-/// How often the old master's status is checked after asking it to hand over,
-/// and for how many rounds.
+/// How long a hand-over may take before it is given up on: a holder that has
+/// not granted our request, or a successor that has not picked up a
+/// mastership we are naming it for.
 ///
 /// A deck's byte `0x9e` dropped within ~70 ms of answering in all five captured
-/// handovers, and status arrives every 200 ms — so this waits about two seconds
-/// before giving up, which is generous for a handover that normally completes
-/// in one packet.
-const MASTER_HANDOVER_POLL: std::time::Duration = std::time::Duration::from_millis(100);
-const MASTER_HANDOVER_POLLS: usize = 20;
-/// After how many unanswered polls the `0x26` is sent once more.
-const MASTER_REQUEST_RESEND_AFTER: usize = 3;
+/// handovers, and status arrives every 200 ms — so two seconds is generous for
+/// a handover that normally completes in one packet.
+const MASTER_HANDOVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+/// When the `0x26` is sent once more, without a grant: a request lost on the
+/// wire is never answered.
+const MASTER_REQUEST_RESEND_AFTER: std::time::Duration = std::time::Duration::from_millis(300);
+/// How often a hand-over looks again with no event to wake it: a deck that
+/// goes silent sends none, and its claim turns stale on the clock alone.
+const MASTER_HANDOVER_RECHECK: std::time::Duration = std::time::Duration::from_millis(250);
 /// A status packet older than this describes a deck that may have gone. A deck
 /// sends one every ~200 ms; a silent one is otherwise believed, mastership
 /// included, until it is forgotten some 30 s later.
@@ -2224,7 +2330,7 @@ mod take_tests {
     use prolink::monitor::{PlayState, PlayerStatus, StatusObservation};
     use prolink::{DeviceNumber, PlayerState};
 
-    use super::{TakeOutcome, take_outcome};
+    use super::{Idle, TakeOutcome, idle_wait, on_idle, take_outcome};
 
     const OURS: u8 = 3;
 
@@ -2253,6 +2359,32 @@ mod take_tests {
                 age: Duration::from_millis(age_ms),
             }),
         }
+    }
+
+    #[test]
+    fn a_take_resends_once_and_gives_up_after_two_seconds_whatever_the_events() {
+        let ms = std::time::Duration::from_millis;
+        assert_eq!(on_idle(ms(0), true), Idle::Recheck);
+        assert_eq!(on_idle(ms(299), true), Idle::Recheck);
+        assert_eq!(
+            on_idle(ms(300), true),
+            Idle::ResendRequest,
+            "a request lost on the wire is never answered: ask once more"
+        );
+        assert_eq!(on_idle(ms(300), false), Idle::Recheck, "but only once");
+        assert_eq!(on_idle(ms(1999), false), Idle::Recheck);
+        assert_eq!(on_idle(ms(2000), false), Idle::GiveUp);
+        assert_eq!(on_idle(ms(2000), true), Idle::GiveUp);
+    }
+
+    #[test]
+    fn a_hand_over_waits_for_news_no_longer_than_its_next_deadline() {
+        let ms = std::time::Duration::from_millis;
+        assert_eq!(idle_wait(ms(0), true), ms(250), "a recheck comes first");
+        assert_eq!(idle_wait(ms(100), true), ms(200), "then the resend");
+        assert_eq!(idle_wait(ms(300), false), ms(250));
+        assert_eq!(idle_wait(ms(1900), false), ms(100), "then the deadline");
+        assert_eq!(idle_wait(ms(2500), false), ms(0));
     }
 
     #[test]

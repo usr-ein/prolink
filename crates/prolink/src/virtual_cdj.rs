@@ -67,7 +67,7 @@ use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use prolink_proto::djl::{self, Body};
 use prolink_proto::status::{self, CdjStatus, MediaState};
@@ -111,6 +111,22 @@ pub const OBSERVER_NUMBER: DeviceNumber = match DeviceNumber::new(7) {
 /// than a rate: at 145 BPM a beat is 414 ms apart and 5 ms is 1.2% of one, well
 /// inside what a deck's own jitter contributes.
 const BEAT_TICK: Duration = Duration::from_millis(5);
+
+/// How often the status emitter looks at what we publish.
+///
+/// So a change goes out at once rather than on the next 200 ms tick: a real
+/// deck answering a master request names its successor in a status packet
+/// 3.3-5.2 ms after the request, and the requester takes master on that
+/// packet (S28, five hand-overs). Reading what we publish is a few atomics and
+/// two short locks, the beat emitter's own cadence.
+const STATUS_CHECK: Duration = Duration::from_millis(5);
+
+/// The least time between two of our status packets.
+///
+/// S28's own floor: not one of its 4,834 status packets came less than 61.7 ms
+/// after the one before to the same peer, and the early ones, sent on a
+/// change, cluster at ~64 ms. A burst of changes goes out at that rate.
+const STATUS_FLOOR: Duration = Duration::from_millis(62);
 
 /// Keep-alive byte `0x25` when this device was first onto the network.
 ///
@@ -771,12 +787,10 @@ impl VirtualCdj {
     /// 5 ms and its status byte `0x9e` drops within ~70 ms (S28).
     ///
     /// **This does not set our own flag.** The `0x27` comes back unicast to
-    /// port 50001, which a [`crate::Monitor`] is holding — only one socket in a
-    /// `SO_REUSEPORT` group receives a given unicast datagram, so we cannot
-    /// hear it. The handover is instead observed the way every other device on
-    /// the network observes it: the old master's *status* stops saying it is
-    /// master. That is a slower signal by a few packets and a more honest one,
-    /// because it is the state the rest of the network is acting on.
+    /// port 50001, which a [`crate::Monitor`] is holding. The grant is watched
+    /// for where every other device sees it: the holder's *status* naming us
+    /// at byte `0x9f`, which it sends at once with its `0x27` (S28: within
+    /// 1 ms), and on which a real requester claims (16-73 ms after asking).
     ///
     /// Synchronous, like the `0x27` [`Self::yield_tempo_master`] answers with:
     /// one datagram, sent from whatever thread asks, so no caller has to hold
@@ -1019,9 +1033,27 @@ impl VirtualCdj {
         let synced = Arc::clone(&self.synced);
 
         Ok(tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(status::STATUS_INTERVAL);
+            // Every 200 ms, and at once when what we publish changes: see
+            // `status_due`. The check is cheap; the packets are what a real
+            // deck sends.
+            let mut check = tokio::time::interval(STATUS_CHECK);
+            check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut last: Option<(Instant, Published)> = None;
             loop {
-                ticker.tick().await;
+                check.tick().await;
+                let playing_now = playback.now();
+                let transport = Transport {
+                    playback: &playing_now,
+                    loaded: playing_track.lock().ok().and_then(|held| *held),
+                    tempo_master: master.load(Ordering::Relaxed),
+                    yielding_to: DeviceNumber::new(yielding.load(Ordering::Relaxed)),
+                    synced: synced.load(Ordering::Relaxed),
+                };
+                let published = Published::of(&transport, media.as_ref());
+                let now = Instant::now();
+                if !status_due(last, now, published) {
+                    continue;
+                }
                 let peers = table.get();
                 let packet = status_packet(
                     &config,
@@ -1029,13 +1061,7 @@ impl VirtualCdj {
                     media.as_ref(),
                     &counter,
                     peers.len(),
-                    Transport {
-                        playback: &playback.now(),
-                        loaded: playing_track.lock().ok().and_then(|held| *held),
-                        tempo_master: master.load(Ordering::Relaxed),
-                        yielding_to: DeviceNumber::new(yielding.load(Ordering::Relaxed)),
-                        synced: synced.load(Ordering::Relaxed),
-                    },
+                    transport,
                 );
                 counter.fetch_add(1, Ordering::Relaxed);
                 for peer in peers {
@@ -1044,6 +1070,7 @@ impl VirtualCdj {
                         debug!(%error, %peer, "status unicast failed");
                     }
                 }
+                last = Some((now, published));
             }
         }))
     }
@@ -1421,6 +1448,49 @@ struct Transport<'a> {
     /// Byte `0x9f`: who we are handing mastership to, mid-handover.
     yielding_to: Option<DeviceNumber>,
     synced: bool,
+}
+
+/// What a peer acts on the moment it changes: who is master and whom it is
+/// going to, sync, whether we play, what is loaded, what is in our slots.
+///
+/// Not the tempo, the pitch or the beat, which move all the time and which a
+/// follower takes from beat packets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Published {
+    tempo_master: bool,
+    yielding_to: Option<DeviceNumber>,
+    synced: bool,
+    playing: bool,
+    play_state: u8,
+    loaded: Option<status::LoadedTrack>,
+    usb: MediaState,
+    sd: MediaState,
+}
+
+impl Published {
+    fn of(transport: &Transport<'_>, media: &dyn MediaSource) -> Self {
+        Self {
+            tempo_master: transport.tempo_master,
+            yielding_to: transport.yielding_to,
+            synced: transport.synced,
+            playing: transport.playback.playing,
+            play_state: play_state_for(transport.playback).0,
+            loaded: transport.loaded,
+            usb: media.slot_state(Slot::USB),
+            sd: media.slot_state(Slot::SD),
+        }
+    }
+}
+
+/// Whether a status packet is due: every [`status::STATUS_INTERVAL`], and at
+/// once when what we publish changed, but never sooner than [`STATUS_FLOOR`]
+/// after the last one. `last` is when the last one went and what it said.
+fn status_due(last: Option<(Instant, Published)>, now: Instant, published: Published) -> bool {
+    let Some((sent, said)) = last else {
+        return true;
+    };
+    let since = now.saturating_duration_since(sent);
+    since >= status::STATUS_INTERVAL || (published != said && since >= STATUS_FLOOR)
 }
 
 fn status_packet(
@@ -2206,6 +2276,72 @@ mod tests {
         // Unanswered, into an empty network, the burst is three (C13).
         assert_eq!(unanswered, Ok(false));
         assert_eq!((sent_unanswered.len(), claims(&sent_unanswered)), (12, 3));
+    }
+
+    fn published(tempo_master: bool, yielding_to: Option<u8>) -> Published {
+        Published {
+            tempo_master,
+            yielding_to: yielding_to.and_then(DeviceNumber::new),
+            synced: false,
+            playing: true,
+            play_state: crate::monitor::PlayState::PLAYING.0,
+            loaded: None,
+            usb: MediaState::EMPTY,
+            sd: MediaState::EMPTY,
+        }
+    }
+
+    #[test]
+    fn status_goes_out_every_200_ms_unchanged_and_at_once_on_a_change() {
+        let sent = Instant::now();
+        let master = published(true, None);
+        let ms = |n: u64| sent + Duration::from_millis(n);
+        assert!(status_due(None, sent, master), "the first one goes at once");
+        let last = Some((sent, master));
+        assert!(!status_due(last, ms(100), master), "nothing new: wait");
+        assert!(!status_due(last, ms(199), master));
+        assert!(status_due(last, ms(200), master), "the 200 ms cadence");
+
+        // Naming a successor is news a requester acts on: S28's holders sent
+        // it 3.3-5.2 ms after the request.
+        let handing_over = published(true, Some(2));
+        assert!(status_due(last, ms(62), handing_over));
+        assert!(
+            !status_due(last, ms(61), handing_over),
+            "but never sooner than 62 ms after the last packet: S28's floor"
+        );
+    }
+
+    #[test]
+    fn what_a_peer_acts_on_at_once_is_what_triggers_a_packet() {
+        let master = published(true, None);
+        assert_ne!(master, published(true, Some(2)), "a successor named");
+        assert_ne!(master, published(false, None), "master given up");
+        assert_ne!(
+            master,
+            Published {
+                playing: false,
+                play_state: crate::monitor::PlayState::PAUSED.0,
+                ..master
+            },
+            "a stop"
+        );
+        assert_ne!(
+            master,
+            Published {
+                synced: true,
+                ..master
+            },
+            "SYNC lit"
+        );
+        assert_ne!(
+            master,
+            Published {
+                usb: MediaState::UNMOUNTING,
+                ..master
+            },
+            "an eject's first step"
+        );
     }
 
     #[test]

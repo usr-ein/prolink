@@ -215,7 +215,13 @@ are all taken; degrade to the observer number 7 with serving off.
 
 284 bytes on firmware 1.44. **Length does not identify the generation** —
 `research/03` maps `0x11c` to "Nexus 2", and a plain CDJ-2000nexus sends it
-(F22). Sent every ~200 ms.
+(F22). Sent every ~200 ms, **and at once when something changes**: about half
+of S28's status packets come early, most carrying a changed field, and one
+follows each beat packet by 3-13 ms. Never closer together than 61.7 ms to the
+same peer (S28, 4,834 packets); the early ones cluster at ~64 ms. This library
+sends one at once when the master claim, the successor at `0x9f`, sync, play
+state, the loaded track or a slot's state changes, never sooner than 62 ms
+after the last, and otherwise every 200 ms.
 
 Media presence lives at offset `0x6f` (USB) and `0x73` (SD), and **nowhere
 else** (F20). A device that does not emit status is a device with empty slots
@@ -345,6 +351,14 @@ that matter are 14 ms apart. **For that window two devices report themselves
 master**, so a listener that treats `0x9e` as exclusive sees mastership flicker
 — and whether it sees a spurious "nobody is master" depends on which packet it
 processes first. Byte `0x9f` is what disambiguates (F52).
+
+**The requester takes master on `0x9f`,** not on the `0x27`: in all five S28
+handoffs the holder's `0x27` and the status naming its successor left within
+1 ms of each other, and the requester's claim followed 16-73 ms after its
+request; the holder let go 67-133 ms after it. A holder that names its
+successor only on its next 200 ms status tick makes the whole handoff wait for
+that tick (an emulated NXS asking this library's deck before 0.4: successor
+named 172 ms after the `0x27`, the handoff complete at 373 ms).
 
 The five handoffs in the corpus were all granted; a refusal has never been
 observed, so the second body word of `0x27` is `1` in every example. `0x2a`
