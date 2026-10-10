@@ -43,4 +43,5 @@ Seconds from the capture's first frame; `fN` is frame N.
   So that is not only the behavioural DSP's doing; a real NXS's status after
   a load is not shown here.
 - B read 0.61 MB of the file over the session, half of E12's.
-- No tempo, no beat packets, the playing flag clear, as in E12.
+- No tempo published, no beat packets, the playing flag clear, as in E12:
+  on Pioneer's DSP code too, though it makes no sound here either.

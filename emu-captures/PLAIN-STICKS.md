@@ -36,8 +36,10 @@ What B sent A, in the order it sends it, for a stick with no `PIONEER/`:
 | after a track | `0x2005` (a waveform preview), `0x2205` (a VBR index), `0x3503` (unplayable) | nothing | §7.7 |
 | TAG TRACK, TAG LIST | `TAG_LIST_ADD 0x3002`, `MENU_TAG_LIST 0x100f` | `SUCCESS`, the tagged files | §8 |
 
-Every request but the root menu carries track type **2** (unanalysed), the
-type a rekordbox stick's FOLDER category carries too (S20 f3880).
+Every request B sends carries track type **2** (unanalysed), `MENU_ROOT`
+included, but the one `0x3e03` it sends as it connects, which carries 1 for
+either stick (E11 f66, E16 f64). A rekordbox stick's FOLDER category is
+browsed with 2 too (S20 f3880).
 
 ---
 
@@ -98,7 +100,8 @@ are at 120.
   BPM, genre and comment from the tags, with the embedded JPEG.
 - The header shows the title tag.
 - No waveform, no beat grid, no key, and the BPM display beside TEMPO stays
-  empty. `NEEDLE` is lit.
+  empty: nothing is decoded to sound in the emulator, so nothing could be
+  measured there (§11). `NEEDLE` is lit.
 
 ---
 
@@ -147,10 +150,10 @@ E11 f122  MENU_ITEM id=0x11 type=0x0090 "⟦FOLDER⟧"
 ```
 
 One item, FOLDER, with the root-menu id and type it has on a rekordbox stick
-(PROTOCOL.md §5.5). B asks with T2 from the first request on; for SAM1 it asks
-with T1 (E16 f114) and gets its twelve categories. So a plain stick has no
-SEARCH, no TRACK list and no other category, over LINK or on A itself: it is
-browsed by folder or not at all.
+(PROTOCOL.md §5.5). B asks with T2 from its first menu request on; for SAM1
+it asks with T1 (E16 f114) and gets its twelve categories. So a plain stick
+has no SEARCH, no TRACK list and no other category, over LINK or on A
+itself: it is browsed by folder or not at all.
 
 ### 4.2 A folder
 
@@ -413,14 +416,17 @@ are mostly WAV and AIFF read again for each load beside them.
 Three requests a server is sent and that A never answers:
 - **`0x2005 [desc M8, 3, id, 0, blob[0], 900, blob[900]]`**, for each track
   B played, a few seconds after loading the next (fourteen in E14, the first
-  at f4042; two in E15, from f3678). The blob has the size of a waveform preview. Here it
-  is 900 zero bytes, because the behavioural DSP makes no audio: what a real
-  NXS sends is not shown.
-- **`0x2205 [desc M8, id, 1604, blob[1604]]`**, once, for `VBR V2.mp3`
-  (E14 f28741): 401 little-endian words, the last 1 325 352, the file's
-  sample count (30.05 s at 44.1 kHz), the others rising like byte offsets.
-  The shape of the VBR index a rekordbox track is served with (400 words of
-  offsets, then the sample count), worked out by B for a file A had none for.
+  at f4042; two in E15, from f3678). The blob has the size of a waveform
+  preview. Here it is 900 zero bytes, because the behavioural DSP makes no
+  audio: what a real NXS sends is not shown.
+- **`0x2205 [desc M8, id, 1604, blob[1604]]`**, once, for `VBR V2.mp3` (E14
+  f28741): 401 little-endian words, the last 1 325 352, the file's sample
+  count (30.05 s at 44.1 kHz), the other 400 rising like byte offsets: 1,
+  417, 1 252, … up to 167 070 of the file's 168 085 bytes. The VBR index a
+  rekordbox track is served has that length and that last word, but its 400
+  others are zero (E16 f1696, and every one of the 741 VBR index answers in
+  `../captures/`, 25 of them all zero). So B worked out a seek table, with
+  real offsets, for a file A had answered with zeros, and handed it to A.
 - **`0x3503 [desc M8, id]`** for the files B found it cannot play: the
   AppleDouble file (E14 f6317), `Corrupt.mp3` (f19005, f25761) and the FLAC
   (f28357).
@@ -430,8 +436,8 @@ among PROTOCOL.md §9's undecoded requests.
 
 ### 7.8 What B publishes while it plays
 
-B's status for a plain file against a rekordbox one, both playing on the
-behavioural DSP (E12 f1215, E16 f2362):
+B's status playing a plain file against a rekordbox track, both on the
+behavioural DSP, which makes no sound (E12 f1215, E16 f2362):
 
 | Offset | | plain file | rekordbox track |
 |---|---|---|---|
@@ -440,18 +446,25 @@ behavioural DSP (E12 f1215, E16 f2362):
 | `0x30` | its place in the list it was loaded from | 3 | 2 |
 | `0x34` | the menu it was loaded from | `0x11`, FOLDER | 4, TRACK |
 | `0x46` | the list's size | 7, the folder's files | 141 |
-| `0x66` | | `ff ff` | `00 00` |
-| `0x89` | flags | `0x84`: not playing, though play state is 3 | `0xe4`: playing, master |
-| `0x92` | tempo ×100 | `ffff`, none | 17501 |
+| `0x89` | flags | `0x84`: the playing bit clear at play state 3 | `0xe4`: playing, master |
+| `0x92` | tempo ×100 | `ffff`: none | 17501 |
 | `0x9e` | master | 0 | 1 |
 | `0xa0` | beat | `ffffffff` | 1 |
 
-And **no beat packets**, in any session with a plain file loaded; 43 from B
-in E16. A player following a CDJ that plays a plain file gets no tempo, no
-beat and no master from it. With Pioneer's DSP code (E13) the same: play
-state 3, flags `0x84`, no tempo. That the playing bit stays clear may be the
-emulator's (no audio is ever produced); that there is no tempo matches the
-track info, which has only the BPM tag.
+What the packets carry: the firmware held the file's BPM tag (track info
+item 3, 12500, E12 f682) and published no tempo (`0x92` = `ffff`).
+
+The rest is the emulated players' only, with no sound anywhere: no beat
+packets in any session with a plain file loaded (43 from B in E16), the
+playing bit clear at play state 3, and never master. In these captures beats
+and master go with the playing bit. Whether a real NXS playing a plain file
+measures and publishes a tempo, sends beats or takes master is not shown
+(§11). With Pioneer's DSP code (E13) B's status was the same: play state 3,
+flags `0x84`, no tempo.
+
+`0x66` holds `ff ff` in single packets only, chiefly the one in which play
+starts after a load, with either stick (E12 f1215, E16 f2258), and `00 00`
+in all the others.
 
 ---
 
@@ -481,29 +494,35 @@ first request: the track is found in its list with `MENU_TAG_LIST` and M3
 ## 9. A rekordbox stick, and one with loose files (E16, E17)
 
 **Is the emulator faithful here?** For SAM1, a copy of a rekordbox stick, the
-emulated NXS answered what the real ones of `../captures/` answered: twelve
-root categories (E16 f116), the eleven B rendered in S20's order, with no
-DATE ADDED between BITRATE and TRACK; `GET_METADATA` with the thirteen items of
-PROTOCOL.md §5.9, in its order (E16 f1650); six-item track info with the path
-(E16 f1636, as S06 f923); a path walked by
-LOOKUP, a VBR index that ends in the sample count (E16 f1696), a beat grid,
-a detailed waveform, and beat packets while it plays.
+emulated NXS answered what the real ones of `../captures/` answered:
+- twelve root categories (E16 f116), the eleven B rendered in S20's order,
+  with no DATE ADDED between BITRATE and TRACK
+- `GET_METADATA` with the thirteen items of PROTOCOL.md §5.9, in its order
+  (E16 f1650)
+- six-item track info with the path (E16 f1636, as S06 f923), and the path
+  walked by LOOKUP
+- a VBR index of 400 zero words and the sample count (E16 f1696), a beat
+  grid, a detailed waveform
+- beat packets while it plays.
 
-**FOLDER on a rekordbox stick lists only what the export does not.** On
-SAM1, FOLDER answered 0 items (E16 f815): its pane says `EMPTY` and it does
-not open, though `Contents/` holds 141 tracks and `PIONEER/` is a plain
-folder on that image. With `Loose/` (three MP3s) and `Loose root.mp3`
-added beside the export, FOLDER lists `Loose` and `Loose root.mp3` and
-nothing else (E17 f573), and they browse, load and play as on PLAINMP3
-(T2, `0x2202`, five-item track info, the `?\0D` lookup: E17). TRACK still
-counts the export's 141 (E17 f491). In S20 the real NXS's FOLDER held one
-folder, `ALPHATHETA REC`, itself empty (f3886, f3916).
+**FOLDER on a rekordbox stick leaves out `Contents/` and `PIONEER/`.** On
+SAM1, FOLDER answered 0 items (E16 f815, f817): its pane says `EMPTY` and it
+does not open. Both folders are on that image, `PIONEER/` not hidden, and
+`Contents/` holds, beside its 141 tracks, 47 AppleDouble `._*.mp3` files
+that the export does not list, of the kind FOLDER lists on PLAINMP3 (§2).
+With `Loose/` (three MP3s) and `Loose root.mp3` beside the export, FOLDER
+lists those two and nothing else (E17 f573), and they browse, load and play
+as on PLAINMP3 (T2, `0x2202`, five-item track info, the `?\0D` lookup: E17).
+Whether it leaves the two folders out by their names or as rekordbox's own
+is not shown. TRACK still counts the export's 141 (E17 f491). In S20 the
+real NXS's FOLDER held one folder, `ALPHATHETA REC`, itself empty (f3886,
+f3916).
 
 | | plain stick | rekordbox stick |
 |---|---|---|
 | media response | label, no date, 0 tracks, 0 playlists, `0xaa` 2 | the export's name, date and counts, `0xaa` 1 |
 | root menu | FOLDER only | the export's categories, FOLDER among them |
-| FOLDER | every folder and audio file | only those the export does not list |
+| FOLDER | every folder and audio file | what is beside `Contents/` and `PIONEER/` |
 | track type | 2 | 1 (2 in FOLDER) |
 | ids | FAT clusters | pdb rows |
 | metadata | `0x2202`, 10 items, the file's tags | `0x2002`, 13 items, the export's rows |
@@ -512,7 +531,7 @@ folder, `ALPHATHETA REC`, itself empty (f3886, f3916).
 | NFS | one LOOKUP `?\0D <dir> <entry>` | the path, a LOOKUP per component |
 | VBR index, waveforms, cues, beat grid | zero or empty, beat grid and detail not asked | the analysis files' |
 | artwork | the embedded JPEG or the folder's `cover.jpg` | `PIONEER/Artwork` |
-| while playing | no tempo, no beats, not master | tempo, beats, master |
+| while playing | no tempo published, though the track info has the BPM tag; on the emulated players, no beats and never master | tempo, beats, master |
 
 ---
 
@@ -521,8 +540,34 @@ folder, `ALPHATHETA REC`, itself empty (f3886, f3916).
 To offer a folder-only medium to an NXS as A offers PLAINMP3, from what A was
 asked and answered above:
 
-1. **The media response** with a name. A sent the volume label and counts of
-   0, and B still offered the stick.
+1. **The media response.** A's for PLAINMP3 is, byte for byte, the one it
+   sends for SAM1 but in these fields (E10 f51 against E16 f49):
+   - `0x2c`, the name: the FAT volume label
+   - `0x6c`, the date: empty (SAM1: the export's, `2026-09-29`)
+   - `0x84`: empty (SAM1: the text `1000`, whose meaning is not known)
+   - `0xa4` tracks and `0xac` playlists: 0
+   - `0xaa`-`0xab`: `02 00` (SAM1, and every media response in
+     `../captures/`: `01 01`)
+   - `0xb4` and `0xbc`: the volume's total and free bytes
+
+   prolink's `MediaResponseBuilder` starts from a rekordbox answer
+   (`status_templates.rs`: the date `2025-06-24`, `1000`, `01 01`) and
+   replaces only the device, slot, name, counts and sizes: as it is, it
+   would announce a folder medium with rekordbox's markers.
+
+   B offered PLAINMP3 with 0 tracks: PROTOCOL.md §3.3's "a deck told there
+   are no tracks has no reason to offer the medium" does not hold for a
+   folder medium.
+
+   B chose T2 for its first menu request, `MENU_ROOT` (E11 f115; T1 for SAM1, E16
+   f114), before any dbserver answer differed between the sticks:
+   `INTRODUCE` and `0x3e03` were answered alike (E11 f64, f68; E16 f62,
+   f66). What differed was this response, and A's own status at
+   `0xdc`-`0xdd`: `00 00` in every A status of E10-E15, `02 01` in E16-E17.
+   The hardware sends `02 01` from a deck with both slots empty (S4b f1) and
+   `00 00` from another throughout S15a, so those two bytes may not be the
+   medium's type. These captures do not isolate which field makes B ask with
+   T2.
 2. **`MENU_ROOT` with T2**: one item, id `0x11`, type `0x0090`,
    `⟦FOLDER⟧` (§4.1).
 3. **`MENU_FOLDER`**: `0xffffffff` for the root; folder rows (`0x0001`) before

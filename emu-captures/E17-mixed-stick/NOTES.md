@@ -32,9 +32,12 @@ Seconds from the capture's first frame; `fN` is frame N.
 
 ## What came of it
 
-- **FOLDER on a rekordbox stick lists only what the export does not:** the
-  loose folder and file, not `Contents/` (whose tracks are all exported) nor
-  `PIONEER/`.
+- **FOLDER on a rekordbox stick leaves out `Contents/` and `PIONEER/`,**
+  and lists what is beside them: the loose folder and file. Not "what the
+  export does not list": `Contents/` also holds 47 AppleDouble `._*.mp3`
+  files no export lists, of the kind FOLDER lists on PLAINMP3 (E16). Whether
+  it goes by the two folders' names or by their being rekordbox's is not
+  shown.
 - The loose files are served as on PLAINMP3: track type 2, `0x2202`, ids that
   are clusters (`Loose` is 4), the same order, the same five-item track info
   and `?\0D` lookup.

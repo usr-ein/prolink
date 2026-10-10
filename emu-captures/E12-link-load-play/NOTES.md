@@ -44,5 +44,6 @@ Seconds from the capture's first frame; `fN` is frame N.
 - The analysis: a 900-byte zero waveform preview, empty cue points, a
   1 604-byte zero VBR index; no beat grid or detailed waveform asked for.
 - B read 1.21 MB of the 1.45 MB file in its first 17 s of playing.
-- While playing: track type 2, id 6, no tempo, the playing flag clear, no
-  beat packets.
+- While playing: track type 2, id 6, no tempo published (`0xffff`), though
+  the track info carried the tag's 125.00; the playing flag clear, and no
+  beat packets, from a player that makes no sound (`PLAIN-STICKS.md` §7.8).

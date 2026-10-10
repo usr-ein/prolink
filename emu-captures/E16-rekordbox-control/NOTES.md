@@ -41,8 +41,10 @@ Seconds from the capture's first frame; `fN` is frame N.
   tracks, 4 playlists, `01 01` at `0xaa`-`0xab`.
 - Twelve root categories, the eleven B rendered in S20's order, without
   DATE ADDED between BITRATE and TRACK.
-- **FOLDER is empty on this rekordbox stick**, though `Contents/` and
-  `PIONEER/` are on it (E17 shows why).
+- **FOLDER is empty on this rekordbox stick** (f815, f817), though
+  `Contents/` and `PIONEER/` are on it, and `Contents/` holds 47 AppleDouble
+  `._*.mp3` files that the export does not list. E17: FOLDER leaves those two
+  folders out, and lists what is beside them.
 - The load: `GET_TRACK_INFO` with six items and the path (f1636),
   `GET_METADATA 0x2002` with thirteen (f1650), the path walked by LOOKUP, a
   component at a time (f1675-f1681), a VBR index ending in the sample count

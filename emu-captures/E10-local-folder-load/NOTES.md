@@ -49,7 +49,8 @@ Seconds from the capture's first frame; `fN` is frame N.
 - A's status for the loaded file (f1107, f1113, f1285): source A's USB, track
   type 2, id 6 (the file's first cluster), its place 3 in a list of 7 (the
   root's files), loaded from menu `0x11` (FOLDER); no tempo (`0xffff`); the
-  playing flag clear at play state 3. No beat packets.
+  playing flag clear at play state 3. No beat packets, from players that make
+  no sound (`PLAIN-STICKS.md` §7.8).
 - On A's screen: the folders-then-files order and its collation, which files
   are listed, the depth limit, the info pane and INFO from the tags:
   `PLAIN-STICKS.md` §2.

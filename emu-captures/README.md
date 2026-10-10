@@ -306,7 +306,8 @@ set against `../captures/S05`, `S06` and `S20`: the root categories in S20's
 order, thirteen-item metadata, six-item track info with the path, the path
 walked by LOOKUP, the analysis served, beat packets while playing, as the
 real NXSs exchanged them. And S20's real request for FOLDER on a rekordbox
-stick carries the track type, 2, that every request of E11-E15 carries. What
+stick carries the track type, 2, that every request of E11-E15 carries but
+the one `0x3e03` B sends as it connects. What
 the emulator cannot show (no audio, so nothing measured from it; the play at
 load; a medium's writes) is in `PLAIN-STICKS.md` §11.
 
@@ -318,8 +319,8 @@ play: the loaded tracks' ids in the stick's `export.pdb` (77 and 116), their
 tempos, pitches, beat counts and grid timings. In E07 the players also ask
 each other about their USB slots, and the answers carry the stick's name
 (`SAM1`), its track and playlist counts and its sizes. No titles, artists,
-artwork, file paths or audio: nothing in these sessions browses another
-player's stick or loads from it.
+artwork, file paths or audio: nothing in E01-E09 browses another player's
+stick or loads from it.
 
 E10-E15 browse and load PLAINMP3, so they carry its made-up names, tags and
 artwork, and the click tracks' audio, read over NFS. E16 and E17 browse and
