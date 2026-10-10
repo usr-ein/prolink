@@ -86,6 +86,7 @@ pub(crate) fn player(from: &prolink::PlayerState) -> Player {
 
         has_status: from.play_state().is_some(),
         is_beating: from.is_beating(),
+        is_playing: status.is_some_and(|status| status.is_playing),
 
         effective_bpm: from.effective_bpm().unwrap_or(ABSENT),
         // From the status packet where there is one: it is published while the
@@ -223,5 +224,57 @@ pub(crate) fn media_info(from: &prolink::PeerSlot) -> MediaInfo {
         created: described.map(|d| d.created.clone()).unwrap_or_default(),
         track_count: described.map_or(0, |d| d.track_count),
         playlist_count: described.map_or(0, |d| d.playlist_count),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use prolink::monitor::{PlayState, PlayerStatus, StatusObservation};
+    use prolink::{DeviceNumber, PlayerState};
+
+    use super::player;
+
+    fn status(play_state: PlayState, is_playing: bool) -> PlayerState {
+        PlayerState {
+            device: DeviceNumber::new(2).expect("2 is a device number"),
+            name: prolink::DeviceName::default(),
+            beat: None,
+            status: Some(StatusObservation {
+                status: PlayerStatus {
+                    play_state,
+                    track: None,
+                    bpm_centi: None,
+                    pitch: None,
+                    is_tempo_master: false,
+                    is_synced: false,
+                    is_playing,
+                    yielding_to: None,
+                    beat: None,
+                    beat_in_bar: None,
+                },
+                age: Duration::from_millis(50),
+            }),
+        }
+    }
+
+    /// E12: an emulated NXS playing a plain file is at play state 3 with flag
+    /// `0x40` clear, sends no beats and never takes master. A host deciding
+    /// who plays from the play state would hand master to a deck that never
+    /// takes it.
+    #[test]
+    fn playing_is_the_status_flag_and_not_the_play_state() {
+        assert!(player(&status(PlayState::PLAYING, true)).is_playing);
+        assert!(
+            !player(&status(PlayState::PLAYING, false)).is_playing,
+            "a plain file at play state 3, its playing bit clear"
+        );
+        assert!(!player(&status(PlayState::PAUSED, false)).is_playing);
+        let unheard = PlayerState {
+            status: None,
+            ..status(PlayState::PLAYING, true)
+        };
+        assert!(!player(&unheard).is_playing, "no status, nothing playing");
     }
 }

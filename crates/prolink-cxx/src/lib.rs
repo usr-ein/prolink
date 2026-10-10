@@ -266,6 +266,12 @@ pub mod ffi {
         has_status: bool,
         /// Whether it is sending beats, and so playing a rekordbox track.
         is_beating: bool,
+        /// Whether its status says it is playing: flag `0x40` of byte `0x89`,
+        /// which goes with beats and with taking master. Not the play state:
+        /// a deck playing a plain file is at play state 3 with this clear,
+        /// sends no beats and never takes master (emulated, E12). False
+        /// without status.
+        is_playing: bool,
 
         /// The tempo actually playing: the track's BPM with pitch applied.
         /// Negative when unknown.

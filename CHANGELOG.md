@@ -46,6 +46,9 @@ by [`work_log/`](work_log/README.md).
   medium taken out of a player still reaches the host as an empty slot. It used
   to reach it as the zeroed answer about an empty slot, which only came because
   every slot was asked about every 5 s.
+- **prolink-cxx:** `Player::is_playing`, the status flag `0x40`: what goes
+  with beats and with taking master, where the play state does not (a deck
+  playing a plain file is at play state 3 with the flag clear; emulated, E12).
 
 - **prolink-cxx:** taking and handing over tempo master wake on the monitor's
   events instead of a 100 ms poll, so we claim in the packet after a holder's
