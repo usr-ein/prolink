@@ -52,6 +52,11 @@ None of it has met a real CDJ yet.
 - **prolink-cxx:** `Player::is_playing`, the status flag `0x40`: what goes
   with beats and with taking master, where the play state does not (a deck
   playing a plain file is at play state 3 with the flag clear; emulated, E12).
+- **prolink:** `VirtualCdj::offer_tempo_master` refuses while a hand-over is
+  in flight, so a master names one successor at a time: a player claims
+  12-69 ms after it is named (S28), and a second name written over the first
+  could leave two of them claiming master. A hand-over asked for with a `0x26`
+  still overrides an offer.
 
 - **prolink-cxx:** taking and handing over tempo master wake on the monitor's
   events instead of a 100 ms poll, so we claim in the packet after a holder's

@@ -764,14 +764,28 @@ impl VirtualCdj {
     /// Name *successor* at byte `0x9f` while keeping our claim: hand
     /// mastership over without having been asked.
     ///
-    /// What a CDJ master does when it stops while a synced deck plays on: the
-    /// successor picks it up, and [`Self::finish_yield`] then lets go. False,
-    /// and nothing changed, when we do not hold mastership.
+    /// What a CDJ master does when it stops while another deck plays on: the
+    /// successor picks it up, and [`Self::finish_yield`] then lets go.
+    ///
+    /// False, and nothing changed, when we do not hold mastership, **or while
+    /// a hand-over is already in flight.** A master names one successor at a
+    /// time: a player claims master 12-69 ms after it is named (S28), so a
+    /// second name written over the first can leave two of them claiming it.
+    /// The offer in flight ends when it is taken up ([`Self::finish_yield`])
+    /// or withdrawn ([`Self::withdraw_offer`]); a hand-over asked for with a
+    /// `0x26` ([`Self::yield_tempo_master`]) still overrides it, as a CDJ's
+    /// MASTER button always wins.
     pub fn offer_tempo_master(&self, successor: DeviceNumber) -> bool {
         if !self.is_tempo_master() {
             return false;
         }
-        self.yielding_to.store(successor.get(), Ordering::Relaxed);
+        if self
+            .yielding_to
+            .compare_exchange(0, successor.get(), Ordering::AcqRel, Ordering::Relaxed)
+            .is_err()
+        {
+            return false;
+        }
         info!(%successor, "offering tempo master");
         true
     }
@@ -2363,6 +2377,59 @@ mod tests {
             },
             "an eject's first step"
         );
+    }
+
+    /// A virtual CDJ with no tasks and no sockets: enough for what touches
+    /// only its own state.
+    fn bare_cdj() -> VirtualCdj {
+        VirtualCdj {
+            config: VirtualCdjConfig::default(),
+            interface: interface(),
+            number: Arc::new(AtomicU8::new(3)),
+            phase: watch::channel(Phase::Announcing).0,
+            media: Arc::new(NoMedia),
+            loaded: Arc::new(LoadedTracks::default()),
+            peers: Arc::new(PeerMedia::default()),
+            status_socket: None,
+            status_tap: None,
+            status_counter: Arc::new(AtomicU32::new(0)),
+            playback: Arc::new(PlaybackCell::default()),
+            playing_track: Arc::new(Mutex::new(None)),
+            tempo_master: Arc::new(AtomicBool::new(false)),
+            yielding_to: Arc::new(AtomicU8::new(0)),
+            synced: Arc::new(AtomicBool::new(false)),
+            first_on_network: Arc::new(AtomicBool::new(false)),
+            tasks: Vec::new(),
+        }
+    }
+
+    /// With two decks that may each take over, a master that named one and
+    /// then the other would leave both claiming it: one successor at a time.
+    #[test]
+    fn a_master_offers_its_mastership_to_one_deck_at_a_time() {
+        let cdj = bare_cdj();
+        let two = DeviceNumber::new(2).expect("2 is a device number");
+        let four = DeviceNumber::new(4).expect("4 is a device number");
+        assert!(!cdj.offer_tempo_master(two), "not master: nothing to offer");
+
+        cdj.set_tempo_master(true);
+        assert!(cdj.offer_tempo_master(two));
+        assert_eq!(cdj.yielding_to(), Some(two));
+        assert!(
+            !cdj.offer_tempo_master(four),
+            "an offer in flight is not written over"
+        );
+        assert_eq!(cdj.yielding_to(), Some(two), "0x9f still names the first");
+
+        // Withdrawn after nobody took it up: the next deck may be offered it.
+        cdj.withdraw_offer();
+        assert!(cdj.offer_tempo_master(four));
+        assert_eq!(cdj.yielding_to(), Some(four));
+
+        // Taken up: we are no longer master, and offer nothing.
+        cdj.finish_yield();
+        assert!(!cdj.offer_tempo_master(two));
+        assert_eq!(cdj.yielding_to(), None);
     }
 
     #[test]
