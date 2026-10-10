@@ -1,0 +1,66 @@
+# E02-sync-follows-master-tempo: every command, in order, at its start: seconds from the capture's
+# first frame (negative: before the capture began). pi-qemu from TriMixxx
+# main 3c0c2aa, its emulator (cdj2000-emulator) at dbc4e31. The panel channel
+# port is the run's own: ~/.pi-qemu/cdj/NAME/run/run.json, endpoints.panel_port.
+# The panel_control lines run in cdj2000-emulator/; they were made by a Python
+# driver calling the same PanelControl, which sends the channel the same line.
+# The setup before the capture: both CDJs booted fresh, sliders centred
+# (field 3 then field 2 = 32768), tracks loaded by the browse encoder.
+
+ -102.83  pi-qemu cdj rm emu-captures-sync-a
+  -99.78  pi-qemu cdj rm emu-captures-sync-b
+  -96.71  pi-qemu cdj up emu-captures-sync-a --link emu-captures-sync --usb ~/.pi-qemu/cdj/sam1-usb.img --dsp-model
+  -77.18  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 3 32768   # emu-captures-sync-a
+  -76.87  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 2 32768   # emu-captures-sync-a
+  -76.87  pi-qemu cdj up emu-captures-sync-b --link emu-captures-sync --usb ~/.pi-qemu/cdj/sam1-usb.img --dsp-model
+  -58.37  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 3 32768   # emu-captures-sync-b
+  -58.07  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 2 32768   # emu-captures-sync-b
+  -58.07  pi-qemu cdj press emu-captures-sync-a usb
+  -51.94  pi-qemu cdj rotary emu-captures-sync-a 1
+  -51.02  pi-qemu cdj rotary emu-captures-sync-a 1
+  -50.10  pi-qemu cdj rotary emu-captures-sync-a 1
+  -49.18  pi-qemu cdj rotary emu-captures-sync-a 1
+  -48.26  pi-qemu cdj rotary emu-captures-sync-a 1
+  -47.35  pi-qemu cdj rotary emu-captures-sync-a 1
+  -45.72  pi-qemu cdj press emu-captures-sync-a enter
+  -44.10  pi-qemu cdj rotary emu-captures-sync-a 1
+  -43.17  pi-qemu cdj rotary emu-captures-sync-a 1
+  -42.23  pi-qemu cdj rotary emu-captures-sync-a 1
+  -41.31  pi-qemu cdj rotary emu-captures-sync-a 1
+  -40.38  pi-qemu cdj rotary emu-captures-sync-a 1
+  -38.76  pi-qemu cdj press emu-captures-sync-a enter
+  -35.62  pi-qemu cdj press emu-captures-sync-b usb
+  -29.50  pi-qemu cdj rotary emu-captures-sync-b 1
+  -28.58  pi-qemu cdj rotary emu-captures-sync-b 1
+  -27.64  pi-qemu cdj rotary emu-captures-sync-b 1
+  -26.74  pi-qemu cdj rotary emu-captures-sync-b 1
+  -25.80  pi-qemu cdj rotary emu-captures-sync-b 1
+  -24.88  pi-qemu cdj rotary emu-captures-sync-b 1
+  -23.26  pi-qemu cdj press emu-captures-sync-b enter
+  -21.63  pi-qemu cdj rotary emu-captures-sync-b 1
+  -20.71  pi-qemu cdj rotary emu-captures-sync-b 1
+  -19.78  pi-qemu cdj rotary emu-captures-sync-b 1
+  -18.85  pi-qemu cdj rotary emu-captures-sync-b 1
+  -17.93  pi-qemu cdj rotary emu-captures-sync-b 1
+  -17.00  pi-qemu cdj rotary emu-captures-sync-b 1
+  -16.08  pi-qemu cdj rotary emu-captures-sync-b 1
+  -15.14  pi-qemu cdj rotary emu-captures-sync-b 1
+  -14.22  pi-qemu cdj rotary emu-captures-sync-b 1
+  -13.31  pi-qemu cdj rotary emu-captures-sync-b 1
+  -12.37  pi-qemu cdj rotary emu-captures-sync-b 1
+  -11.46  pi-qemu cdj rotary emu-captures-sync-b 1
+   -9.82  pi-qemu cdj press emu-captures-sync-b enter
+   -5.18  pi-qemu link capture emu-captures-sync check.pcap 3   # the setup's check: status from both
+   -1.10  pi-qemu link capture emu-captures-sync run.pcap 125
+    3.90  pi-qemu cdj press emu-captures-sync-b sync
+   13.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 2 V   # emu-captures-sync-a: V from 32768 to 49152, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+   23.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 2 V   # emu-captures-sync-a: V from 49152 to 16384, 31 values evenly over 3 s (the TEMPO slider moved by hand)
+   33.89  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 2 V   # emu-captures-sync-a: V from 16384 to 32768, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+   43.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 2 V   # emu-captures-sync-b: V from 32768 to 49152, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+   53.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 2 V   # emu-captures-sync-b: V from 49152 to 32768, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+   63.90  pi-qemu cdj press emu-captures-sync-b sync
+   73.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 2 V   # emu-captures-sync-a: V from 32768 to 49152, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+   83.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 5984 analog 2 V   # emu-captures-sync-a: V from 49152 to 32768, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+   93.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 2 V   # emu-captures-sync-b: V from 32768 to 49152, 21 values evenly over 2 s (the TEMPO slider moved by hand)
+  101.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 2 V   # emu-captures-sync-b: V from 49152 to 0, 51 values evenly over 5 s (the TEMPO slider moved by hand)
+  111.90  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6014 analog 2 V   # emu-captures-sync-b: V from 0 to 32768, 31 values evenly over 3 s (the TEMPO slider moved by hand)

@@ -1,0 +1,63 @@
+# E03-master-handoff-playing: every command, in order, at its start: seconds from the capture's
+# first frame (negative: before the capture began). pi-qemu from TriMixxx
+# main 3c0c2aa, its emulator (cdj2000-emulator) at dbc4e31. The panel channel
+# port is the run's own: ~/.pi-qemu/cdj/NAME/run/run.json, endpoints.panel_port.
+# The panel_control lines run in cdj2000-emulator/; they were made by a Python
+# driver calling the same PanelControl, which sends the channel the same line.
+# The setup before the capture: both CDJs booted fresh, sliders centred
+# (field 3 then field 2 = 32768), tracks loaded by the browse encoder.
+
+ -101.04  pi-qemu cdj rm emu-captures-sync-a
+  -98.17  pi-qemu cdj rm emu-captures-sync-b
+  -95.70  pi-qemu cdj up emu-captures-sync-a --link emu-captures-sync --usb ~/.pi-qemu/cdj/sam1-usb.img --dsp-model
+  -76.59  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6024 analog 3 32768   # emu-captures-sync-a
+  -76.28  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6024 analog 2 32768   # emu-captures-sync-a
+  -76.27  pi-qemu cdj up emu-captures-sync-b --link emu-captures-sync --usb ~/.pi-qemu/cdj/sam1-usb.img --dsp-model
+  -58.06  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6034 analog 3 32768   # emu-captures-sync-b
+  -57.75  cdj2000-emulator/.venv/bin/python -m tools.cdj_main.panel_control --port 6034 analog 2 32768   # emu-captures-sync-b
+  -57.75  pi-qemu cdj press emu-captures-sync-a usb
+  -51.63  pi-qemu cdj rotary emu-captures-sync-a 1
+  -50.70  pi-qemu cdj rotary emu-captures-sync-a 1
+  -49.78  pi-qemu cdj rotary emu-captures-sync-a 1
+  -48.85  pi-qemu cdj rotary emu-captures-sync-a 1
+  -47.94  pi-qemu cdj rotary emu-captures-sync-a 1
+  -47.01  pi-qemu cdj rotary emu-captures-sync-a 1
+  -45.38  pi-qemu cdj press emu-captures-sync-a enter
+  -43.76  pi-qemu cdj rotary emu-captures-sync-a 1
+  -42.82  pi-qemu cdj rotary emu-captures-sync-a 1
+  -41.89  pi-qemu cdj rotary emu-captures-sync-a 1
+  -40.98  pi-qemu cdj rotary emu-captures-sync-a 1
+  -40.06  pi-qemu cdj rotary emu-captures-sync-a 1
+  -38.33  pi-qemu cdj press emu-captures-sync-a enter
+  -35.21  pi-qemu cdj press emu-captures-sync-b usb
+  -29.09  pi-qemu cdj rotary emu-captures-sync-b 1
+  -28.16  pi-qemu cdj rotary emu-captures-sync-b 1
+  -27.22  pi-qemu cdj rotary emu-captures-sync-b 1
+  -26.30  pi-qemu cdj rotary emu-captures-sync-b 1
+  -25.38  pi-qemu cdj rotary emu-captures-sync-b 1
+  -24.46  pi-qemu cdj rotary emu-captures-sync-b 1
+  -22.82  pi-qemu cdj press emu-captures-sync-b enter
+  -21.19  pi-qemu cdj rotary emu-captures-sync-b 1
+  -20.27  pi-qemu cdj rotary emu-captures-sync-b 1
+  -19.34  pi-qemu cdj rotary emu-captures-sync-b 1
+  -18.42  pi-qemu cdj rotary emu-captures-sync-b 1
+  -17.50  pi-qemu cdj rotary emu-captures-sync-b 1
+  -16.58  pi-qemu cdj rotary emu-captures-sync-b 1
+  -15.64  pi-qemu cdj rotary emu-captures-sync-b 1
+  -14.72  pi-qemu cdj rotary emu-captures-sync-b 1
+  -13.81  pi-qemu cdj rotary emu-captures-sync-b 1
+  -12.87  pi-qemu cdj rotary emu-captures-sync-b 1
+  -11.94  pi-qemu cdj rotary emu-captures-sync-b 1
+  -11.02  pi-qemu cdj rotary emu-captures-sync-b 1
+   -9.40  pi-qemu cdj press emu-captures-sync-b enter
+   -4.75  pi-qemu link capture emu-captures-sync check.pcap 3   # the setup's check: status from both
+   -0.62  pi-qemu link capture emu-captures-sync run.pcap 95
+    4.39  pi-qemu cdj press emu-captures-sync-b sync
+    9.38  pi-qemu cdj press emu-captures-sync-a sync
+   19.38  pi-qemu cdj press emu-captures-sync-b master
+   29.38  pi-qemu cdj press emu-captures-sync-a master
+   39.38  pi-qemu cdj press emu-captures-sync-b master
+   49.39  pi-qemu cdj press emu-captures-sync-a master
+   59.38  pi-qemu cdj press emu-captures-sync-a sync
+   64.39  pi-qemu cdj press emu-captures-sync-b sync
+   74.38  pi-qemu cdj press emu-captures-sync-b master

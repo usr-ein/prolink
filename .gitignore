@@ -2,11 +2,14 @@
 **/*.rs.bk
 Cargo.lock.orig
 
-# The capture corpus is committed, under `captures/`. Recordings anywhere else
-# in the tree are someone's working files, not part of it. The first rule is
+# The capture corpus is committed, under `captures/`, and the captures of
+# emulated decks beside it, under `emu-captures/`. Recordings anywhere else in
+# the tree are someone's working files, not part of either. The first rules are
 # not redundant: a global ignore of `captures/` excludes the directory outright,
 # and git does not look inside an excluded directory for the re-inclusions below.
 !captures/
+!emu-captures/
 *.pcap
 *.pcapng
 !captures/**
+!emu-captures/**
