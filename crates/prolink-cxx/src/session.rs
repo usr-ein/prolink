@@ -9,7 +9,7 @@
 use std::collections::VecDeque;
 use std::net::Ipv4Addr;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use prolink::consume::NfsClient;
 use prolink::playback::rounded;
@@ -1753,7 +1753,7 @@ const MEDIA_RETRY: std::time::Duration = std::time::Duration::from_secs(5);
 fn spawn_media_asker(runtime: &Runtime, live: Arc<RwLock<Option<Live>>>) {
     runtime.spawn(async move {
         let mut asker = MediaAsker::default();
-        let mut asking_for: Option<Arc<VirtualPlayer>> = None;
+        let mut asking_for = Weak::new();
         let mut check = tokio::time::interval(MEDIA_CHECK);
         check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -1762,12 +1762,8 @@ fn spawn_media_asker(runtime: &Runtime, live: Arc<RwLock<Option<Live>>>) {
                 continue;
             };
             // A rebuilt session is a new table, with nothing asked yet.
-            if !asking_for
-                .as_ref()
-                .is_some_and(|before| Arc::ptr_eq(before, &player))
-            {
+            if is_new_table(&mut asking_for, &player) {
                 asker = MediaAsker::default();
-                asking_for = Some(Arc::clone(&player));
             }
             let cdj = player.cdj();
             let ours = cdj.number();
@@ -1793,6 +1789,21 @@ fn spawn_media_asker(runtime: &Runtime, live: Arc<RwLock<Option<Live>>>) {
             }
         }
     });
+}
+
+/// Whether `player` is not the one `asking_for` holds, which it then holds.
+///
+/// **Weakly.** The asker outlives every session, and holding the player
+/// kept a torn-down one running: on an emulated deck whose cable was pulled
+/// and put back, its keep-alives went on as player 4 and its file server kept
+/// UDP 111, so the session built after it found the port taken and settled for
+/// watching as device 7, both on the link at once.
+fn is_new_table<T>(asking_for: &mut Weak<T>, player: &Arc<T>) -> bool {
+    if std::ptr::eq(asking_for.as_ptr(), Arc::as_ptr(player)) {
+        return false;
+    }
+    *asking_for = Arc::downgrade(player);
+    true
 }
 
 /// Which peer slots are due a media query, as a deck decides it.
@@ -2544,7 +2555,7 @@ mod media_asker_tests {
     use prolink_proto::Slot;
     use prolink_proto::status::MediaState;
 
-    use super::{MediaAsker, media_changes};
+    use super::{MediaAsker, is_new_table, media_changes};
 
     fn usb(state: MediaState, answered: bool) -> PeerSlot {
         PeerSlot {
@@ -2657,5 +2668,26 @@ mod media_asker_tests {
             vec![key],
             "the same stick back is news again"
         );
+    }
+
+    /// The asker outlives every session, and must not keep one's player:
+    /// a torn-down player kept alive went on announcing itself and holding its
+    /// ports, and the session built after it settled for device 7.
+    #[test]
+    fn the_asker_lets_a_torn_down_player_go() {
+        let mut asking_for = std::sync::Weak::new();
+        let player = std::sync::Arc::new(4_u8);
+        assert!(is_new_table(&mut asking_for, &player), "the first player");
+        assert!(!is_new_table(&mut asking_for, &player), "the same player");
+
+        let torn_down = std::sync::Arc::downgrade(&player);
+        drop(player);
+        assert!(
+            torn_down.upgrade().is_none(),
+            "nothing but the session held it"
+        );
+
+        let rebuilt = std::sync::Arc::new(4_u8);
+        assert!(is_new_table(&mut asking_for, &rebuilt), "a rebuilt session");
     }
 }
