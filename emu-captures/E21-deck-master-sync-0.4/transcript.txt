@@ -1,0 +1,68 @@
+      1      0.000  169.254.5.189>169.254.230.162 status usb=loaded sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+      3      0.178  169.254.230.162>169.254.95.108 status usb=loaded sd=loaded link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     14      0.750  169.254.95.108>169.254.5.189 status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0x84 bpm=128.00 browse=None
+     32      1.252     P2>169.254.255.255 keep-alive: player 2 is 169.254.230.162, "CDJ-2000nexus"
+     51      1.886     P1>169.254.255.255 keep-alive: player 1 is 169.254.5.189, "CDJ-2000nexus"
+     52      1.935     P4>169.254.255.255 keep-alive: player 4 is 169.254.95.108, "CDJ-2000nexus"
+    141      4.680     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xe4 bpm=128.00 browse=None
+    850     25.769     P1>P4    port query (0000000f52656d6f7465444253657276657200)
+    852     25.770     P4>P1    port reply: dbserver on 1051
+    859     25.772     P1>P4    dbserver preamble 11 00 00 00 01
+    861     25.773     P4>P1    dbserver preamble 11 00 00 00 01
+    862     25.774     P1>P4    db introduce txn=0xfffffffe [0x1]
+    863     25.774     P4>P1    db success txn=0xfffffffe [0x0, 0x4]
+    865     25.780     P1>P4    db unknown_3d03 txn=0x380003d [0x01010301=D1/M1/S3/T1, 0x84]
+    866     25.780     P4>P1    db success txn=0x380003d [0x3d03, 0x0]
+    870     25.789     P1>P4    db disconnect txn=0xfffffffe []
+   1091     32.240     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(2) flags=0x84 bpm=- browse=Some(141)
+   1299     38.026     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(2) flags=0x84 bpm=126.00 browse=Some(141)
+   1301     38.097     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xc4 bpm=126.00 browse=Some(141)
+   1995     55.706     P2>P4    port query (0000000f52656d6f7465444253657276657200)
+   1997     55.707     P4>P2    port reply: dbserver on 1051
+   2003     55.710     P2>P4    dbserver preamble 11 00 00 00 01
+   2005     55.711     P4>P2    dbserver preamble 11 00 00 00 01
+   2006     55.711     P2>P4    db introduce txn=0xfffffffe [0x2]
+   2007     55.712     P4>P2    db success txn=0xfffffffe [0x0, 0x4]
+   2009     55.717     P2>P4    db unknown_3d03 txn=0x380002d [0x02010301=D2/M1/S3/T1, 0x84]
+   2010     55.717     P4>P2    db success txn=0x380002d [0x3d03, 0x0]
+   2012     55.727     P2>P4    db disconnect txn=0xfffffffe []
+   2539     68.989     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(2) flags=0x84 bpm=- browse=Some(141)
+   2610     70.717     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(2) flags=0x84 bpm=132.00 browse=Some(141)
+   2612     70.782     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(3) flags=0xc4 bpm=132.00 browse=Some(141)
+   2795     74.897     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xe4 bpm=126.00 browse=Some(141)
+   2797     74.902     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xc4 bpm=128.00 browse=None
+   3500     90.587     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xe4 bpm=128.00 browse=None
+   3502     90.599     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xc4 bpm=126.00 browse=Some(141)
+   4163    105.261     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0xa4 bpm=128.00 browse=None
+   4165    105.302     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xe4 bpm=126.00 browse=Some(141)
+   4167    105.327     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0x84 bpm=128.00 browse=None
+   4809    120.432     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xc4 bpm=128.00 browse=None
+   5041    125.572     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xe4 bpm=128.00 browse=None
+   5046    125.634     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xc4 bpm=126.00 browse=Some(141)
+   5685    139.975     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(3) flags=0xd4 bpm=132.00 browse=Some(141)
+   6130    149.901     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(5) flags=0x84 bpm=126.00 browse=Some(141)
+   6361    155.532     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xf4 bpm=128.00 browse=None
+   6744    164.937     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0xb4 bpm=128.00 browse=None
+   6746    164.997     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(3) flags=0xf4 bpm=132.00 browse=Some(141)
+   6750    165.002     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0x94 bpm=128.00 browse=None
+   7281    180.082     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xd4 bpm=128.00 browse=None
+   7485    185.432     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xf4 bpm=128.00 browse=None
+   7488    185.489     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(3) flags=0xd4 bpm=132.00 browse=Some(141)
+   8069    200.955     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(5) flags=0x94 bpm=132.00 browse=Some(141)
+   8416    210.282     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0xb4 bpm=128.00 browse=None
+   8753    219.891     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xc4 bpm=126.00 browse=Some(141)
+   9334    235.003     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0xa4 bpm=128.00 browse=None
+   9342    235.206     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xe4 bpm=126.00 browse=Some(141)
+   9344    235.259     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0x84 bpm=128.00 browse=None
+   9926    250.260     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xc4 bpm=128.00 browse=None
+  10112    254.881     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(3) flags=0xe4 bpm=128.00 browse=None
+  10117    254.950     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(3) flags=0xc4 bpm=126.00 browse=Some(141)
+  10723    269.861     P1>P2    status usb=loaded sd=empty link=true track P1 usb type=1 id=77 play=Some(5) flags=0x84 bpm=126.00 browse=Some(141)
+  10919    275.128     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0xa4 bpm=128.00 browse=None
+  11325    286.651     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(3) flags=0xd4 bpm=132.00 browse=Some(141)
+  11357    287.389     P2>P1    status usb=loaded sd=loaded link=true track P2 usb type=1 id=116 play=Some(3) flags=0xf4 bpm=132.00 browse=Some(141)
+  11359    287.429     P4>P1    status usb=loaded sd=empty link=true track P4 usb type=1 id=132 play=Some(5) flags=0x84 bpm=128.00 browse=None
+
+keep-alives: P1 169, P2 169, P4 172
+beat packets: P1 330, P2 194, P4 428
+status packets: 169.254.230.162 11, 169.254.5.189 20, 169.254.95.108 12, P1 4264, P2 4128, P4 3401

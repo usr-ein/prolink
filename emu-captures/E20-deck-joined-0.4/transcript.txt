@@ -1,0 +1,500 @@
+      1      0.000     P4>169.254.255.255 keep-alive: player 4 is 169.254.95.108, "CDJ-2000nexus"
+      8     12.058  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+      9     13.057  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+     11     15.057  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+     18     21.060  169.254.5.189>169.254.255.255 hello
+     19     21.356  169.254.5.189>169.254.255.255 hello
+     20     21.656  169.254.5.189>169.254.255.255 hello
+     21     21.956  169.254.5.189>169.254.255.255 claim_mac
+     23     22.256  169.254.5.189>169.254.255.255 claim_mac
+     24     22.556  169.254.5.189>169.254.255.255 claim_mac
+     25     22.856  169.254.5.189>169.254.255.255 claim_ip number=1 ip=169.254.5.189
+     26     23.156  169.254.5.189>169.254.255.255 claim_ip number=1 ip=169.254.5.189
+     27     23.456  169.254.5.189>169.254.255.255 claim_ip number=1 ip=169.254.5.189
+     28     23.756  169.254.5.189>169.254.255.255 claim_number number=1
+     30     24.056  169.254.5.189>169.254.255.255 claim_number number=1
+     31     24.356  169.254.5.189>169.254.255.255 claim_number number=1
+     32     24.657     P1>169.254.255.255 keep-alive: player 1 is 169.254.5.189, "CDJ-2000nexus"
+     35     24.662     P1>P4    status usb=loaded sd=empty link=false no track play=Some(0) flags=0x84 bpm=- browse=None
+     36     24.824     P4>P1    status usb=empty sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+     38     24.874     P4>P1    media_query: P4 (169.254.95.108) asks about P1 usb
+     39     24.875     P1>P4    media_response: P1 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 01 00 9c 00 00 00 01 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+     50     25.500     P4>P1    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 49]
+     52     25.500     P4>P1    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 51]
+     54     25.501     P4>P1    mount Export = Export([Export { path: "/C/"/6B, groups: ["169.254.0.0/255.255.0.0"] }])   [call 53]
+     56     25.502     P4>P1    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 55]
+     58     25.504     P4>P1    nfs LOOKUP "/C/PIONEER" (name bytes 500049004f004e00450045005200; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19800256 fh:012e20c0012538a8012538a80000000000000000000000000000000000000000   [call 57]
+     60     25.505     P4>P1    nfs LOOKUP "/C/PIONEER/rekordbox" (name bytes 720065006b006f007200640062006f007800; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19800636 fh:012e223c012e20c0012538a80000000000000000000000000000000000000000   [call 59]
+     62     25.507     P4>P1    nfs LOOKUP "/C/PIONEER/rekordbox/export.pdb" (name bytes 6500780070006f00720074002e00700064006200; dir fh tail 0000000000000000000000000000000000000000) = NFREG size=319488 fileid=19800892 fh:012e233c012e223c012538a80000000000000000000000000000000000000000   [call 61]
+     69     25.510     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @0 +8192 = 8192 bytes   [call 63]
+     76     25.512     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @8192 +8192 = 8192 bytes   [call 70]
+     83     25.514     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @16384 +8192 = 8192 bytes   [call 77]
+     90     25.517     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @24576 +8192 = 8192 bytes   [call 84]
+     97     25.518     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @32768 +8192 = 8192 bytes   [call 91]
+    104     25.520     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @40960 +8192 = 8192 bytes   [call 98]
+    111     25.523     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @49152 +8192 = 8192 bytes   [call 105]
+    118     25.525     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @57344 +8192 = 8192 bytes   [call 112]
+    125     25.526     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @65536 +8192 = 8192 bytes   [call 119]
+    132     25.528     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @73728 +8192 = 8192 bytes   [call 126]
+    139     25.531     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @81920 +8192 = 8192 bytes   [call 133]
+    146     25.533     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @90112 +8192 = 8192 bytes   [call 140]
+    153     25.535     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @98304 +8192 = 8192 bytes   [call 147]
+    160     25.537     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @106496 +8192 = 8192 bytes   [call 154]
+    167     25.539     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @114688 +8192 = 8192 bytes   [call 161]
+    174     25.541     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @122880 +8192 = 8192 bytes   [call 168]
+    181     25.543     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @131072 +8192 = 8192 bytes   [call 175]
+    188     25.544     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @139264 +8192 = 8192 bytes   [call 182]
+    195     25.546     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @147456 +8192 = 8192 bytes   [call 189]
+    202     25.548     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @155648 +8192 = 8192 bytes   [call 196]
+    209     25.551     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @163840 +8192 = 8192 bytes   [call 203]
+    216     25.553     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @172032 +8192 = 8192 bytes   [call 210]
+    223     25.557     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @180224 +8192 = 8192 bytes   [call 217]
+    230     25.559     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @188416 +8192 = 8192 bytes   [call 224]
+    237     25.562     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @196608 +8192 = 8192 bytes   [call 231]
+    244     25.565     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @204800 +8192 = 8192 bytes   [call 238]
+    251     25.567     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @212992 +8192 = 8192 bytes   [call 245]
+    258     25.570     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @221184 +8192 = 8192 bytes   [call 252]
+    265     25.572     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @229376 +8192 = 8192 bytes   [call 259]
+    273     25.574     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @237568 +8192 = 8192 bytes   [call 267]
+    280     25.576     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @245760 +8192 = 8192 bytes   [call 274]
+    287     25.578     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @253952 +8192 = 8192 bytes   [call 281]
+    294     25.580     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @262144 +8192 = 8192 bytes   [call 288]
+    301     25.582     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @270336 +8192 = 8192 bytes   [call 295]
+    308     25.584     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @278528 +8192 = 8192 bytes   [call 302]
+    315     25.586     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @286720 +8192 = 8192 bytes   [call 309]
+    322     25.588     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @294912 +8192 = 8192 bytes   [call 316]
+    329     25.590     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @303104 +8192 = 8192 bytes   [call 323]
+    336     25.592     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @311296 +8192 = 8192 bytes   [call 330]
+    338     25.595     P4>P1    mount UMNT "/C/" = Umnt   [call 337]
+    882     68.585  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+    895     69.585  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+    921     71.585  0.0.0.0>255.255.255.255 UDP 68>67 300 bytes, not RPC
+   1000     77.587  169.254.230.162>169.254.255.255 hello
+   1005     77.885  169.254.230.162>169.254.255.255 hello
+   1011     78.185  169.254.230.162>169.254.255.255 hello
+   1016     78.485  169.254.230.162>169.254.255.255 claim_mac
+   1020     78.785  169.254.230.162>169.254.255.255 claim_mac
+   1025     79.085  169.254.230.162>169.254.255.255 claim_mac
+   1029     79.385  169.254.230.162>169.254.255.255 claim_ip number=1 ip=169.254.230.162
+   1032     79.386     P1>169.254.230.162 mixer_assign
+   1033     79.386  169.254.230.162>169.254.255.255 claim_ip number=2 ip=169.254.230.162
+   1037     79.685  169.254.230.162>169.254.255.255 claim_ip number=2 ip=169.254.230.162
+   1041     79.985  169.254.230.162>169.254.255.255 claim_ip number=2 ip=169.254.230.162
+   1048     80.285  169.254.230.162>169.254.255.255 claim_number number=2
+   1049     80.286     P1>169.254.230.162 number_in_use number=1
+   1050     80.288     P2>169.254.255.255 keep-alive: player 2 is 169.254.230.162, "CDJ-2000nexus"
+   1093     82.014     P2>P4    status usb=loaded sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+   1106     82.300     P1>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 1105]
+   1108     82.301     P1>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 1107]
+   1110     82.303     P1>P2    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 1109]
+   1113     82.319     P1>P2    media_query: P1 (169.254.5.189) asks about P2 usb
+   1116     82.320     P2>P1    media_response: P2 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   1119     82.326     P1>P2    port query (0000000f52656d6f7465444253657276657200)
+   1120     82.327     P2>P1    port reply: dbserver on 1051
+   1125     82.329     P1>P2    dbserver preamble 11 00 00 00 01
+   1126     82.329     P2>P1    dbserver preamble 11 00 00 00 01
+   1127     82.330     P1>P2    db introduce txn=0xfffffffe [0x1]
+   1128     82.332     P2>P1    db success txn=0xfffffffe [0x0, 0x2]
+   1130     82.337     P1>P2    db unknown_3e03 txn=0x3800009 [0x01010301=D1/M1/S3/T1]
+   1132     82.345     P2>P1    db unknown_4b02 txn=0x3800009 [0x3e03, 0x0, 0x2, ""]
+   1134     82.362     P1>P2    db disconnect txn=0xfffffffe []
+   1138     82.375     P4>P2    media_query: P4 (169.254.95.108) asks about P2 usb
+   1139     82.376     P2>P4    media_response: P2 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   1140     82.383     P1>P2    status usb=loaded sd=empty link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+   1153     82.662     P4>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 1152]
+   1155     82.662     P4>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 1154]
+   1157     82.663     P4>P2    mount Export = Export([Export { path: "/C/"/6B, groups: ["169.254.0.0/255.255.0.0"] }])   [call 1156]
+   1159     82.664     P4>P2    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 1158]
+   1161     82.666     P4>P2    nfs LOOKUP "/C/PIONEER" (name bytes 500049004f004e00450045005200; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19994796 fh:013118ac012538a8012538a80000000000000000000000000000000000000000   [call 1160]
+   1163     82.667     P4>P2    nfs LOOKUP "/C/PIONEER/rekordbox" (name bytes 720065006b006f007200640062006f007800; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19995176 fh:01311a28013118ac012538a80000000000000000000000000000000000000000   [call 1162]
+   1167     82.670     P4>P2    nfs LOOKUP "/C/PIONEER/rekordbox/export.pdb" (name bytes 6500780070006f00720074002e00700064006200; dir fh tail 0000000000000000000000000000000000000000) = NFREG size=319488 fileid=19995432 fh:01311b2801311a28012538a80000000000000000000000000000000000000000   [call 1164]
+   1174     82.673     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @0 +8192 = 8192 bytes   [call 1168]
+   1181     82.675     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @8192 +8192 = 8192 bytes   [call 1175]
+   1188     82.677     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @16384 +8192 = 8192 bytes   [call 1182]
+   1195     82.679     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @24576 +8192 = 8192 bytes   [call 1189]
+   1202     82.681     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @32768 +8192 = 8192 bytes   [call 1196]
+   1209     82.683     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @40960 +8192 = 8192 bytes   [call 1203]
+   1216     82.685     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @49152 +8192 = 8192 bytes   [call 1210]
+   1223     82.688     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @57344 +8192 = 8192 bytes   [call 1217]
+   1230     82.690     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @65536 +8192 = 8192 bytes   [call 1224]
+   1237     82.692     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @73728 +8192 = 8192 bytes   [call 1231]
+   1244     82.695     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @81920 +8192 = 8192 bytes   [call 1238]
+   1251     82.697     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @90112 +8192 = 8192 bytes   [call 1245]
+   1258     82.699     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @98304 +8192 = 8192 bytes   [call 1252]
+   1265     82.701     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @106496 +8192 = 8192 bytes   [call 1259]
+   1272     82.705     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @114688 +8192 = 8192 bytes   [call 1266]
+   1279     82.707     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @122880 +8192 = 8192 bytes   [call 1273]
+   1286     82.711     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @131072 +8192 = 8192 bytes   [call 1280]
+   1293     82.713     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @139264 +8192 = 8192 bytes   [call 1287]
+   1300     82.715     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @147456 +8192 = 8192 bytes   [call 1294]
+   1307     82.717     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @155648 +8192 = 8192 bytes   [call 1301]
+   1314     82.719     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @163840 +8192 = 8192 bytes   [call 1308]
+   1321     82.721     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @172032 +8192 = 8192 bytes   [call 1315]
+   1328     82.724     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @180224 +8192 = 8192 bytes   [call 1322]
+   1337     82.726     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @188416 +8192 = 8192 bytes   [call 1329]
+   1346     82.728     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @196608 +8192 = 8192 bytes   [call 1338]
+   1353     82.730     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @204800 +8192 = 8192 bytes   [call 1347]
+   1360     82.732     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @212992 +8192 = 8192 bytes   [call 1354]
+   1367     82.736     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @221184 +8192 = 8192 bytes   [call 1361]
+   1374     82.739     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @229376 +8192 = 8192 bytes   [call 1368]
+   1381     82.742     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @237568 +8192 = 8192 bytes   [call 1375]
+   1388     82.744     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @245760 +8192 = 8192 bytes   [call 1382]
+   1395     82.746     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @253952 +8192 = 8192 bytes   [call 1389]
+   1402     82.748     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @262144 +8192 = 8192 bytes   [call 1396]
+   1409     82.750     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @270336 +8192 = 8192 bytes   [call 1403]
+   1416     82.753     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @278528 +8192 = 8192 bytes   [call 1410]
+   1423     82.755     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @286720 +8192 = 8192 bytes   [call 1417]
+   1430     82.758     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @294912 +8192 = 8192 bytes   [call 1424]
+   1437     82.761     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @303104 +8192 = 8192 bytes   [call 1431]
+   1444     82.763     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @311296 +8192 = 8192 bytes   [call 1438]
+   1446     82.764     P4>P2    mount UMNT "/C/" = Umnt   [call 1445]
+   1458     83.067     P2>P1    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 1457]
+   1460     83.068     P2>P1    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 1459]
+   1462     83.069     P2>P1    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 1461]
+   1465     83.086     P2>P1    media_query: P2 (169.254.230.162) asks about P1 usb
+   1466     83.086     P1>P2    media_response: P1 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 01 00 9c 00 00 00 01 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   1469     83.091     P2>P1    port query (0000000f52656d6f7465444253657276657200)
+   1470     83.091     P1>P2    port reply: dbserver on 1051
+   1475     83.093     P2>P1    dbserver preamble 11 00 00 00 01
+   1476     83.093     P1>P2    dbserver preamble 11 00 00 00 01
+   1479     83.094     P2>P1    db introduce txn=0xfffffffe [0x2]
+   1480     83.094     P1>P2    db success txn=0xfffffffe [0x0, 0x1]
+   1482     83.099     P2>P1    db unknown_3e03 txn=0x3800001 [0x02010301=D2/M1/S3/T1]
+   1484     83.106     P1>P2    db unknown_4b02 txn=0x3800001 [0x3e03, 0x0, 0x2, ""]
+   1711     88.965     P2>P1    status usb=loaded sd=loaded link=true no track play=Some(0) flags=0x84 bpm=- browse=None
+   1715     88.985     P2>P1    db disconnect txn=0xfffffffe []
+   1734     89.370     P1>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 1733]
+   1736     89.370     P1>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 1735]
+   1738     89.371     P1>P2    mount MNT "/B/" = root fh:022624b8022624b8022624b80000000000000000000000000000000000000000   [call 1737]
+   1739     89.373     P4>P2    media_query: P4 (169.254.95.108) asks about P2 sd
+   1740     89.373     P2>P4    media_response: P2 sd name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 02 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   1741     89.375     P1>P2    media_query: P1 (169.254.5.189) asks about P2 sd
+   1742     89.375     P2>P1    media_response: P2 sd name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 02 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   1757     89.702     P4>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 1756]
+   1759     89.703     P4>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 1758]
+   1761     89.704     P4>P2    mount Export = Export([Export { path: "/C/"/6B, groups: ["169.254.0.0/255.255.0.0"] }, Export { path: "/B/"/6B, groups: ["169.254.0.0/255.255.0.0"] }])   [call 1760]
+   1763     89.704     P4>P2    mount MNT "/B/" = root fh:022624b8022624b8022624b80000000000000000000000000000000000000000   [call 1762]
+   1765     89.705     P4>P2    nfs LOOKUP "/B/PIONEER" (name bytes 500049004f004e00450045005200; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=35994264 fh:02253a98022624b8022624b80000000000000000000000000000000000000000   [call 1764]
+   1767     89.706     P4>P2    nfs LOOKUP "/B/PIONEER/rekordbox" (name bytes 720065006b006f007200640062006f007800; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=35994644 fh:02253c1402253a98022624b80000000000000000000000000000000000000000   [call 1766]
+   1769     89.708     P4>P2    nfs LOOKUP "/B/PIONEER/rekordbox/export.pdb" (name bytes 6500780070006f00720074002e00700064006200; dir fh tail 0000000000000000000000000000000000000000) = NFREG size=319488 fileid=35994900 fh:02253d1402253c14022624b80000000000000000000000000000000000000000   [call 1768]
+   1776     89.713     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @0 +8192 = 8192 bytes   [call 1770]
+   1783     89.716     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @8192 +8192 = 8192 bytes   [call 1777]
+   1794     89.721     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @16384 +8192 = 8192 bytes   [call 1786]
+   1801     89.725     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @24576 +8192 = 8192 bytes   [call 1795]
+   1808     89.731     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @32768 +8192 = 8192 bytes   [call 1802]
+   1815     89.735     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @40960 +8192 = 8192 bytes   [call 1809]
+   1822     89.738     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @49152 +8192 = 8192 bytes   [call 1816]
+   1829     89.742     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @57344 +8192 = 8192 bytes   [call 1823]
+   1836     89.746     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @65536 +8192 = 8192 bytes   [call 1830]
+   1843     89.750     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @73728 +8192 = 8192 bytes   [call 1837]
+   1850     89.754     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @81920 +8192 = 8192 bytes   [call 1844]
+   1857     89.759     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @90112 +8192 = 8192 bytes   [call 1851]
+   1864     89.763     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @98304 +8192 = 8192 bytes   [call 1858]
+   1871     89.769     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @106496 +8192 = 8192 bytes   [call 1865]
+   1878     89.773     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @114688 +8192 = 8192 bytes   [call 1872]
+   1885     89.777     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @122880 +8192 = 8192 bytes   [call 1879]
+   1894     89.781     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @131072 +8192 = 8192 bytes   [call 1886]
+   1901     89.786     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @139264 +8192 = 8192 bytes   [call 1895]
+   1908     89.791     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @147456 +8192 = 8192 bytes   [call 1902]
+   1915     89.796     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @155648 +8192 = 8192 bytes   [call 1909]
+   1922     89.800     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @163840 +8192 = 8192 bytes   [call 1916]
+   1929     89.804     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @172032 +8192 = 8192 bytes   [call 1923]
+   1936     89.808     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @180224 +8192 = 8192 bytes   [call 1930]
+   1943     89.812     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @188416 +8192 = 8192 bytes   [call 1937]
+   1950     89.816     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @196608 +8192 = 8192 bytes   [call 1944]
+   1957     89.819     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @204800 +8192 = 8192 bytes   [call 1951]
+   1964     89.823     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @212992 +8192 = 8192 bytes   [call 1958]
+   1971     89.827     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @221184 +8192 = 8192 bytes   [call 1965]
+   1978     89.832     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @229376 +8192 = 8192 bytes   [call 1972]
+   1985     89.837     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @237568 +8192 = 8192 bytes   [call 1979]
+   1992     89.841     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @245760 +8192 = 8192 bytes   [call 1986]
+   1999     89.846     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @253952 +8192 = 8192 bytes   [call 1993]
+   2006     89.850     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @262144 +8192 = 8192 bytes   [call 2000]
+   2013     89.855     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @270336 +8192 = 8192 bytes   [call 2007]
+   2020     89.859     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @278528 +8192 = 8192 bytes   [call 2014]
+   2027     89.863     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @286720 +8192 = 8192 bytes   [call 2021]
+   2034     89.868     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @294912 +8192 = 8192 bytes   [call 2028]
+   2041     89.872     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @303104 +8192 = 8192 bytes   [call 2035]
+   2048     89.876     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @311296 +8192 = 8192 bytes   [call 2042]
+   2050     89.877     P4>P2    mount UMNT "/B/" = Umnt   [call 2049]
+   5086    189.383     P4>224.0.0.251 UDP 5353>5353 116 bytes, not RPC
+   5087    189.386     P4>224.0.0.251 UDP 5353>5353 299 bytes, not RPC
+   5091    189.637     P4>224.0.0.251 UDP 5353>5353 299 bytes, not RPC
+   5095    189.889     P4>224.0.0.251 UDP 5353>5353 299 bytes, not RPC
+   5098    190.087     P4>224.0.0.251 UDP 5353>5353 275 bytes, not RPC
+   5105    190.453     P4>224.0.0.251 UDP 5353>5353 116 bytes, not RPC
+   5115    191.158     P4>224.0.0.251 UDP 5353>5353 275 bytes, not RPC
+   5134    192.522     P4>224.0.0.251 UDP 5353>5353 203 bytes, not RPC
+   5144    193.228     P4>224.0.0.251 UDP 5353>5353 275 bytes, not RPC
+   5199    198.008     P4>169.254.255.255 hello
+   5204    198.315     P4>169.254.255.255 hello
+   5207    198.624     P4>169.254.255.255 hello
+   5212    198.921     P4>169.254.255.255 claim_mac
+   5216    199.232     P4>169.254.255.255 claim_mac
+   5219    199.536     P4>169.254.255.255 claim_mac
+   5225    199.839     P4>169.254.255.255 claim_ip number=4 ip=169.254.95.108
+   5228    200.139     P4>169.254.255.255 claim_ip number=4 ip=169.254.95.108
+   5231    200.443     P4>169.254.255.255 claim_ip number=4 ip=169.254.95.108
+   5236    200.745     P4>169.254.255.255 claim_number number=4
+   5237    200.748     P1>P4    number_in_use number=1
+   5247    200.874     P4>P1    media_query: P4 (169.254.95.108) asks about P1 usb
+   5248    200.874     P1>P4    media_response: P1 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 01 00 9c 00 00 00 01 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   5262    201.272     P4>P1    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 5261]
+   5264    201.273     P4>P1    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 5263]
+   5266    201.274     P4>P1    mount Export = Export([Export { path: "/C/"/6B, groups: ["169.254.0.0/255.255.0.0"] }])   [call 5265]
+   5268    201.276     P4>P1    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 5267]
+   5270    201.278     P4>P1    nfs LOOKUP "/C/PIONEER" (name bytes 500049004f004e00450045005200; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19216700 fh:0125393c012538a8012538a80000000000000000000000000000000000000000   [call 5269]
+   5272    201.278     P4>P1    nfs LOOKUP "/C/PIONEER/rekordbox" (name bytes 720065006b006f007200640062006f007800; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19217080 fh:01253ab80125393c012538a80000000000000000000000000000000000000000   [call 5271]
+   5274    201.283     P4>P1    nfs LOOKUP "/C/PIONEER/rekordbox/export.pdb" (name bytes 6500780070006f00720074002e00700064006200; dir fh tail 0000000000000000000000000000000000000000) = NFREG size=319488 fileid=19217336 fh:01253bb801253ab8012538a80000000000000000000000000000000000000000   [call 5273]
+   5281    201.286     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @0 +8192 = 8192 bytes   [call 5275]
+   5288    201.290     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @8192 +8192 = 8192 bytes   [call 5282]
+   5295    201.293     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @16384 +8192 = 8192 bytes   [call 5289]
+   5302    201.296     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @24576 +8192 = 8192 bytes   [call 5296]
+   5309    201.299     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @32768 +8192 = 8192 bytes   [call 5303]
+   5316    201.303     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @40960 +8192 = 8192 bytes   [call 5310]
+   5323    201.305     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @49152 +8192 = 8192 bytes   [call 5317]
+   5330    201.309     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @57344 +8192 = 8192 bytes   [call 5324]
+   5339    201.313     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @65536 +8192 = 8192 bytes   [call 5331]
+   5347    201.317     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @73728 +8192 = 8192 bytes   [call 5340]
+   5354    201.320     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @81920 +8192 = 8192 bytes   [call 5348]
+   5361    201.323     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @90112 +8192 = 8192 bytes   [call 5355]
+   5368    201.326     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @98304 +8192 = 8192 bytes   [call 5362]
+   5375    201.329     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @106496 +8192 = 8192 bytes   [call 5369]
+   5382    201.333     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @114688 +8192 = 8192 bytes   [call 5376]
+   5389    201.335     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @122880 +8192 = 8192 bytes   [call 5383]
+   5396    201.338     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @131072 +8192 = 8192 bytes   [call 5390]
+   5403    201.342     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @139264 +8192 = 8192 bytes   [call 5397]
+   5410    201.347     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @147456 +8192 = 8192 bytes   [call 5404]
+   5417    201.349     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @155648 +8192 = 8192 bytes   [call 5411]
+   5424    201.353     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @163840 +8192 = 8192 bytes   [call 5418]
+   5431    201.356     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @172032 +8192 = 8192 bytes   [call 5425]
+   5438    201.358     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @180224 +8192 = 8192 bytes   [call 5432]
+   5445    201.362     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @188416 +8192 = 8192 bytes   [call 5439]
+   5452    201.364     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @196608 +8192 = 8192 bytes   [call 5446]
+   5461    201.366     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @204800 +8192 = 8192 bytes   [call 5453]
+   5468    201.369     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @212992 +8192 = 8192 bytes   [call 5462]
+   5475    201.372     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @221184 +8192 = 8192 bytes   [call 5469]
+   5476    201.372     P4>P2    media_query: P4 (169.254.95.108) asks about P2 sd
+   5477    201.372     P4>P2    media_query: P4 (169.254.95.108) asks about P2 usb
+   5479    201.373     P2>P4    media_response: P2 sd name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 02 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   5480    201.373     P2>P4    media_response: P2 usb name="SAM1" created="2026-09-29" tracks=141 playlists=4 total=Some(4285513728) free=Some(2449547264)
+                         0000  51 73 70 74 31 57 6d 4a 4f 4c 06 43 44 4a 2d 32
+                         0010  30 30 30 6e 65 78 75 73 00 00 00 00 00 00 00 01
+                         0020  00 02 00 9c 00 00 00 02 00 00 00 03 00 53 00 41
+                         0030  00 4d 00 31 00 00 00 00 00 00 00 00 00 00 00 00
+                         0040  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0050  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         0060  00 00 00 00 00 00 00 00 00 00 00 00 00 32 00 30
+                         0070  00 32 00 36 00 2d 00 30 00 39 00 2d 00 32 00 39
+                         0080  00 00 00 00 00 31 00 30 00 30 00 30 00 00 00 00
+                         0090  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                         00a0  00 00 00 00 00 00 00 8d 00 00 01 01 00 00 00 04
+                         00b0  00 00 00 00 ff 6f c0 00 00 00 00 00 92 01 20 00
+   5486    201.375     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @229376 +8192 = 8192 bytes   [call 5478]
+   5493    201.379     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @237568 +8192 = 8192 bytes   [call 5487]
+   5500    201.383     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @245760 +8192 = 8192 bytes   [call 5494]
+   5507    201.385     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @253952 +8192 = 8192 bytes   [call 5501]
+   5514    201.389     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @262144 +8192 = 8192 bytes   [call 5508]
+   5521    201.392     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @270336 +8192 = 8192 bytes   [call 5515]
+   5528    201.395     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @278528 +8192 = 8192 bytes   [call 5522]
+   5535    201.397     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @286720 +8192 = 8192 bytes   [call 5529]
+   5542    201.401     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @294912 +8192 = 8192 bytes   [call 5536]
+   5549    201.404     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @303104 +8192 = 8192 bytes   [call 5543]
+   5556    201.407     P4>P1    nfs READ "/C/PIONEER/rekordbox/export.pdb" @311296 +8192 = 8192 bytes   [call 5550]
+   5558    201.408     P4>P1    mount UMNT "/C/" = Umnt   [call 5557]
+   5572    201.790     P4>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 5571]
+   5574    201.791     P4>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 5573]
+   5576    201.792     P4>P2    mount Export = Export([Export { path: "/C/"/6B, groups: ["169.254.0.0/255.255.0.0"] }, Export { path: "/B/"/6B, groups: ["169.254.0.0/255.255.0.0"] }])   [call 5575]
+   5578    201.795     P4>P2    mount MNT "/B/" = root fh:022624b8022624b8022624b80000000000000000000000000000000000000000   [call 5577]
+   5580    201.798     P4>P2    nfs LOOKUP "/B/PIONEER" (name bytes 500049004f004e00450045005200; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=35994264 fh:02253a98022624b8022624b80000000000000000000000000000000000000000   [call 5579]
+   5582    201.801     P4>P2    nfs LOOKUP "/B/PIONEER/rekordbox" (name bytes 720065006b006f007200640062006f007800; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=35994644 fh:02253c1402253a98022624b80000000000000000000000000000000000000000   [call 5581]
+   5584    201.812     P4>P2    nfs LOOKUP "/B/PIONEER/rekordbox/export.pdb" (name bytes 6500780070006f00720074002e00700064006200; dir fh tail 0000000000000000000000000000000000000000) = NFREG size=319488 fileid=35994900 fh:02253d1402253c14022624b80000000000000000000000000000000000000000   [call 5583]
+   5591    201.826     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @0 +8192 = 8192 bytes   [call 5585]
+   5598    201.850     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @8192 +8192 = 8192 bytes   [call 5592]
+   5608    201.893     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @16384 +8192 = 8192 bytes   [call 5599]
+   5615    201.938     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @24576 +8192 = 8192 bytes   [call 5609]
+   5622    201.952     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @32768 +8192 = 8192 bytes   [call 5616]
+   5631    201.969     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @40960 +8192 = 8192 bytes   [call 5623]
+   5640    201.987     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @49152 +8192 = 8192 bytes   [call 5632]
+   5647    202.013     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @57344 +8192 = 8192 bytes   [call 5641]
+   5654    202.023     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @65536 +8192 = 8192 bytes   [call 5648]
+   5661    202.033     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @73728 +8192 = 8192 bytes   [call 5655]
+   5668    202.039     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @81920 +8192 = 8192 bytes   [call 5662]
+   5675    202.047     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @90112 +8192 = 8192 bytes   [call 5669]
+   5684    202.077     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @98304 +8192 = 8192 bytes   [call 5676]
+   5691    202.086     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @106496 +8192 = 8192 bytes   [call 5685]
+   5698    202.094     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @114688 +8192 = 8192 bytes   [call 5692]
+   5705    202.103     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @122880 +8192 = 8192 bytes   [call 5699]
+   5712    202.111     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @131072 +8192 = 8192 bytes   [call 5706]
+   5719    202.117     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @139264 +8192 = 8192 bytes   [call 5713]
+   5726    202.124     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @147456 +8192 = 8192 bytes   [call 5720]
+   5733    202.133     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @155648 +8192 = 8192 bytes   [call 5727]
+   5740    202.141     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @163840 +8192 = 8192 bytes   [call 5734]
+   5747    202.147     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @172032 +8192 = 8192 bytes   [call 5741]
+   5754    202.154     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @180224 +8192 = 8192 bytes   [call 5748]
+   5763    202.173     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @188416 +8192 = 8192 bytes   [call 5755]
+   5772    202.187     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @196608 +8192 = 8192 bytes   [call 5764]
+   5779    202.196     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @204800 +8192 = 8192 bytes   [call 5773]
+   5786    202.201     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @212992 +8192 = 8192 bytes   [call 5780]
+   5793    202.213     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @221184 +8192 = 8192 bytes   [call 5787]
+   5800    202.223     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @229376 +8192 = 8192 bytes   [call 5794]
+   5807    202.234     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @237568 +8192 = 8192 bytes   [call 5801]
+   5814    202.240     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @245760 +8192 = 8192 bytes   [call 5808]
+   5827    202.464     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @253952 +8192 = 8192 bytes   [call 5815]
+   5840    202.680     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @262144 +8192 = 8192 bytes   [call 5828]
+   5847    202.719     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @270336 +8192 = 8192 bytes   [call 5841]
+   5854    202.749     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @278528 +8192 = 8192 bytes   [call 5848]
+   5862    202.773     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @286720 +8192 = 8192 bytes   [call 5855]
+   5871    202.803     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @294912 +8192 = 8192 bytes   [call 5863]
+   5878    202.836     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @303104 +8192 = 8192 bytes   [call 5872]
+   5885    202.851     P4>P2    nfs READ "/B/PIONEER/rekordbox/export.pdb" @311296 +8192 = 8192 bytes   [call 5879]
+   5887    202.854     P4>P2    mount UMNT "/B/" = Umnt   [call 5886]
+   5889    202.855     P4>P2    portmap GETPORT Mapping { program: mountd, version: 1, protocol: udp, port: 0 } = GetPort(Some(48276))   [call 5888]
+   5891    202.856     P4>P2    portmap GETPORT Mapping { program: nfs, version: 2, protocol: udp, port: 0 } = GetPort(Some(2049))   [call 5890]
+   5893    202.857     P4>P2    mount Export = Export([Export { path: "/C/"/6B, groups: ["169.254.0.0/255.255.0.0"] }, Export { path: "/B/"/6B, groups: ["169.254.0.0/255.255.0.0"] }])   [call 5892]
+   5895    202.858     P4>P2    mount MNT "/C/" = root fh:012538a8012538a8012538a80000000000000000000000000000000000000000   [call 5894]
+   5897    202.858     P4>P2    nfs LOOKUP "/C/PIONEER" (name bytes 500049004f004e00450045005200; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19994796 fh:013118ac012538a8012538a80000000000000000000000000000000000000000   [call 5896]
+   5899    202.859     P4>P2    nfs LOOKUP "/C/PIONEER/rekordbox" (name bytes 720065006b006f007200640062006f007800; dir fh tail 0000000000000000000000000000000000000000) = NFDIR size=0 fileid=19995176 fh:01311a28013118ac012538a80000000000000000000000000000000000000000   [call 5898]
+   5901    202.861     P4>P2    nfs LOOKUP "/C/PIONEER/rekordbox/export.pdb" (name bytes 6500780070006f00720074002e00700064006200; dir fh tail 0000000000000000000000000000000000000000) = NFREG size=319488 fileid=19995432 fh:01311b2801311a28012538a80000000000000000000000000000000000000000   [call 5900]
+   5908    202.866     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @0 +8192 = 8192 bytes   [call 5902]
+   5915    202.868     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @8192 +8192 = 8192 bytes   [call 5909]
+   5922    202.871     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @16384 +8192 = 8192 bytes   [call 5916]
+   5931    202.875     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @24576 +8192 = 8192 bytes   [call 5923]
+   5940    202.881     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @32768 +8192 = 8192 bytes   [call 5933]
+   5947    202.891     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @40960 +8192 = 8192 bytes   [call 5941]
+   5954    202.899     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @49152 +8192 = 8192 bytes   [call 5948]
+   5961    202.906     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @57344 +8192 = 8192 bytes   [call 5955]
+   5968    202.909     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @65536 +8192 = 8192 bytes   [call 5962]
+   5975    202.916     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @73728 +8192 = 8192 bytes   [call 5969]
+   5982    202.921     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @81920 +8192 = 8192 bytes   [call 5976]
+   5989    202.927     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @90112 +8192 = 8192 bytes   [call 5983]
+   5996    202.934     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @98304 +8192 = 8192 bytes   [call 5990]
+   6003    202.939     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @106496 +8192 = 8192 bytes   [call 5997]
+   6010    202.950     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @114688 +8192 = 8192 bytes   [call 6004]
+   6017    202.961     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @122880 +8192 = 8192 bytes   [call 6011]
+   6024    202.983     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @131072 +8192 = 8192 bytes   [call 6018]
+   6033    203.021     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @139264 +8192 = 8192 bytes   [call 6025]
+   6040    203.032     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @147456 +8192 = 8192 bytes   [call 6034]
+   6047    203.040     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @155648 +8192 = 8192 bytes   [call 6041]
+   6054    203.044     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @163840 +8192 = 8192 bytes   [call 6048]
+   6061    203.048     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @172032 +8192 = 8192 bytes   [call 6055]
+   6068    203.052     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @180224 +8192 = 8192 bytes   [call 6062]
+   6075    203.055     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @188416 +8192 = 8192 bytes   [call 6069]
+   6082    203.060     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @196608 +8192 = 8192 bytes   [call 6076]
+   6089    203.069     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @204800 +8192 = 8192 bytes   [call 6083]
+   6096    203.076     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @212992 +8192 = 8192 bytes   [call 6090]
+   6107    203.085     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @221184 +8192 = 8192 bytes   [call 6099]
+   6114    203.093     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @229376 +8192 = 8192 bytes   [call 6108]
+   6121    203.099     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @237568 +8192 = 8192 bytes   [call 6115]
+   6128    203.115     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @245760 +8192 = 8192 bytes   [call 6122]
+   6135    203.122     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @253952 +8192 = 8192 bytes   [call 6129]
+   6142    203.127     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @262144 +8192 = 8192 bytes   [call 6136]
+   6149    203.131     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @270336 +8192 = 8192 bytes   [call 6143]
+   6156    203.135     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @278528 +8192 = 8192 bytes   [call 6150]
+   6163    203.138     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @286720 +8192 = 8192 bytes   [call 6157]
+   6170    203.145     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @294912 +8192 = 8192 bytes   [call 6164]
+   6177    203.156     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @303104 +8192 = 8192 bytes   [call 6171]
+   6184    203.161     P4>P2    nfs READ "/C/PIONEER/rekordbox/export.pdb" @311296 +8192 = 8192 bytes   [call 6178]
+   6186    203.162     P4>P2    mount UMNT "/C/" = Umnt   [call 6185]
+
+keep-alives: P1 150, P2 122, P4 150
+beat packets: none
+status packets: P1 2757, P2 2549, P4 2414
+NFS reads of "/B/PIONEER/rekordbox/export.pdb": 78 reads, 638976 bytes, offsets 0..319488
+NFS reads of "/C/PIONEER/rekordbox/export.pdb": 156 reads, 1277952 bytes, offsets 0..319488

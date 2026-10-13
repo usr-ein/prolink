@@ -1,4 +1,4 @@
-# PLAINMP3, the stick of E10-E19
+# PLAINMP3, the stick of E10-E17
 
 A 1 GiB FAT32 stick of music files that rekordbox never saw: no `PIONEER/`,
 no export. Every file is generated, so every tag on it is one we chose. Where

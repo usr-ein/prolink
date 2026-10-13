@@ -18,8 +18,9 @@ E03-master-handoff-playing/
 └── NOTES.md    what was done, when, what came of it, and against the hardware
 ```
 
-E10-E19 also carry `transcript.txt`, `tools/emudump`'s reading of `run.pcap`
-("Reading them"), and their `cmd.txt` is the shell script that ran the session.
+E10-E22 also carry `transcript.txt`, `tools/emudump`'s reading of `run.pcap`
+("Reading them"), and E10-E17's `cmd.txt` is the shell script that ran the
+session.
 
 ## The rig
 
@@ -247,7 +248,7 @@ emulator alone):
    player alone on the link sends none, and when E07's master leaves, the
    other player's status goes unseen until a peer comes back.
 
-## E10-E19: a stick without rekordbox
+## E10-E17: a stick without rekordbox
 
 What a CDJ does with a USB stick of music files that rekordbox never saw, on
 its own and shared over LINK. What the sessions show is written up in
@@ -311,6 +312,70 @@ the one `0x3e03` B sends as it connects. What
 the emulator cannot show (no audio, so nothing measured from it; the play at
 load; a medium's writes) is in `PLAIN-STICKS.md` §11.
 
+## E18-E22: a TriMixxx deck between two NXSs
+
+A player of this library's making, a TriMixxx deck, on the link with two NXSs,
+before and after prolink 0.4.0. 0.4.0 changed how the deck holds the
+first-on-the-network byte, how it takes and gives tempo master, and when it
+asks about a peer's media ([work log 033](../work_log/033-what-the-cdj-to-cdj-captures-teach.md)).
+
+| | player | address | MAC |
+| --- | --- | --- | --- |
+| the deck | 4 | 169.254.95.108 | 02:54:4d:27:ef:06 |
+| a | 1 | 169.254.5.189 | 02:43:44:13:05:bd |
+| b | 2 | 169.254.230.162 | 02:43:44:92:e6:a2 |
+
+- **The deck** is TriMixxx's emulated deck (`pi-qemu deck up NAME --link
+  NET`): the image a real deck runs, on an emulated Pi 4, with the Mixxx fork
+  deployed on it (`pi-qemu deck deploy NAME mixxx`). That is `7fddd9f`, with
+  prolink 0.3.0, for E18-E19, and `21f8b4d`, with 0.4.0, for E20-E22. It
+  claims player 4 (MANUAL), and serves its own stick when one is in.
+- **The NXSs** are E01-E17's, with `--dsp-model` and SAM1 in USB; b has it in
+  SD too from E20 on.
+- **The stick** is SAM1, E01-E09's, in all three. The deck reads an NXS's
+  `export.pdb` over NFS when it first hears of the medium, to list it.
+- **Before every session:** in E18 and E20 the deck is alone on the link, with
+  no stick, and both NXSs boot inside the capture. E19 and E21 start where the
+  session before left them, sliders centred, with Kepler (128.00) cued on the
+  deck from its own copy of SAM1. Each `cmd.txt` is a timed list, as E01-E09's.
+
+### Sessions
+
+| Session | Size | What it records |
+| --- | --- | --- |
+| `E18-deck-joined-0.3` | 2.2 MB | 0.3: the deck alone, two NXSs join; one re-claims its number every 4.5-5.2 s; the deck asks about every slot every 5.4 s |
+| `E19-deck-master-sync-0.3` | 3.1 MB | 0.3: the first play, MASTER both ways, the deck stopping as master beside a deck out of sync and in sync |
+| `E20-deck-joined-0.4` | 4.8 MB | 0.4: E18 again, then the deck's cable pulled and put back |
+| `E21-deck-master-sync-0.4` | 4.3 MB | 0.4: the first play, MASTER both ways, E06's five cases with the deck as the stopped master |
+| `E22-deck-stick-pulled-0.4` | 0.9 MB | 0.4: a stick taken out of an NXS and put back |
+
+### What they show
+
+- **The first-on-the-network byte** (keep-alive `0x25`, `../docs/PROTOCOL.md`
+  §2.5). On 0.3 the deck says 2 throughout, and the NXS that holds the role
+  beside it re-claims its number for as long as it hears it (E18, E19). On
+  0.4 the deck says 1 from its next keep-alive after an NXS says 2, and the
+  NXS claims once (E20). Back after its cable, the deck is answered by the
+  holder's `0x05` as a joining NXS is (E20; S13).
+- **Tempo master.** On 0.3 the first play took master 6 s late, and a stopped
+  master handed over only to a deck in sync (E19). On 0.4 the first play takes
+  it at once, and a stopped master hands over as E06 found the NXS does (E21).
+- **Media queries.** On 0.3, every slot of every peer every 5.4 s (E18). On
+  0.4, once per slot that turns loaded (E20), and a stick taken out leaves the
+  deck's library with nothing asked (E22).
+
+The NOTES have the details, and the hardware sessions each stands against.
+
+### What they can't stand for
+
+- **Timing.** The deck is emulated too, on the same shared Mac. E21 ran
+  under heavy load (a load average of 11-15 on twelve cores), so its timings
+  say nothing about a real deck: it is there for what happened.
+- **An emulated NXS's SD can't be taken out** through the emulator's panel
+  channel, so E22 takes out a USB stick.
+- **E01-E17's differences hold for the NXSs here,** a load playing at once
+  first among them.
+
 ## What is in the packets
 
 Link-local addresses (169.254.0.0/16), MACs made up from the players' names
@@ -327,6 +392,12 @@ artwork, and the click tracks' audio, read over NFS. E16 and E17 browse and
 load from SAM1: track and artist names, artwork, and the audio of the tracks
 loaded, as the hardware captures carry the author's music.
 
+E18-E22 add the deck: its link-local address, a MAC pi-qemu made up
+(`02:54:4d:..`), and the name it announces, `CDJ-2000nexus`. It reads each
+NXS's `export.pdb` over NFS, so they carry SAM1's track and artist names,
+playlists and file paths, as E16 and E17 do; no artwork and no audio. Its
+status names the track it loaded from its own stick, id 132.
+
 ## Reading them
 
 `prolink pcap run.pcap` counts what is in a capture. The fields that matter
@@ -338,7 +409,7 @@ state), `0x8c` (pitch, `0x00100000` = 0%), `0x92` (BPM x 100), `0x9e`
 come from those fields, decoded with `prolink-proto`, times from the pcap's
 own timestamps.
 
-E10-E19 come with `transcript.txt`, the output of `tools/emudump`, so nothing
+E10-E22 come with `transcript.txt`, the output of `tools/emudump`, so nothing
 needs building to read one: a line per event, by frame (Wireshark's
 numbering), with every dbserver message through `prolink-proto`'s own codec,
 every NFS, mount and portmap call with its reply and the path it names, media

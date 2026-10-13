@@ -1,0 +1,44 @@
+# E21-deck-master-sync-0.4: every command, in order, at its start: seconds from
+# the capture's first frame (negative: before it). The script's clock was its
+# T0, logged to the second; the first frame came 0.49 s after it (+-0.1 s, as
+# for E19).
+# pi-qemu from TriMixxx 3c0c2aa, its emulator (cdj2000-emulator) at dbc4e31, as
+# for E01-E17. The deck: TriMixxx's Mixxx fork at 21f8b4d (prolink 0.4.0,
+# 57b2d8d), put on it with `pi-qemu deck deploy prolink-learnings mixxx`.
+# Before: E20's CDJs, as E20 left them (sliders centred after it); SAM1 in the
+# deck's own USB, Kepler (128.00) loaded and cued from it. Nothing loaded on
+# the CDJs, nobody master.
+# cdjload NAME N: `pi-qemu cdj press NAME usb`, six `cdj rotary NAME 1` 0.8 s
+# apart (to TRACK), `cdj press NAME enter`, N `cdj rotary NAME 1`, `cdj press
+# NAME enter`: a, N = 5, Kosh (id 77); b, N = 12, Booster (id 116).
+# The deck's top bar: 1070 50 is its MASTER button, 1005 50 its SYNC.
+# 299.54 pressed SD OPEN, a key on the NXS's panel: nothing came of it on the
+# wire, and b's SD stayed in. E22 takes a stick out instead.
+
+   -0.49  pi-qemu link capture prolink-learnings-net run.pcap 345
+    1.53  pi-qemu deck tempo prolink-learnings center
+    4.53  pi-qemu deck press prolink-learnings play
+   14.54  cdjload prolink-learnings-a 5
+   44.53  cdjload prolink-learnings-b 12
+   74.53  pi-qemu cdj press prolink-learnings-a master
+   89.53  pi-qemu deck tap prolink-learnings 1070 50
+  104.54  pi-qemu deck press prolink-learnings play
+  119.55  pi-qemu deck press prolink-learnings play
+  124.54  pi-qemu deck tap prolink-learnings 1070 50
+  139.59  pi-qemu cdj press prolink-learnings-b sync
+  149.56  pi-qemu cdj press prolink-learnings-a play
+  154.60  pi-qemu deck tap prolink-learnings 1005 50
+  164.55  pi-qemu deck press prolink-learnings play
+  179.62  pi-qemu deck press prolink-learnings play
+  184.54  pi-qemu deck tap prolink-learnings 1070 50
+  199.55  pi-qemu cdj press prolink-learnings-b play
+  209.56  pi-qemu deck press prolink-learnings play
+  219.54  pi-qemu cdj press prolink-learnings-a play
+  234.54  pi-qemu deck tap prolink-learnings 1005 50
+  249.61  pi-qemu deck press prolink-learnings play
+  254.54  pi-qemu deck tap prolink-learnings 1070 50
+  269.55  pi-qemu cdj press prolink-learnings-a play
+  274.56  pi-qemu deck press prolink-learnings play
+  284.54  pi-qemu cdj press prolink-learnings-b play
+  299.54  pi-qemu cdj press prolink-learnings-b "sd open"
+  339.54  (the capture ends)

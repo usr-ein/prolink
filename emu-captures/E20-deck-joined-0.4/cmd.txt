@@ -1,0 +1,16 @@
+# E20-deck-joined-0.4: every command, in order, at its start: seconds from the
+# capture's first frame (negative: before it). The script's clock was its T0,
+# logged to the second; the first frame came 0.95 s after it (+-0.1 s, from the
+# deck's last packet before the unplug).
+# pi-qemu from TriMixxx 3c0c2aa, its emulator (cdj2000-emulator) at dbc4e31, as
+# for E01-E17. The deck: TriMixxx's Mixxx fork at 21f8b4d (prolink 0.4.0,
+# 57b2d8d), put on it with `pi-qemu deck deploy prolink-learnings mixxx`.
+# Before: the deck up on the link and redeployed, alone there, no stick, player
+# 4. No CDJ running. After the capture both CDJs' sliders were centred, for
+# E21.
+
+   -0.95  pi-qemu link capture prolink-learnings-net run.pcap 330
+    5.07  pi-qemu cdj up prolink-learnings-a --link prolink-learnings-net --usb ~/.pi-qemu/cdj/sam1-usb.img --dsp-model
+   59.07  pi-qemu cdj up prolink-learnings-b --link prolink-learnings-net --usb ~/.pi-qemu/cdj/sam1-usb.img --sd ~/.pi-qemu/cdj/sam1-usb.img --dsp-model
+  169.10  pi-qemu deck link prolink-learnings unplug
+  189.08  pi-qemu deck link prolink-learnings plug
