@@ -41,6 +41,11 @@ None of it has met a real CDJ yet.
 
 ### Behind the API
 
+- **prolink-cxx:** taking and handing over tempo master wake on the monitor's
+  events instead of a 100 ms poll, so we claim in the packet after a holder's
+  `0x9f` names us, and let go in the packet after our successor claims. The
+  deadlines stay: the `0x26` once more after 300 ms without a grant, nothing
+  more after 2 s, and a successor that never picks up is still given up on.
 - **prolink:** `PeerMedia` forgets a slot's description when the slot is empty
   (kept through the eject's unmounting states), so the next medium is
   described afresh; `VirtualCdj::ask_media` asks about one slot without waiting
@@ -57,9 +62,3 @@ None of it has met a real CDJ yet.
   12-69 ms after it is named (S28), and a second name written over the first
   could leave two of them claiming master. A hand-over asked for with a `0x26`
   still overrides an offer.
-
-- **prolink-cxx:** taking and handing over tempo master wake on the monitor's
-  events instead of a 100 ms poll, so we claim in the packet after a holder's
-  `0x9f` names us, and let go in the packet after our successor claims. The
-  deadlines stay: the `0x26` once more after 300 ms without a grant, nothing
-  more after 2 s, and a successor that never picks up is still given up on.

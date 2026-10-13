@@ -20,7 +20,7 @@ what the hardware does, the hardware wins and the doc comment says so.
 
 > **Status: working against real hardware.** Two CDJ-2000NXS browse this
 > server's media, load and play from it, search it, sort it, tag from it and
-> read its analysis, and 778 tests pass — including a corpus replay of 37
+> read its analysis, and 779 tests pass — including a corpus replay of 37
 > captures of real CDJ traffic and an end-to-end test of this library's servers
 > against its own clients. Several bugs that only hardware could find have been
 > fixed, each recorded in [`work_log/`](work_log/README.md) with the capture
@@ -192,7 +192,7 @@ the wrong call:
 ## Testing
 
 ```sh
-cargo test --workspace                                   # 778 tests, no hardware needed
+cargo test --workspace                                   # 779 tests, no hardware needed
 PROLINK_CAPTURES=/other/captures cargo test --workspace   # ...against a different corpus
 ```
 

@@ -80,7 +80,7 @@ before.
 
 ## What is checked, and what is not
 
-**Checked, with `cargo test --workspace`** (778 passed):
+**Checked, with `cargo test --workspace`** (779 passed):
 - The two step-aside rules against every discovery packet in the corpus.
 - Our claim burst against a stand-in answering with S13's own `0x05`.
 - The status pacing, the hand-over clock, and the asker:
@@ -91,12 +91,13 @@ before.
 
 `tools/emudump` reads E10-E17 into the same transcripts, byte for byte.
 
-**Not shown yet:**
-- **On emulated CDJs, waiting for a Mixxx build:**
-  - whether an NXS stops re-claiming once we say `0x01`, which S24b's and
-    S18's pattern predicts;
-  - that every device ends on its own number;
-  - the hand-over timings.
-- **On a real CDJ, which none of this has met:** each wire change needs Sam's
-  check before it merges. `docs/prolink-learnings.md` §5 says what each must
-  show.
+**Not shown yet, and now the merge gate.** Sam waived the checks on a real
+CDJ (2026-10-13): "Emulated test is good enough for merging the changes."
+So these decide instead, on emulated CDJs after a Mixxx build:
+- whether an NXS stops re-claiming once we say `0x01`, which S24b's and
+  S18's pattern predicts;
+- that every device ends on its own number;
+- the hand-over timings.
+
+None of this has met a real CDJ. TriMixxx's `docs/prolink-learnings.md` §5
+keeps, for a later session on real decks, what each change must show.
