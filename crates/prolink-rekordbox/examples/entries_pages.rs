@@ -4,10 +4,22 @@
 //! the prior question: are we reading every row the file holds? A chain that
 //! stops early, or a page whose declared rows exceed what we decode, loses
 //! entries silently and always from the end.
+// A probe run by hand against one file, not library code: a panic is its error
+// report, and the lints that keep the library from trusting a byte it parses
+// would only bury what it prints.
+#![allow(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::expect_used,
+    clippy::indexing_slicing
+)]
+
 use prolink_rekordbox::pdb::{PAGE_SIZE, PageHeader, PageType, Pdb, PlaylistEntryRow};
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: entries_pages <export.pdb>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: entries_pages <export.pdb>");
     let bytes = std::fs::read(&path).expect("read");
     let pdb = Pdb::new(&bytes).expect("parse");
 
@@ -51,7 +63,10 @@ fn main() {
             header.num_rows()
         );
         if page == table.last_page {
-            println!("  ^^ this is last_page, but next_page={} -- continuing to see what is there", header.next_page);
+            println!(
+                "  ^^ this is last_page, but next_page={} -- continuing to see what is there",
+                header.next_page
+            );
         }
         if header.next_page == 0 || hops > 5000 {
             println!("  chain ended at next_page={}", header.next_page);
@@ -60,5 +75,8 @@ fn main() {
         page = header.next_page;
     }
     println!("pages walked: {hops}, rows declared by headers: {declared_total}");
-    println!("rows the reader returns: {}", pdb.rows::<PlaylistEntryRow>().len());
+    println!(
+        "rows the reader returns: {}",
+        pdb.rows::<PlaylistEntryRow>().len()
+    );
 }

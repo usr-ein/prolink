@@ -2,10 +2,23 @@
 //!
 //! The directory says where a table's chain starts and ends; this says what is
 //! actually in the file. The two disagreeing is the interesting case.
+// A probe run by hand against one file, not library code: a panic is its error
+// report, and the lints that keep the library from trusting a byte it parses
+// would only bury what it prints.
+#![allow(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::default_trait_access,
+    clippy::expect_used,
+    clippy::indexing_slicing
+)]
+
 use prolink_rekordbox::pdb::{PAGE_SIZE, PageHeader};
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: all_pages <file.pdb>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: all_pages <file.pdb>");
     let bytes = std::fs::read(&path).expect("read");
     let pages = bytes.len() / PAGE_SIZE as usize;
     let mut per_type: std::collections::BTreeMap<u32, (usize, u32)> = Default::default();

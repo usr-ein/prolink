@@ -27,7 +27,9 @@ use prolink_rekordbox::anlz::{Content, CueListType, CueType, FourCc};
 
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::ffi::{AnlzBeat, AnlzColourColumn, AnlzContents, AnlzCue, AnlzPreview, AnlzPreviewColumn};
+use crate::ffi::{
+    AnlzBeat, AnlzColourColumn, AnlzContents, AnlzCue, AnlzPreview, AnlzPreviewColumn,
+};
 
 /// Read one analysis file off disk.
 #[must_use]
@@ -205,7 +207,7 @@ pub fn read_anlz_preview(path: &str) -> AnlzPreview {
         let len_tag = u32::from_be_bytes([tag[8], tag[9], tag[10], tag[11]]);
         // A zero-length tag would loop here forever, and a file that claims one
         // is a file we cannot walk any further.
-        if len_tag < TAG_HEADER as u32 {
+        if !usize::try_from(len_tag).is_ok_and(|len| len >= TAG_HEADER) {
             break;
         }
 
@@ -310,10 +312,11 @@ mod tests {
     use super::*;
 
     /// A tag: fourcc, header length, total length, then the body.
-    fn tag(fourcc: &[u8; 4], header_len: u32, body: &[u8]) -> Vec<u8> {
+    fn tag(fourcc: [u8; 4], header_len: u32, body: &[u8]) -> Vec<u8> {
         let mut out = fourcc.to_vec();
         out.extend_from_slice(&header_len.to_be_bytes());
-        out.extend_from_slice(&(12 + body.len() as u32).to_be_bytes());
+        let len = u32::try_from(body.len()).expect("a test tag fits a u32");
+        out.extend_from_slice(&(12 + len).to_be_bytes());
         out.extend_from_slice(body);
         out
     }
@@ -323,7 +326,8 @@ mod tests {
         let body: Vec<u8> = tags.concat();
         let mut out = b"PMAI".to_vec();
         out.extend_from_slice(&28u32.to_be_bytes());
-        out.extend_from_slice(&(28 + body.len() as u32).to_be_bytes());
+        let len = u32::try_from(body.len()).expect("a test file fits a u32");
+        out.extend_from_slice(&(28 + len).to_be_bytes());
         out.extend_from_slice(&[0; 16]);
         out.extend_from_slice(&body);
         out
@@ -360,7 +364,7 @@ mod tests {
             body.extend_from_slice(&tempo.to_be_bytes());
             body.extend_from_slice(&time.to_be_bytes());
         }
-        let contents = parse(&file(&[tag(b"PQTZ", 24, &body)]));
+        let contents = parse(&file(&[tag(*b"PQTZ", 24, &body)]));
 
         assert_eq!(contents.beats.len(), 2);
         assert_eq!(contents.beats[0].beat_number, 1);
@@ -391,10 +395,11 @@ mod tests {
         let list = |list_type: u32, entries: Vec<Vec<u8>>| {
             let mut body = list_type.to_be_bytes().to_vec();
             body.extend_from_slice(&0u16.to_be_bytes()); // unknown
-            body.extend_from_slice(&(entries.len() as u16).to_be_bytes());
+            let count = u16::try_from(entries.len()).expect("a test list fits a u16");
+            body.extend_from_slice(&count.to_be_bytes());
             body.extend_from_slice(&0u32.to_be_bytes()); // memory_count
             body.extend(entries.concat());
-            tag(b"PCOB", 24, &body)
+            tag(*b"PCOB", 24, &body)
         };
 
         let contents = parse(&file(&[
@@ -438,7 +443,7 @@ mod tests {
         body.extend_from_slice(&0u32.to_be_bytes());
         body.extend(entry);
 
-        let contents = parse(&file(&[tag(b"PCOB", 24, &body)]));
+        let contents = parse(&file(&[tag(*b"PCOB", 24, &body)]));
         assert_eq!(contents.cues[0].loop_time_ms, 0);
     }
 
@@ -451,7 +456,7 @@ mod tests {
         body.extend_from_slice(&0u32.to_be_bytes()); // unknown
         body.extend_from_slice(&word.to_be_bytes());
 
-        let contents = parse(&file(&[tag(b"PWV5", 24, &body)]));
+        let contents = parse(&file(&[tag(*b"PWV5", 24, &body)]));
         assert_eq!(contents.colour_detail.len(), 1);
         let column = &contents.colour_detail[0];
         assert_eq!(column.bass, 5);
@@ -481,9 +486,9 @@ mod tests {
         pwv4_body.extend_from_slice(&[0x11, 0x22, 30, 40, 60, 70]);
 
         let bytes = file(&[
-            tag(b"PWAV", 20, &pwav_body),
-            tag(b"PWV5", 24, &pwv5_body),
-            tag(b"PWV4", 24, &pwv4_body),
+            tag(*b"PWAV", 20, &pwav_body),
+            tag(*b"PWV5", 24, &pwv5_body),
+            tag(*b"PWV4", 24, &pwv4_body),
         ]);
         let dir = std::env::temp_dir().join("prolink-cxx-preview-test");
         std::fs::create_dir_all(&dir).unwrap();
@@ -517,7 +522,7 @@ mod tests {
         let dir = std::env::temp_dir().join("prolink-cxx-preview-test-width");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ANLZ0000.EXT");
-        std::fs::write(&path, file(&[tag(b"PWV4", 24, &body)])).unwrap();
+        std::fs::write(&path, file(&[tag(*b"PWV4", 24, &body)])).unwrap();
 
         let preview = read_anlz_preview(path.to_str().unwrap());
         assert!(preview.ok);
@@ -539,7 +544,7 @@ mod tests {
         body.extend_from_slice(&0x0010_0000u32.to_be_bytes());
         body.extend_from_slice(&[0b1010_0110; 400]);
 
-        let contents = parse(&file(&[tag(b"PWAV", 20, &body)]));
+        let contents = parse(&file(&[tag(*b"PWAV", 20, &body)]));
         assert_eq!(contents.preview.len(), 400);
         assert_eq!(contents.preview[0] & 0x1f, 6, "height in the low five bits");
         assert_eq!(contents.preview[0] >> 5, 5, "shade in the top three");

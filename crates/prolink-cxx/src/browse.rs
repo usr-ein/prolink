@@ -182,7 +182,7 @@ impl Session {
     /// for a whole track, so a preview queued behind one would arrive minutes
     /// after the row it belongs to -- and asking NFS for small files by the
     /// hundred churns the player's filehandle table until it answers
-    /// NFSERR_STALE to everything, including the track a DJ is loading (F49).
+    /// `NFSERR_STALE` to everything, including the track a DJ is loading (F49).
     ///
     /// The reply is 900 bytes: `PWAV` unpacked into (height, shade) pairs with
     /// the tiny `PWV2` appended. It is stashed on the session and collected

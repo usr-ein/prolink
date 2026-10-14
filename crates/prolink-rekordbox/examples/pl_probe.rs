@@ -15,10 +15,17 @@
 //!
 //! MediaRegistry keeps a copy of whatever it last ingested at
 //! ~/.mixxx/last-ingest.pdb, which is where the deck's own copy comes from.
+// A probe run by hand against one file, not library code: a panic is its error
+// report, and the lints that keep the library from trusting a byte it parses
+// would only bury what it prints.
+#![allow(clippy::default_trait_access, clippy::expect_used)]
+
 use prolink_rekordbox::pdb::{Pdb, PlaylistEntryRow, PlaylistTreeRow};
 
 fn main() {
-    let path = std::env::args().nth(1).expect("usage: pl_probe <export.pdb>");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: pl_probe <export.pdb>");
     let bytes = std::fs::read(&path).expect("read the pdb");
     let pdb = Pdb::new(&bytes).expect("parse the pdb");
 
