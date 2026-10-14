@@ -220,6 +220,7 @@ pub(crate) fn media_info(from: &prolink::PeerSlot) -> MediaInfo {
         device: from.device.get(),
         slot: slot(from.slot),
         has_media: from.state.has_media(),
+        plain: described.is_some_and(|d| d.plain),
         volume_name: described.map(|d| d.volume_name.clone()).unwrap_or_default(),
         created: described.map(|d| d.created.clone()).unwrap_or_default(),
         track_count: described.map_or(0, |d| d.track_count),

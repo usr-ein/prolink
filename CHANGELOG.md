@@ -68,6 +68,16 @@ by [`work_log/`](work_log/README.md).
 - **prolink-proto:** `LoadedTrack::track_type`.
 - **prolink:** `DbClient::generic_metadata`, `plain_track_info` and
   `plain_artwork`; `TrackInfo::plain_lookup`; `NfsClient::open_plain`.
+- **prolink-cxx:** a session serves every stick mounted on its host, a
+  plain one by its folders, where it served rekordbox ones only; a stick it
+  cannot serve is looked at again 30 s later, or at once when another is
+  mounted there. `MediaInfo::plain` says a
+  player's slot holds a plain stick, and `fetch_plain_tree`,
+  `fetch_plain_metadata`, `fetch_plain_artwork` and
+  `fetch_plain_file_streaming` read one (`PlainEntry`, `take_plain_tree`,
+  `take_metadata`). `set_loaded_track` takes `plain`, and `served_file_id`
+  and `served_file_path` turn a file of a plain stick we serve into the id a
+  player knows it by, and back.
 - **prolink:** `Medium::open` reads a mounted medium of either kind, and
   `Medium::from_folders` a plain one: `folders`, `is_plain`, `track_count`,
   `tags` and `track_files` say what it holds. `serve::folder` walks a stick

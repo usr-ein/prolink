@@ -44,9 +44,9 @@ impl std::fmt::Debug for Server {
 ///
 /// # Errors
 ///
-/// When no interface matches, when a medium cannot be read as a rekordbox
-/// export, when every browsable device number is taken, or when a socket
-/// cannot be bound — most often UDP/111 without root.
+/// When no interface matches, when a medium can be read neither as a rekordbox
+/// export nor as a stick of music files, when every browsable device number is
+/// taken, or when a socket cannot be bound — most often UDP/111 without root.
 pub fn serve(config: &ServeConfig) -> Result<Box<Server>, Error> {
     if config.usb_path.is_empty() && config.sd_path.is_empty() {
         return Err(Error::new(
@@ -69,7 +69,7 @@ pub fn serve(config: &ServeConfig) -> Result<Box<Server>, Error> {
         if path.is_empty() {
             continue;
         }
-        let medium = Medium::from_volume(Path::new(path), slot)
+        let medium = Medium::open(Path::new(path), slot)
             .map_err(|error| Error::new(format!("reading {path}: {error}")))?;
         media.push(Arc::new(medium));
     }
@@ -146,8 +146,9 @@ pub(crate) fn describe(player: &VirtualPlayer, interface: String, address: Strin
                         .map(|root| root.display().to_string())
                         .unwrap_or_default(),
                     export_path: medium.slot().export_path().to_owned(),
-                    track_count: description.track_count,
+                    track_count: u32::try_from(medium.track_count()).unwrap_or(u32::MAX),
                     playlist_count: description.playlist_count,
+                    plain: medium.is_plain(),
                     phantom: medium.is_phantom(),
                 }
             })

@@ -25,11 +25,19 @@
 use std::collections::BTreeMap;
 
 use prolink::consume::{DbClient, TrackMetadata};
-use prolink_proto::dbserver::{MenuItem, SortOrder};
+use prolink_proto::dbserver::{FILTER_ALL, ItemType, MenuItem, SortOrder};
 use prolink_proto::{BrowsableDeviceNumber, Slot as LibSlot};
 
 use crate::convert;
-use crate::ffi::{MediaInfo, Metadata, Row, Slot};
+use crate::ffi::{MediaInfo, Metadata, PlainEntry, Row, Slot};
+
+/// How deep a walk of a player's plain stick goes: the deck's own browser's
+/// limit for its own sticks. A CDJ itself opens eight levels over LINK.
+const PLAIN_DEPTH: usize = 16;
+
+/// How many files a walk of a player's plain stick takes, as for the deck's
+/// own sticks.
+const PLAIN_FILES: usize = 20_000;
 use crate::session::Events;
 use crate::session::{Error, Session};
 
@@ -239,6 +247,181 @@ impl Session {
         Ok(id)
     }
 
+    /// Ask a player what one of its plain files is, without blocking:
+    /// `GET_GENERIC_METADATA`, the ten items it reads off the file's tags
+    /// (PLAIN-STICKS.md §5).
+    ///
+    /// A file off a stick with no rekordbox library is named nowhere else: a
+    /// player playing one publishes its own id for it, which no database the
+    /// host holds can resolve. Over the connection artwork uses, and collected
+    /// with `take_metadata` once the `TransferDone` event is drained.
+    ///
+    /// # Errors
+    ///
+    /// When the player is not on the network, or no browsable device number is
+    /// free. Everything after that is asynchronous.
+    pub fn fetch_plain_metadata(
+        &self,
+        device_number: u8,
+        slot: Slot,
+        file_id: u32,
+    ) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error::new(format!("no device {device_number} on the network")))?;
+        let number = self.browsable_number().ok_or_else(|| {
+            Error::new("metadata needs a device number in 1-4 and every one is taken".to_owned())
+        })?;
+
+        let id = self.next_transfer_id();
+        let events = self.events_handle();
+        let queue = self.artwork_queue();
+        let stash = self.metadata_stash();
+        let slot = convert::slot_back(slot);
+
+        self.runtime_handle().spawn(async move {
+            let mut held = queue.lock().await;
+            let client = match held.as_mut() {
+                Some(client) => client,
+                None => match DbClient::connect(peer, number).await {
+                    Ok(opened) => held.insert(opened),
+                    Err(error) => {
+                        finish(&events, id, "", Err(format!("connecting: {error}")));
+                        return;
+                    }
+                },
+            };
+
+            let outcome = match client.generic_metadata(slot, file_id).await {
+                Ok(found) => {
+                    if let Ok(mut held) = stash.lock() {
+                        held.insert(id, convert::metadata(&found));
+                    }
+                    Ok(())
+                }
+                Err(error) => {
+                    // As for a preview: the connection may be mid-message.
+                    *held = None;
+                    Err(format!("fetching metadata for file {file_id}: {error}"))
+                }
+            };
+            finish(&events, id, "", outcome);
+        });
+        Ok(id)
+    }
+
+    /// Walk a player's plain stick, without blocking: every folder and file
+    /// its FOLDER menus list (PLAIN-STICKS.md §4.2), asked with track type 2
+    /// as a player asks them.
+    ///
+    /// What a host builds a stick with no rekordbox library from: a CDJ will
+    /// not list a directory over NFS (`READDIR` is `PROC_UNAVAIL`), so these
+    /// menus are the only way to its files. Names only; the tags are asked
+    /// file by file (`fetch_plain_metadata`). Collected with
+    /// `take_plain_tree` once the `TransferDone` event is drained.
+    ///
+    /// # Errors
+    ///
+    /// When the player is not on the network, or no browsable device number is
+    /// free. Everything after that is asynchronous.
+    pub fn fetch_plain_tree(&self, device_number: u8, slot: Slot) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error::new(format!("no device {device_number} on the network")))?;
+        let number = self.browsable_number().ok_or_else(|| {
+            Error::new("browsing needs a device number in 1-4 and every one is taken".to_owned())
+        })?;
+
+        let id = self.next_transfer_id();
+        let events = self.events_handle();
+        let queue = self.artwork_queue();
+        let stash = self.tree_stash();
+        let slot = convert::slot_back(slot);
+
+        self.runtime_handle().spawn(async move {
+            let mut held = queue.lock().await;
+            let client = match held.as_mut() {
+                Some(client) => client,
+                None => match DbClient::connect(peer, number).await {
+                    Ok(opened) => held.insert(opened),
+                    Err(error) => {
+                        finish(&events, id, "", Err(format!("connecting: {error}")));
+                        return;
+                    }
+                },
+            };
+            let outcome = match walk_plain(client, slot).await {
+                Ok(entries) => {
+                    tracing::info!(device_number, %slot, entries = entries.len(), "walked a plain stick");
+                    if let Ok(mut held) = stash.lock() {
+                        held.insert(id, entries);
+                    }
+                    Ok(())
+                }
+                Err(error) => {
+                    *held = None;
+                    Err(format!("walking a plain stick: {error}"))
+                }
+            };
+            finish(&events, id, "", outcome);
+        });
+        Ok(id)
+    }
+
+    /// Fetch a plain file's cover into `local_path`, without blocking: its
+    /// embedded picture or its folder's, by the file's own id, asked with
+    /// track type 2 (PLAIN-STICKS.md §6). As `fetch_artwork` otherwise.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::fetch_artwork`].
+    pub fn fetch_plain_artwork(
+        &self,
+        device_number: u8,
+        slot: Slot,
+        file_id: u32,
+        local_path: &str,
+    ) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error::new(format!("no device {device_number} on the network")))?;
+        let number = self.browsable_number().ok_or_else(|| {
+            Error::new("artwork needs a device number in 1-4 and every one is taken".to_owned())
+        })?;
+
+        let id = self.next_transfer_id();
+        let events = self.events_handle();
+        let queue = self.artwork_queue();
+        let slot = convert::slot_back(slot);
+        let local = local_path.to_owned();
+
+        self.runtime_handle().spawn(async move {
+            let mut held = queue.lock().await;
+            let client = match held.as_mut() {
+                Some(client) => client,
+                None => match DbClient::connect(peer, number).await {
+                    Ok(opened) => held.insert(opened),
+                    Err(error) => {
+                        finish(&events, id, &local, Err(format!("connecting: {error}")));
+                        return;
+                    }
+                },
+            };
+            let outcome = match client.plain_artwork(slot, file_id).await {
+                // No picture is an empty answer, and a cover that is not
+                // there: written as nothing would be a broken image.
+                Ok(bytes) if bytes.is_empty() => Err(format!("file {file_id} has no artwork")),
+                Ok(bytes) => write_artwork(&local, &bytes),
+                Err(error) => {
+                    *held = None;
+                    Err(format!("fetching artwork of file {file_id}: {error}"))
+                }
+            };
+            finish(&events, id, &local, outcome);
+        });
+        Ok(id)
+    }
+
     /// Run one menu request and turn the rows into the shared shape.
     fn browse<F>(&mut self, device_number: u8, slot: Slot, request: F) -> Result<Vec<Row>, Error>
     where
@@ -329,6 +512,45 @@ impl Connections {
     }
 }
 
+/// Every folder and file of a player's plain stick, through its FOLDER menus.
+///
+/// Depth first, one `MENU_FOLDER` and its renders per folder. A top-level
+/// entry's parent is 0, which no CDJ gives a folder: its ids are the FAT
+/// volume's clusters, from 2.
+async fn walk_plain(client: &mut DbClient, slot: LibSlot) -> prolink::Result<Vec<PlainEntry>> {
+    let mut entries = Vec::new();
+    let mut files = 0usize;
+    let mut pending = vec![(FILTER_ALL, 0u32, 0usize)];
+    while let Some((folder, parent, depth)) = pending.pop() {
+        for row in client.folder(slot, folder).await? {
+            match row.item_type.masked() {
+                ItemType::FOLDER => {
+                    if depth < PLAIN_DEPTH {
+                        pending.push((row.id, row.id, depth + 1));
+                    }
+                    entries.push(PlainEntry {
+                        id: row.id,
+                        parent,
+                        name: row.label1,
+                        is_folder: true,
+                    });
+                }
+                ItemType::TRACK_TITLE if files < PLAIN_FILES => {
+                    files += 1;
+                    entries.push(PlainEntry {
+                        id: row.id,
+                        parent,
+                        name: row.label1,
+                        is_folder: false,
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(entries)
+}
+
 /// The number a session browses with, if it has one.
 pub(crate) fn browsable(number: u8) -> Option<BrowsableDeviceNumber> {
     BrowsableDeviceNumber::new(number)
@@ -363,5 +585,88 @@ fn finish(
     }
     if let Ok(mut queue) = events.lock() {
         queue.push(done);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use prolink::consume::{DbClient, DbConfig};
+    use prolink::serve::dbserver::{DbServer, DbServerConfig};
+    use prolink::serve::{Medium, ServedSlot};
+
+    use super::walk_plain;
+
+    #[tokio::test]
+    async fn a_walk_finds_every_folder_and_file_of_a_plain_stick() {
+        let root = std::env::temp_dir().join(format!("prolink-cxx-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for path in [
+            "a.mp3",
+            "House/b.mp3",
+            "House/Deep/c.wav",
+            "Empty/readme.txt",
+        ] {
+            let full = root.join(path);
+            std::fs::create_dir_all(full.parent().expect("a parent")).expect("a folder");
+            std::fs::write(full, b"not audio").expect("a file");
+        }
+        let medium =
+            Arc::new(Medium::from_folders(&root, ServedSlot::USB).expect("a plain medium"));
+        let server = DbServer::start(
+            DbServerConfig {
+                device: prolink::BrowsableDeviceNumber::new(4).expect("4"),
+                address: std::net::Ipv4Addr::LOCALHOST,
+                port: 0,
+                query_port: None,
+            },
+            [medium],
+        )
+        .await
+        .expect("the dbserver starts");
+        let mut client = DbClient::connect_at(
+            std::net::Ipv4Addr::LOCALHOST,
+            server.port(),
+            prolink::BrowsableDeviceNumber::new(2).expect("2"),
+            DbConfig::default(),
+        )
+        .await
+        .expect("connecting");
+
+        let entries = walk_plain(&mut client, prolink_proto::Slot::USB)
+            .await
+            .expect("the walk");
+        let mut shape: Vec<(String, bool, bool)> = entries
+            .iter()
+            .map(|entry| (entry.name.clone(), entry.is_folder, entry.parent == 0))
+            .collect();
+        shape.sort();
+        assert_eq!(
+            shape,
+            [
+                ("Deep".to_owned(), true, false),
+                ("House".to_owned(), true, true),
+                ("a.mp3".to_owned(), false, true),
+                ("b.mp3".to_owned(), false, false),
+                ("c.wav".to_owned(), false, false),
+            ]
+        );
+        let house = entries
+            .iter()
+            .find(|entry| entry.name == "House")
+            .expect("House");
+        let deep = entries
+            .iter()
+            .find(|entry| entry.name == "Deep")
+            .expect("Deep");
+        assert_eq!(deep.parent, house.id);
+        let c = entries
+            .iter()
+            .find(|entry| entry.name == "c.wav")
+            .expect("c.wav");
+        assert_eq!(c.parent, deep.id);
+
+        std::fs::remove_dir_all(&root).ok();
     }
 }

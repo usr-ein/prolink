@@ -89,6 +89,12 @@ pub struct Session {
     /// keeps the shared `Event` struct free of a payload field that every beat
     /// packet would otherwise carry.
     previews: Arc<std::sync::Mutex<std::collections::HashMap<u32, Vec<u8>>>>,
+    /// Plain files' metadata that has arrived and not yet been collected, by
+    /// transfer id, as the previews are. See `fetch_plain_metadata`.
+    metadata: Arc<std::sync::Mutex<std::collections::HashMap<u32, crate::ffi::Metadata>>>,
+    /// Plain sticks' folders and files walked and not yet collected, by
+    /// transfer id. See `fetch_plain_tree`.
+    trees: Arc<std::sync::Mutex<std::collections::HashMap<u32, Vec<crate::ffi::PlainEntry>>>>,
     /// The last thing that went wrong, for a host's status line.
     last_error: Arc<Mutex<String>>,
     /// Transfers waiting their turn. See `fetch_file`.
@@ -276,6 +282,8 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         connections: crate::browse::Connections::default(),
         artwork: Arc::new(tokio::sync::Mutex::new(None)),
         previews: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        metadata: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        trees: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         last_error: Arc::new(Mutex::new(String::new())),
         // One at a time. Two NFS pulls from the same deck contend for the same
         // reply socket and the same filehandle table, and a deck answers
@@ -588,7 +596,7 @@ async fn announce_as_player(
     }
 }
 
-/// Read a rekordbox medium off a local path.
+/// Read a medium off a local path: a rekordbox one, or a stick of plain files.
 fn load_medium(
     slot: prolink_proto::Slot,
     path: &str,
@@ -597,7 +605,7 @@ fn load_medium(
         prolink_proto::Slot::SD => prolink::serve::ServedSlot::SD,
         _ => prolink::serve::ServedSlot::USB,
     };
-    prolink::Medium::from_volume(std::path::Path::new(path), served).map(Arc::new)
+    prolink::Medium::open(std::path::Path::new(path), served).map(Arc::new)
 }
 
 /// Turn a peer's slot description into an event the first time it appears.
@@ -768,15 +776,18 @@ impl Session {
     /// and a CDJ asked to follow a master that claims a tempo and no track does
     /// not follow it. `source_player` is the player whose medium the track came
     /// from — our own number when playing off our own stick — and `track_id` is
-    /// the rekordbox row id.
-    pub fn set_loaded_track(&self, source_player: u8, slot: Slot, track_id: u32) {
+    /// the rekordbox row id, or with `plain` a plain file's id on its medium.
+    pub fn set_loaded_track(&self, source_player: u8, slot: Slot, track_id: u32, plain: bool) {
         let track = prolink::DeviceNumber::new(source_player).map(|source_player| {
             prolink_proto::status::LoadedTrack {
                 source_player,
                 slot: convert::slot_back(slot),
                 id: track_id,
-                // Only rekordbox tracks yet: the bridge says nothing else.
-                track_type: prolink_proto::dbserver::TrackType::REKORDBOX,
+                track_type: if plain {
+                    prolink_proto::dbserver::TrackType::UNANALYSED
+                } else {
+                    prolink_proto::dbserver::TrackType::REKORDBOX
+                },
             }
         });
         self.with_live(|live| {
@@ -1070,7 +1081,7 @@ impl Session {
                 &interface,
                 peer,
                 slot,
-                &remote,
+                &Source::Path(remote.clone()),
                 &local,
                 u64::from(head_bytes),
                 id,
@@ -1091,6 +1102,99 @@ impl Session {
                 // The line a host follows to know the switch from network to
                 // local reads is safe to make.
                 tracing::info!(remote, local, "background download complete");
+            }
+            if let Ok(mut queue) = events.lock() {
+                queue.push(done);
+            }
+        });
+        Ok(id)
+    }
+
+    /// Fetch a plain file off a player's stick head first, as
+    /// [`Self::fetch_file_streaming`] does a path: by its id, which its track
+    /// info turns into the two numbers it is opened by over NFS
+    /// (PLAIN-STICKS.md §7.1-7.3).
+    ///
+    /// # Errors
+    ///
+    /// When the player is not on the network, the network is not up, or no
+    /// browsable device number is free to ask the track info with.
+    pub fn fetch_plain_file_streaming(
+        &self,
+        device_number: u8,
+        slot: Slot,
+        file_id: u32,
+        local_path: &str,
+        head_bytes: u32,
+    ) -> Result<u32, Error> {
+        let peer = self
+            .address_of(device_number)
+            .ok_or_else(|| Error(format!("no device {device_number} on the network")))?;
+        let number = self.browsable_number().ok_or_else(|| {
+            Error("a plain file needs a device number in 1-4 to ask about it".to_owned())
+        })?;
+        let Some(interface) = self.interface() else {
+            return Err(Error("the network is not up yet".to_owned()));
+        };
+
+        let id = self.next_transfer.fetch_add(1, Ordering::Relaxed);
+        let events = Arc::clone(&self.events);
+        let asking = Arc::clone(&self.artwork);
+        let queue = Arc::clone(&self.transfers);
+        let last_error = Arc::clone(&self.last_error);
+        let slot = convert::slot_back(slot);
+        let local = local_path.to_owned();
+
+        self.runtime.spawn(async move {
+            let outcome = async {
+                // Its two numbers first, on the connection covers use: the
+                // track info is all a plain file can be opened by.
+                let (folder, entry) = {
+                    let mut held = asking.lock().await;
+                    let client = match held.as_mut() {
+                        Some(client) => client,
+                        None => held.insert(
+                            prolink::consume::DbClient::connect(peer, number)
+                                .await
+                                .map_err(|error| format!("connecting: {error}"))?,
+                        ),
+                    };
+                    match client.plain_track_info(slot, file_id).await {
+                        Ok(info) => info.plain_lookup.ok_or_else(|| {
+                            format!("file {file_id} came back with no numbers to open it by")
+                        })?,
+                        Err(error) => {
+                            *held = None;
+                            return Err(format!("asking about file {file_id}: {error}"));
+                        }
+                    }
+                };
+                let _turn = queue.acquire().await;
+                fetch_streaming(
+                    &interface,
+                    peer,
+                    slot,
+                    &Source::Plain { folder, entry },
+                    &local,
+                    u64::from(head_bytes),
+                    id,
+                    &events,
+                )
+                .await
+            }
+            .await;
+            let mut done = plain(EventKind::TransferDone, 0, 0);
+            done.transfer = id;
+            done.path.clone_from(&local);
+            if let Err(reason) = outcome {
+                tracing::warn!(%peer, file_id, "streaming a plain file failed: {reason}");
+                done.ok = false;
+                done.detail.clone_from(&reason);
+                if let Ok(mut held) = last_error.lock() {
+                    *held = reason;
+                }
+            } else {
+                tracing::info!(file_id, local, "background download complete");
             }
             if let Ok(mut queue) = events.lock() {
                 queue.push(done);
@@ -1188,6 +1292,26 @@ impl Session {
         .unwrap_or_else(|| crate::serve::nothing(name))
     }
 
+    /// Where a file of a plain stick we serve is, `/` first, by its id.
+    pub fn served_file_path(&self, slot: Slot, file_id: u32) -> String {
+        self.with_live(|live| {
+            let medium = live.role.player()?.media().get(convert::slot_back(slot))?;
+            Some(format!("/{}", medium.folders()?.file(file_id)?.relative))
+        })
+        .flatten()
+        .unwrap_or_default()
+    }
+
+    /// The id a plain stick we serve gives one of its files, or zero.
+    pub fn served_file_id(&self, slot: Slot, path: &str) -> u32 {
+        self.with_live(|live| {
+            let medium = live.role.player()?.media().get(convert::slot_back(slot))?;
+            Some(medium.folders()?.file_by_path(path)?.id)
+        })
+        .flatten()
+        .unwrap_or(0)
+    }
+
     /// The last thing that went wrong, or empty.
     #[must_use]
     pub fn last_error(&self) -> String {
@@ -1264,6 +1388,40 @@ impl Session {
             .ok()
             .and_then(|mut held| held.remove(&transfer))
             .unwrap_or_default()
+    }
+
+    pub(crate) fn metadata_stash(
+        &self,
+    ) -> Arc<std::sync::Mutex<std::collections::HashMap<u32, crate::ffi::Metadata>>> {
+        Arc::clone(&self.metadata)
+    }
+
+    pub(crate) fn tree_stash(
+        &self,
+    ) -> Arc<std::sync::Mutex<std::collections::HashMap<u32, Vec<crate::ffi::PlainEntry>>>> {
+        Arc::clone(&self.trees)
+    }
+
+    /// Take a finished `fetch_plain_tree`'s folders and files, by transfer id.
+    ///
+    /// Empty if it failed or has already been taken.
+    pub fn take_plain_tree(&self, transfer: u32) -> Vec<crate::ffi::PlainEntry> {
+        self.trees
+            .lock()
+            .ok()
+            .and_then(|mut held| held.remove(&transfer))
+            .unwrap_or_default()
+    }
+
+    /// Take a finished `fetch_plain_metadata`'s answer, by transfer id.
+    ///
+    /// Empty but for the id if it failed or has already been taken.
+    pub fn take_metadata(&self, transfer: u32) -> crate::ffi::Metadata {
+        self.metadata
+            .lock()
+            .ok()
+            .and_then(|mut held| held.remove(&transfer))
+            .unwrap_or_else(|| convert::metadata(&prolink::consume::TrackMetadata::default()))
     }
 
     /// The runtime, for spawning work that outlives the call.
@@ -1857,7 +2015,8 @@ impl MediaAsker {
 /// to run forever.
 const VOLUME_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// Serve whatever rekordbox media is plugged into this machine.
+/// Serve whatever media is plugged into this machine: rekordbox sticks, and
+/// sticks of plain music files, by their folders.
 ///
 /// A CDJ has two slots and so do we, so at most two sticks are offered: USB
 /// first, because that is where a DJ expects one to appear.
@@ -1885,10 +2044,11 @@ fn spawn_volume_watch(
         let mut ours: std::collections::BTreeMap<prolink_proto::Slot, String> =
             std::collections::BTreeMap::new();
         let mut keeping = Preserving::new();
+        let mut passed_over = PassedOver::default();
         loop {
             tokio::time::sleep(VOLUME_POLL).await;
             keeping.tick(&live);
-            reconcile(&live, &served, &mut ours, &mut keeping).await;
+            reconcile(&live, &served, &mut ours, &mut keeping, &mut passed_over).await;
         }
     });
 }
@@ -2036,6 +2196,53 @@ impl Preserving {
     }
 }
 
+/// How long a mounted volume that could not be served is left alone before it
+/// is looked at again.
+///
+/// A plain candidate is walked to find out whether it holds any music, and
+/// a stick of documents, or a large disk on a Mac's `/Volumes`, would be walked
+/// again every two seconds for as long as it stays mounted. A stick swapped
+/// for another is a new mount and is looked at at once; this only spaces out
+/// the second look at the same one.
+const PASS_OVER: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Volumes looked at and not served, by path: what was mounted there and when.
+#[derive(Debug, Default)]
+struct PassedOver(std::collections::BTreeMap<String, (Option<u64>, std::time::Instant)>);
+
+impl PassedOver {
+    /// Whether a volume was found unservable a moment ago, and is still the
+    /// same mount.
+    fn skips(&self, path: &str) -> bool {
+        self.0
+            .get(path)
+            .is_some_and(|(device, when)| *device == device_of(path) && when.elapsed() < PASS_OVER)
+    }
+
+    fn note(&mut self, path: &str) {
+        self.0.insert(
+            path.to_owned(),
+            (device_of(path), std::time::Instant::now()),
+        );
+    }
+
+    /// Forget what is no longer mounted, so a stick put back is looked at
+    /// afresh.
+    fn keep_only(&mut self, found: &[prolink::Volume]) {
+        self.0.retain(|path, _| {
+            found
+                .iter()
+                .any(|volume| volume.path.display().to_string() == *path)
+        });
+    }
+}
+
+/// The device a path is on, which a remount changes.
+fn device_of(path: &str) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|metadata| metadata.dev())
+}
+
 /// The slots a local stick may be offered in, in the order they are filled.
 const LOCAL_SLOTS: [prolink_proto::Slot; 2] = [prolink_proto::Slot::USB, prolink_proto::Slot::SD];
 
@@ -2045,9 +2252,12 @@ async fn reconcile(
     served: &Arc<Mutex<Vec<(prolink_proto::Slot, String)>>>,
     ours: &mut std::collections::BTreeMap<prolink_proto::Slot, String>,
     keeping: &mut Preserving,
+    passed_over: &mut PassedOver,
 ) {
-    let found: Vec<String> = prolink::rekordbox_volumes()
-        .into_iter()
+    let volumes = prolink::local_volumes();
+    passed_over.keep_only(&volumes);
+    let found: Vec<String> = volumes
+        .iter()
         .map(|volume| volume.path.display().to_string())
         .collect();
 
@@ -2090,6 +2300,9 @@ async fn reconcile(
             .iter()
             .find(|(_, held)| *held == &path)
             .map(|(slot, _)| *slot);
+        if already.is_none() && passed_over.skips(&path) {
+            continue;
+        }
         let slot = match already {
             // Known. Mounted again only if the player is not in fact serving
             // it, which is the case a stick found before the player existed
@@ -2123,10 +2336,14 @@ async fn reconcile(
                 tracing::info!(%slot, path, offered = serving(live, slot), "serving a local medium");
                 ours.insert(slot, path);
             }
-            // Not every stick is a rekordbox export, and a DJ plugging in an
-            // ordinary one has done nothing wrong. Not recorded, so it is not
-            // holding a slot a real medium could use.
-            Err(error) => tracing::debug!(path, "not a rekordbox medium: {error}"),
+            // Not every mounted volume is music, and a DJ plugging in a stick
+            // of documents has done nothing wrong. Not recorded, so it is not
+            // holding a slot a real medium could use, and not looked at again
+            // for a while unless it is swapped.
+            Err(error) => {
+                tracing::debug!(path, "not a medium a player could use: {error}");
+                passed_over.note(&path);
+            }
         }
     }
 }
@@ -2209,11 +2426,47 @@ async fn fetch(
 
 /// Fill `local` from `remote`, head first, tail second, middle last.
 #[allow(clippy::too_many_arguments)]
+/// Where a file is on a player's medium, as a fetch opens it.
+#[derive(Debug, Clone)]
+pub(crate) enum Source {
+    /// A path from the export's root, as `export.pdb` stores it.
+    Path(String),
+    /// A plain file, by the two numbers its track info carries: opened with
+    /// one `LOOKUP` of `?\0D <folder> <entry>` (PLAIN-STICKS.md §7.3).
+    Plain {
+        /// Argument 0 of the track info's container item.
+        folder: u32,
+        /// Argument 0 of its duration item.
+        entry: u32,
+    },
+}
+
+impl Source {
+    /// How a log line names it.
+    fn describe(&self) -> String {
+        match self {
+            Self::Path(path) => path.clone(),
+            Self::Plain { folder, entry } => format!("?D {folder:X} {entry:X}"),
+        }
+    }
+
+    async fn open(
+        &self,
+        client: &mut NfsClient,
+        mounted: &prolink::consume::nfs::Mount,
+    ) -> prolink::Result<prolink::consume::nfs::RemoteFile> {
+        match self {
+            Self::Path(path) => client.open(mounted, path).await,
+            Self::Plain { folder, entry } => client.open_plain(mounted, *folder, *entry).await,
+        }
+    }
+}
+
 async fn fetch_streaming(
     interface: &Interface,
     peer: Ipv4Addr,
     slot: prolink_proto::Slot,
-    remote: &str,
+    source: &Source,
     local: &str,
     head_bytes: u64,
     id: u32,
@@ -2234,18 +2487,19 @@ async fn fetch_streaming(
         .await
         .map_err(|error| format!("mounting {slot}: {error}"))?;
 
+    let remote = source.describe();
     // Same stale-handle dance as the whole-file path: a deck churns its
     // filehandle table and then answers NFSERR_STALE to everything made against
     // the old ones (F28). Re-mount and walk again, once.
-    let file = match client.open(&mounted, remote).await {
+    let file = match source.open(&mut client, &mounted).await {
         Ok(file) => file,
         Err(error) if error.is_stale() => {
             mounted = client
                 .refresh(mounted)
                 .await
                 .map_err(|error| format!("re-mounting {slot} after a stale handle: {error}"))?;
-            client
-                .open(&mounted, remote)
+            source
+                .open(&mut client, &mounted)
                 .await
                 .map_err(|error| format!("opening {remote} after a re-mount: {error}"))?
         }

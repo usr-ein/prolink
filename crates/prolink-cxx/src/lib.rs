@@ -404,6 +404,20 @@ pub mod ffi {
         artwork_id: u32,
     }
 
+    /// One folder or file of a player's plain stick, as its FOLDER menus list
+    /// it.
+    #[derive(Debug, Clone)]
+    struct PlainEntry {
+        /// Its id on the player's medium: what the player names it by.
+        id: u32,
+        /// The folder holding it, or 0 at the top of the stick.
+        parent: u32,
+        /// Its name, a file's with its extension, as the player shows it.
+        name: String,
+        /// A folder rather than a file.
+        is_folder: bool,
+    }
+
     /// What one of a player's slots holds.
     #[derive(Debug, Clone)]
     struct MediaInfo {
@@ -413,6 +427,10 @@ pub mod ffi {
         slot: Slot,
         /// Whether a medium is present and mounted.
         has_media: bool,
+        /// A stick with no rekordbox library, offered by its folders: the
+        /// player said so in its description (`02` at `0xaa`). False until it
+        /// has described the slot.
+        plain: bool,
         /// The volume name, empty until the player has described the slot.
         volume_name: String,
         /// When the export was written, as `2025-06-24`. Empty until known.
@@ -448,10 +466,13 @@ pub mod ffi {
         local_path: String,
         /// The NFS export path a deck mounts.
         export_path: String,
-        /// How many tracks it holds.
+        /// How many tracks it holds: a plain stick's files.
         track_count: u32,
         /// How many playlists.
         playlist_count: u32,
+        /// Whether it is a stick with no rekordbox library, offered by its
+        /// folders.
+        plain: bool,
         /// Whether the medium behind this is **gone** while a player is still
         /// playing off it.
         ///
@@ -978,7 +999,17 @@ pub mod ffi {
         /// track does not follow it. `source_player` is the player whose
         /// medium the track came from — our own number when playing off our
         /// own stick — and `track_id` is the rekordbox row id.
-        fn set_loaded_track(self: &Session, source_player: u8, slot: Slot, track_id: u32);
+        ///
+        /// `plain` for a file off a stick with no rekordbox library: `track_id`
+        /// is then that file's id on its medium (`served_file_id` for one of
+        /// ours), and a player names it with `GET_GENERIC_METADATA`.
+        fn set_loaded_track(
+            self: &Session,
+            source_player: u8,
+            slot: Slot,
+            track_id: u32,
+            plain: bool,
+        );
 
         /// Nothing is loaded here. The network stops seeing a tempo from us.
         fn clear_playback(self: &Session);
@@ -1089,6 +1120,23 @@ pub mod ffi {
         /// What we are offering, and which players are reading it.
         fn serve_status(self: &Session) -> ServeStatus;
 
+        /// The id a plain stick we serve gives one of its files, or zero.
+        ///
+        /// `path` is where the file is from the stick's root, as the host plays
+        /// it; the id is what this host says it has loaded, with `plain`, so a
+        /// player browsing us can name the track (`set_loaded_track`). Zero
+        /// when nothing plain is served in that slot, or the file is not one
+        /// it offers.
+        fn served_file_id(self: &Session, slot: Slot, path: &str) -> u32;
+
+        /// Where a file of a plain stick we serve is from the stick's root,
+        /// `/` first, by the id it is served under; empty for none.
+        ///
+        /// The other way from `served_file_id`: a player playing one of our
+        /// plain files names it by that id in its status, and the host knows
+        /// its tracks by their paths.
+        fn served_file_path(self: &Session, slot: Slot, file_id: u32) -> String;
+
         /// The interface currently bound, or empty if none is.
         ///
         /// Not fixed for the life of the session: a host is often started
@@ -1175,6 +1223,58 @@ pub mod ffi {
             track_id: u32,
         ) -> Result<u32>;
 
+        /// Ask a player what one of its plain files is, without blocking.
+        ///
+        /// For a track a player has loaded off a stick with no rekordbox
+        /// library (`Player::track_is_rekordbox` false): `GET_GENERIC_METADATA`,
+        /// what the player reads off the file's tags. Returns a transfer id;
+        /// the answer arrives as a `TransferDone` with that id and is collected
+        /// with `take_metadata`.
+        fn fetch_plain_metadata(
+            self: &Session,
+            device_number: u8,
+            slot: Slot,
+            file_id: u32,
+        ) -> Result<u32>;
+
+        /// Take a finished `fetch_plain_metadata`'s answer, by transfer id.
+        ///
+        /// Empty if it failed or has already been taken.
+        fn take_metadata(self: &Session, transfer: u32) -> Metadata;
+
+        /// Walk a player's plain stick, without blocking: every folder and
+        /// file its FOLDER menus list, names only. Returns a transfer id; the
+        /// entries are collected with `take_plain_tree` once its `TransferDone`
+        /// arrives. A CDJ lists no directory over NFS, so this is the only way
+        /// to a plain stick's files.
+        fn fetch_plain_tree(self: &Session, device_number: u8, slot: Slot) -> Result<u32>;
+
+        /// Take a finished `fetch_plain_tree`'s entries, by transfer id. Empty
+        /// if it failed or has already been taken.
+        fn take_plain_tree(self: &Session, transfer: u32) -> Vec<PlainEntry>;
+
+        /// Fetch a plain file's cover into `local_path`, by the file's own id,
+        /// without blocking: as `fetch_artwork`.
+        fn fetch_plain_artwork(
+            self: &Session,
+            device_number: u8,
+            slot: Slot,
+            file_id: u32,
+            local_path: &str,
+        ) -> Result<u32>;
+
+        /// Fetch a plain file head first, as `fetch_file_streaming` does a
+        /// path, by its id: a plain file has no path, and is opened by the two
+        /// numbers its track info carries.
+        fn fetch_plain_file_streaming(
+            self: &Session,
+            device_number: u8,
+            slot: Slot,
+            file_id: u32,
+            local_path: &str,
+            head_bytes: u32,
+        ) -> Result<u32>;
+
         /// Take the bytes of a finished preview fetch, by transfer id.
         ///
         /// Empty if it failed or has already been taken. 900 bytes on success:
@@ -1250,7 +1350,7 @@ pub mod ffi {
 
 pub use ffi::{
     Config, Device, DeviceKind, Event, EventKind, MediaInfo, Metadata, NetworkInterface,
-    PdbContents, PdbNamed, PdbPlaylist, PdbTrack, PlayState, Player, Row, ServeConfig,
+    PdbContents, PdbNamed, PdbPlaylist, PdbTrack, PlainEntry, PlayState, Player, Row, ServeConfig,
     ServeConsumer, ServeStatus, ServedSlot, Slot,
 };
 pub use serve::{Server, serve};
