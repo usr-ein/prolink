@@ -18,7 +18,7 @@ E03-master-handoff-playing/
 └── NOTES.md    what was done, when, what came of it, and against the hardware
 ```
 
-E10-E22 also carry `transcript.txt`, `tools/emudump`'s reading of `run.pcap`
+E10-E25 also carry `transcript.txt`, `tools/emudump`'s reading of `run.pcap`
 ("Reading them"), and E10-E17's `cmd.txt` is the shell script that ran the
 session.
 
@@ -376,6 +376,62 @@ The NOTES have the details, and the hardware sessions each stands against.
 - **E01-E17's differences hold for the NXSs here,** a load playing at once
   first among them.
 
+## E23-E25: plain sticks between a TriMixxx deck and two NXSs
+
+prolink 0.5.0 serves a stick with no rekordbox library by its folders, as
+E10-E17 found a CDJ serves one (`PLAIN-STICKS.md` §10.1), and reads one in a
+player by its FOLDER menus. These are the deck doing both, on the same rig.
+
+| | player | address | MAC |
+| --- | --- | --- | --- |
+| the deck | 4 | 169.254.190.254 | 02:54:4d:ed:fe:82 |
+| a | 1 | 169.254.45.24 | 02:43:44:6e:2d:18 |
+| b | 2 | 169.254.249.106 | 02:43:44:16:f9:6a |
+
+- **The deck** is TriMixxx's emulated deck, with the fork's prolink-todos
+  branch and prolink at `b393671` (E23, E25) or `4139302` (E24): 0.5.0's code.
+  Player 4, its own stick PLAINMP3 (`plain-stick/`, as a pi-qemu folder
+  stick).
+- **The NXSs** have `--dsp-model`. a has PLAINMP3's image in USB and SAM1 in
+  SD. b has the same image with its label cleared (`mlabel -c`), and in E24
+  its `Many` folder deleted too, so that its stick differs from a's.
+- **Before every session:** the rig as the session before left it, sliders
+  centred. Each `cmd.txt` is a timed list, as E18-E22's.
+
+### Sessions
+
+| Session | Size | What it records |
+| --- | --- | --- |
+| `E23-deck-plain-stick-on-nxs` | 15.9 MB | the deck plays its plain file and says type 2; an NXS browses its stick, previews files, loads three in a row off it and one off its own |
+| `E24-nxs-plain-sticks-on-deck` | 8.7 MB | two NXSs' plain sticks, one unlabelled, go in: the deck lists, walks and tags each over its own connection, streams a file, names an NXS's plays |
+| `E25-plain-nxs-master` | 3.5 MB | an NXS playing a plain file takes master twice; the deck in sync keeps its own tempo and takes master back |
+
+E23 is large for E14's reason: the NXS reads each file it loads whole.
+
+### What they show
+
+- **The deck's plain stick on an NXS** (E23): FOLDER alone at the root,
+  folders then files in a CDJ's order, each file's tags and picture, loads
+  by `?\0D <folder> <entry>`, TRACK n from `0x3100`, and the three hand-backs
+  (`0x2005`) left unanswered with nothing one behind after them. The NXS's
+  LINK shows the deck's stick at its volume's own size.
+- **What the deck says it plays** (E23): track type 2 and the id its server
+  gives the file.
+- **A player's plain stick on the deck** (E24): listed with or without a
+  label, walked by FOLDER menus with track type 2, its files' tags asked one
+  at a time, a file streamed by its `?\0D` name, and a player's plays named
+  in the History, each player asked about its own.
+- **A master with no tempo** (E25): an NXS playing a plain file says `0xffff`
+  and sends no beats; the deck in sync never takes it.
+
+### What they can't stand for
+
+- **A real CDJ on either side.** What only one can show, and how each wire
+  change of 0.5.0 is to be checked on one, is in TriMixxx's
+  `docs/plain-usb-plan.md` §7.
+- **Timing,** as for E18-E22: the deck and the NXSs share a Mac with other
+  work.
+
 ## What is in the packets
 
 Link-local addresses (169.254.0.0/16), MACs made up from the players' names
@@ -398,6 +454,9 @@ NXS's `export.pdb` over NFS, so they carry SAM1's track and artist names,
 playlists and file paths, as E16 and E17 do; no artwork and no audio. Its
 status names the track it loaded from its own stick, id 132.
 
+E23-E25 carry PLAINMP3's made-up names, tags and artwork both ways, and its
+click tracks' audio as each player reads a file it loads.
+
 ## Reading them
 
 `prolink pcap run.pcap` counts what is in a capture. The fields that matter
@@ -409,7 +468,7 @@ state), `0x8c` (pitch, `0x00100000` = 0%), `0x92` (BPM x 100), `0x9e`
 come from those fields, decoded with `prolink-proto`, times from the pcap's
 own timestamps.
 
-E10-E22 come with `transcript.txt`, the output of `tools/emudump`, so nothing
+E10-E25 come with `transcript.txt`, the output of `tools/emudump`, so nothing
 needs building to read one: a line per event, by frame (Wireshark's
 numbering), with every dbserver message through `prolink-proto`'s own codec,
 every NFS, mount and portmap call with its reply and the path it names, media

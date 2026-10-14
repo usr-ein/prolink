@@ -1,0 +1,64 @@
+# E23-deck-plain-stick-on-nxs: every command, in order, at its start: seconds
+# from the capture's first frame (negative: before it). The script's clock was
+# its T0, read to the hundredth; the first frame came 0.26 s after it.
+# pi-qemu from TriMixxx main, built earlier that day, its emulator
+# (cdj2000-emulator) at fe15285.
+# The deck: TriMixxx's Mixxx fork, its prolink-todos branch, with prolink at
+# b393671 (0.5.0's code), put on it with `pi-qemu deck deploy prolink-todos
+# mixxx`.
+# Before: the deck with PLAINMP3 (the plain-stick folder, as a pi-qemu folder
+# stick) in its own USB, its library open at that stick; a with PLAINMP3's
+# image in USB and SAM1 in SD; b with an unlabelled copy of PLAINMP3's image
+# in USB. Sliders centred. Nothing loaded anywhere, nobody master.
+# The deck: `push` opens a library level or loads a row, `browse N` moves its
+# cursor N rows up. a: LINK, the browse encoder (`rotary`), ENTER, USB.
+
+   -0.24  pi-qemu link capture prolink-todos-net run.pcap 600
+    1.79  pi-qemu deck press prolink-todos push
+   11.75  pi-qemu deck browse prolink-todos -2
+   12.30  pi-qemu deck press prolink-todos push
+   23.14  pi-qemu deck press prolink-todos push
+   27.29  pi-qemu deck press prolink-todos play
+   35.76  pi-qemu cdj press prolink-todos-a link
+   49.85  pi-qemu cdj rotary prolink-todos-a 1
+   64.05  pi-qemu cdj press prolink-todos-a enter
+   67.36  pi-qemu cdj press prolink-todos-a enter
+   80.84  pi-qemu cdj rotary prolink-todos-a 1
+   81.48  pi-qemu cdj rotary prolink-todos-a 1
+   82.12  pi-qemu cdj rotary prolink-todos-a 1
+   82.78  pi-qemu cdj rotary prolink-todos-a 1
+   83.43  pi-qemu cdj rotary prolink-todos-a 1
+   84.08  pi-qemu cdj rotary prolink-todos-a 1
+   84.72  pi-qemu cdj rotary prolink-todos-a 1
+  101.44  pi-qemu cdj rotary prolink-todos-a 1
+  102.10  pi-qemu cdj rotary prolink-todos-a 1
+  102.76  pi-qemu cdj rotary prolink-todos-a 1
+  103.41  pi-qemu cdj rotary prolink-todos-a 1
+  129.07  pi-qemu cdj rotary prolink-todos-a -1
+  129.72  pi-qemu cdj rotary prolink-todos-a -1
+  130.38  pi-qemu cdj rotary prolink-todos-a -1
+  133.66  pi-qemu cdj press prolink-todos-a enter
+  155.24  pi-qemu cdj rotary prolink-todos-a 1
+  156.40  pi-qemu cdj press prolink-todos-a enter
+  168.68  pi-qemu cdj rotary prolink-todos-a -1
+  169.86  pi-qemu cdj press prolink-todos-a enter
+  193.32  pi-qemu cdj press prolink-todos-a usb
+  196.58  pi-qemu cdj press prolink-todos-a enter
+  208.79  pi-qemu cdj rotary prolink-todos-a 1
+  209.40  pi-qemu cdj rotary prolink-todos-a 1
+  210.00  pi-qemu cdj rotary prolink-todos-a 1
+  210.60  pi-qemu cdj rotary prolink-todos-a 1
+  211.21  pi-qemu cdj rotary prolink-todos-a 1
+  211.82  pi-qemu cdj rotary prolink-todos-a 1
+  212.42  pi-qemu cdj rotary prolink-todos-a 1
+  213.02  pi-qemu cdj rotary prolink-todos-a 1
+  213.63  pi-qemu cdj rotary prolink-todos-a 1
+  214.23  pi-qemu cdj rotary prolink-todos-a 1
+  225.81  pi-qemu cdj rotary prolink-todos-a 1
+  226.96  pi-qemu cdj press prolink-todos-a enter
+  347.22  pi-qemu deck press prolink-todos back
+  347.89  pi-qemu deck press prolink-todos back
+  348.54  pi-qemu deck press prolink-todos back
+  358.85  pi-qemu deck browse prolink-todos -5
+  359.51  pi-qemu deck press prolink-todos push
+  367.96  pi-qemu deck press prolink-todos push

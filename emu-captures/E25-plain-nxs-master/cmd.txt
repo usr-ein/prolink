@@ -1,0 +1,20 @@
+# E25-plain-nxs-master: every command, in order, at its start: seconds from
+# the capture's first frame (negative: before it). The script's clock was its
+# T0, read to the hundredth; the first frame came 0.07 s after it.
+# pi-qemu from TriMixxx main (ecfbc90), its emulator (cdj2000-emulator) at fe15285.
+# The deck: as in E23 (the fork's prolink-todos branch, prolink at b393671).
+# Before: E24's first run's end: the deck master and stopped at the end of
+# "Title Tag v24", streamed off b's stick (128.00 BPM by its own analysis); a
+# with "04 No tags.mp3" off its own stick, on to the next file, unplayable.
+# The deck's top bar: 1005 50 is its SYNC button, 1070 50 its MASTER.
+
+   -0.05  pi-qemu link capture prolink-todos-net run.pcap 300
+    1.98  pi-qemu cdj rotary prolink-todos-a -1
+    2.63  pi-qemu cdj rotary prolink-todos-a -1
+    4.29  pi-qemu cdj press prolink-todos-a enter
+   21.73  pi-qemu cdj press prolink-todos-a master
+   35.96  pi-qemu deck press prolink-todos cue
+   36.71  pi-qemu deck press prolink-todos play
+   38.36  pi-qemu deck tap prolink-todos 1005 50
+   64.25  pi-qemu cdj press prolink-todos-a master
+   81.29  pi-qemu deck tap prolink-todos 1070 50
