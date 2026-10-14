@@ -7,6 +7,11 @@
 //! title, artist, album, genre, comment, the BPM tag, the duration and the
 //! bitrate, and the embedded JPEG or the folder's `cover.jpg` for artwork.
 //! This module reads the same, the same way: one file at a time, when asked.
+//!
+//! The tags and the picture are read apart. A player asks for a file's tags
+//! far more often than for its cover, and another TriMixxx deck asks for the
+//! tags of every file on the stick: a cover read with them, and kept with
+//! them, would hold a picture per file in RAM.
 
 use std::path::Path;
 
@@ -48,8 +53,6 @@ pub struct FileTags {
     pub tempo_centibpm: u32,
     /// The audio's bitrate in kbps, or zero.
     pub bitrate_kbps: u32,
-    /// The embedded JPEG, else the folder's, else empty (§6).
-    pub artwork: Vec<u8>,
     read: bool,
 }
 
@@ -68,22 +71,15 @@ impl FileTags {
     }
 }
 
-/// Read one file's tags. A file that cannot be read is answered by its name,
-/// as a CDJ answers a file with no tags.
+/// Read one file's tags, and not its pictures (see [`cover`]). A file that
+/// cannot be read is answered by its name, as a CDJ answers a file with no
+/// tags.
 pub fn read(path: &Path, file: &File) -> FileTags {
     let mut tags = FileTags::untagged(file);
-    let parsed = lofty::probe::Probe::open(path).and_then(|probe| {
-        probe
-            .options(ParseOptions::new().read_cover_art(true))
-            .read()
-    });
-    let tagged = match parsed {
+    let tagged = match open(path, false) {
         Ok(tagged) => tagged,
         Err(error) => {
             tracing::debug!(path = %path.display(), %error, "a plain file's tags could not be read");
-            // Its folder's picture all the same: a file with no tags gets one
-            // on a CDJ too (§6, `04 No tags.mp3`).
-            tags.artwork = folder_picture(path);
             return tags;
         }
     };
@@ -122,17 +118,41 @@ pub fn read(path: &Path, file: &File) -> FileTags {
     })
     .and_then(|bpm| centibpm(&bpm))
     .unwrap_or(0);
-
-    tags.artwork = ordered
-        .iter()
-        .flat_map(|tag| tag.pictures())
-        // The front cover first, as a player would want it, then any.
-        .filter(|picture| is_jpeg(picture.mime_type(), picture.data()))
-        .min_by_key(|picture| picture.pic_type() != PictureType::CoverFront)
-        .map(|picture| picture.data().to_vec())
-        .filter(|data| data.len() <= MAX_ARTWORK)
-        .unwrap_or_else(|| folder_picture(path));
     tags
+}
+
+/// One file's cover: its embedded JPEG, the front cover first, else its
+/// folder's picture, else empty (§6). A file with no tags gets its folder's
+/// picture too, as on a CDJ (§6, `04 No tags.mp3`).
+pub fn cover(path: &Path) -> Vec<u8> {
+    let embedded = open(path, true).ok().and_then(|tagged| {
+        let primary = tagged.primary_tag().map(Tag::tag_type);
+        tagged
+            .primary_tag()
+            .into_iter()
+            .chain(
+                tagged
+                    .tags()
+                    .iter()
+                    .filter(|tag| Some(tag.tag_type()) != primary),
+            )
+            .flat_map(Tag::pictures)
+            .filter(|picture| is_jpeg(picture.mime_type(), picture.data()))
+            .min_by_key(|picture| picture.pic_type() != PictureType::CoverFront)
+            .map(|picture| picture.data().to_vec())
+            .filter(|data| data.len() <= MAX_ARTWORK)
+    });
+    embedded.unwrap_or_else(|| folder_picture(path))
+}
+
+/// A file opened by its contents rather than its name, its pictures read only
+/// when asked for.
+fn open(path: &Path, pictures: bool) -> lofty::error::Result<lofty::file::TaggedFile> {
+    lofty::probe::Probe::open(path).and_then(|probe| {
+        probe
+            .options(ParseOptions::new().read_cover_art(pictures))
+            .read()
+    })
 }
 
 /// A BPM tag as hundredths: `125` is 12500, `125.5` is 12550. Nothing for one

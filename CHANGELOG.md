@@ -37,7 +37,9 @@ None of it has met a real CDJ yet. The first release tagged since v0.3.0:
   files; `GET_GENERIC_METADATA` answers a file's tags, read when a player
   first asks; `GET_TRACK_INFO` answers five items and no path; `0x3100`
   answers the file's place in its folder; the preview and the seek index
-  are zeros; the artwork is the file's JPEG or its folder's `cover.jpg`; and
+  are zeros; the artwork is the file's JPEG or its folder's `cover.jpg`,
+  read when a player asks for it, the last 4 MiB of them and those of files
+  a player has loaded kept (another TriMixxx deck asks about every file); and
   NFS opens the file by the name a player asks for, `?` then `D <folder>
   <entry>`. Until now such a stick was refused. An emulated NXS browses one,
   reads its tags, loads a file and plays it (E23). We list less than a CDJ
@@ -78,9 +80,10 @@ None of it has met a real CDJ yet. The first release tagged since v0.3.0:
   `Option<u64>`, and `MediaDescription::plain` says a stick is plain.
 - **prolink:** `Medium::open` reads a mounted medium of either kind, and
   `Medium::from_folders` a plain one: `folders`, `is_plain`, `track_count`,
-  `tags` and `track_files` say what it holds. `serve::folder` walks a stick
-  as a player is shown it (`FolderTree`, `WalkLimits`) and `serve::tags`
-  reads a file's tags (`FileTags`). `local_volumes` finds every mounted
+  `tags` and `track_files` say what it holds, and `cover_bytes` how much of
+  its covers it keeps (`COVER_BUDGET`). `serve::folder` walks a stick as a
+  player is shown it (`FolderTree`, `WalkLimits`) and `serve::tags` reads a
+  file's tags (`FileTags`, no pictures) and, apart, its `cover`. `local_volumes` finds every mounted
   stick, `Volume::rekordbox` says which kind it is, and `volumes::label_of`
   is public. `Error::NoMusic` refuses a plain stick with nothing to play.
 - **prolink:** `DbClient::generic_metadata`, `plain_track_info` and

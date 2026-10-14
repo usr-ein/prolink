@@ -129,8 +129,11 @@ pub struct Medium {
     size: Option<(u64, u64)>,
     /// file id → its tags, for a plain medium: read when a player first asks,
     /// as a CDJ does (§5), and kept. They are the only copy once the stick is
-    /// gone.
+    /// gone. Strings only, a few hundred bytes a file: the covers are apart.
     tags: Mutex<BTreeMap<u32, Arc<FileTags>>>,
+    /// A plain medium's covers: read when a player asks for one, and a few
+    /// kept. See [`Covers`].
+    covers: Mutex<Covers>,
     /// track id → its analysis. A load asks for four tags across two files
     /// within milliseconds, and asks again when the DJ reloads the same track.
     analysis: Mutex<BTreeMap<u32, Arc<Analysis>>>,
@@ -140,6 +143,68 @@ pub struct Medium {
     /// Whether the medium behind this is gone while a player is still playing
     /// from it. See [`Self::go_phantom`].
     phantom: AtomicBool,
+}
+
+/// The most bytes of covers a plain medium keeps of those asked for lately.
+///
+/// Enough for the rows on a player's screen and their neighbours, which is
+/// what a CDJ asks for, at a few tens of KB a cover; a cover is up to 1 MiB.
+/// Another TriMixxx deck asks about every file of the stick, at about ten a
+/// second: whatever it asks for, no more than this is held.
+pub const COVER_BUDGET: usize = 4 * 1024 * 1024;
+
+/// A plain medium's covers, read off the stick when a player asks for one.
+///
+/// The few asked for lately are kept, least recently asked for first out,
+/// within [`COVER_BUDGET`]. A file a player has loaded keeps its cover for as
+/// long as the medium is served: that is all a phantom can still be asked for,
+/// since nothing on it can be browsed.
+#[derive(Debug, Default)]
+struct Covers {
+    /// The covers asked for lately, the least recent first.
+    recent: Vec<(u32, Arc<Vec<u8>>)>,
+    /// What `recent` holds, in bytes.
+    recent_bytes: usize,
+    /// The covers of files a player has loaded.
+    loaded: BTreeMap<u32, Arc<Vec<u8>>>,
+}
+
+impl Covers {
+    fn get(&mut self, file_id: u32) -> Option<Arc<Vec<u8>>> {
+        if let Some(held) = self.loaded.get(&file_id) {
+            return Some(Arc::clone(held));
+        }
+        let at = self.recent.iter().position(|(id, _)| *id == file_id)?;
+        let entry = self.recent.remove(at);
+        let held = Arc::clone(&entry.1);
+        self.recent.push(entry);
+        Some(held)
+    }
+
+    fn remember(&mut self, file_id: u32, cover: Arc<Vec<u8>>) {
+        if self.loaded.contains_key(&file_id) || self.recent.iter().any(|(id, _)| *id == file_id) {
+            return;
+        }
+        self.recent_bytes += cover.len();
+        self.recent.push((file_id, cover));
+        // The newest stays even alone past the budget: it is the one asked for.
+        while self.recent_bytes > COVER_BUDGET && self.recent.len() > 1 {
+            let (_, gone) = self.recent.remove(0);
+            self.recent_bytes -= gone.len();
+        }
+    }
+
+    fn keep(&mut self, file_id: u32, cover: Arc<Vec<u8>>) {
+        if let Some(at) = self.recent.iter().position(|(id, _)| *id == file_id) {
+            let (_, moved) = self.recent.remove(at);
+            self.recent_bytes -= moved.len();
+        }
+        self.loaded.insert(file_id, cover);
+    }
+
+    fn bytes(&self) -> usize {
+        self.recent_bytes + self.loaded.values().map(|cover| cover.len()).sum::<usize>()
+    }
 }
 
 impl Medium {
@@ -188,6 +253,7 @@ impl Medium {
             settings,
             size: crate::volumes::size_of(volume),
             tags: Mutex::new(BTreeMap::new()),
+            covers: Mutex::new(Covers::default()),
             analysis: Mutex::new(BTreeMap::new()),
             artwork: Mutex::new(BTreeMap::new()),
             phantom: AtomicBool::new(false),
@@ -230,6 +296,7 @@ impl Medium {
             settings: Self::read_settings(volume),
             size: crate::volumes::size_of(volume),
             tags: Mutex::new(BTreeMap::new()),
+            covers: Mutex::new(Covers::default()),
             analysis: Mutex::new(BTreeMap::new()),
             artwork: Mutex::new(BTreeMap::new()),
             phantom: AtomicBool::new(false),
@@ -249,6 +316,7 @@ impl Medium {
             settings: Vec::new(),
             size: None,
             tags: Mutex::new(BTreeMap::new()),
+            covers: Mutex::new(Covers::default()),
             analysis: Mutex::new(BTreeMap::new()),
             artwork: Mutex::new(BTreeMap::new()),
             phantom: AtomicBool::new(false),
@@ -390,6 +458,36 @@ impl Medium {
         }
     }
 
+    /// A plain file's cover, by its id: kept if a player loaded the file or
+    /// asked for it lately, else read off the stick. `None` for a file the
+    /// medium does not have; empty for one with no picture, or one that cannot
+    /// be read once the medium has gone phantom.
+    fn cover(&self, file_id: u32) -> Option<Arc<Vec<u8>>> {
+        let file = self.folders.as_ref()?.file(file_id)?;
+        if let Ok(mut covers) = self.covers.lock()
+            && let Some(held) = covers.get(file_id)
+        {
+            return Some(held);
+        }
+        let cover = Arc::new(match self.root.as_deref() {
+            Some(root) if !self.is_phantom() => tags::cover(&root.join(&file.relative)),
+            _ => Vec::new(),
+        });
+        // Not remembered when empty, as for a rekordbox medium: the stick may
+        // have been busy, and a cover that is there would stay missing.
+        if !cover.is_empty()
+            && let Ok(mut covers) = self.covers.lock()
+        {
+            covers.remember(file_id, Arc::clone(&cover));
+        }
+        Some(cover)
+    }
+
+    /// How many bytes of covers a plain medium holds.
+    pub fn cover_bytes(&self) -> usize {
+        self.covers.lock().map_or(0, |covers| covers.bytes())
+    }
+
     /// The cover image for an artwork row, or empty if unavailable.
     ///
     /// Empty rather than an error: a track without art is ordinary, and the
@@ -404,8 +502,8 @@ impl Medium {
         // folder's (§6).
         if self.folders.is_some() {
             return self
-                .tags(artwork_id)
-                .map(|tags| tags.artwork.clone())
+                .cover(artwork_id)
+                .map(|cover| cover.as_ref().clone())
                 .unwrap_or_default();
         }
         if let Ok(cache) = self.artwork.lock()
@@ -443,6 +541,12 @@ impl Medium {
     pub fn warm(&self, track_id: u32) {
         if self.folders.is_some() {
             let _ = self.tags(track_id);
+            if let Some(cover) = self.cover(track_id)
+                && !cover.is_empty()
+                && let Ok(mut covers) = self.covers.lock()
+            {
+                covers.keep(track_id, cover);
+            }
             return;
         }
         let _ = self.analysis(track_id);
@@ -529,6 +633,106 @@ mod tests {
     fn a_slot_knows_where_it_is_exported_from() {
         assert_eq!(ServedSlot::SD.export_path(), "/B/");
         assert_eq!(ServedSlot::USB.export_path(), "/C/");
+    }
+
+    /// A WAV of a hundredth of a second of silence, with no tags: a file a
+    /// player can play, and that reads.
+    fn wav() -> Vec<u8> {
+        fn chunk(id: [u8; 4], body: &[u8]) -> Vec<u8> {
+            let mut out = id.to_vec();
+            let len = u32::try_from(body.len()).expect("a small chunk");
+            out.extend_from_slice(&len.to_le_bytes());
+            out.extend_from_slice(body);
+            out
+        }
+        let mut format = Vec::new();
+        for word in [1u16, 2] {
+            format.extend_from_slice(&word.to_le_bytes());
+        }
+        format.extend_from_slice(&44_100u32.to_le_bytes());
+        format.extend_from_slice(&(44_100u32 * 4).to_le_bytes());
+        format.extend_from_slice(&4u16.to_le_bytes());
+        format.extend_from_slice(&16u16.to_le_bytes());
+        let mut body = b"WAVE".to_vec();
+        body.extend(chunk(*b"fmt ", &format));
+        body.extend(chunk(*b"data", &[0u8; 1764]));
+        chunk(*b"RIFF", &body)
+    }
+
+    /// A plain stick of `files` WAVs and a `cover.jpg` of `cover` bytes beside
+    /// them: every file's cover is that.
+    fn plain_stick(test: &str, files: usize, cover: usize) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("prolink-medium-{test}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("a temporary stick");
+        let audio = wav();
+        for n in 0..files {
+            std::fs::write(root.join(format!("{n:04}.wav")), &audio).expect("a file");
+        }
+        let mut jpeg = vec![0xff, 0xd8, 0xff, 0xe0];
+        jpeg.resize(cover, 0x5a);
+        std::fs::write(root.join("cover.jpg"), &jpeg).expect("a cover");
+        root
+    }
+
+    fn file_ids(medium: &Medium) -> Vec<u32> {
+        medium
+            .folders()
+            .expect("a plain medium's folders")
+            .files()
+            .map(|file| file.id)
+            .collect()
+    }
+
+    #[test]
+    fn a_plain_files_tags_hold_no_picture() {
+        // Another TriMixxx deck asks for the tags of every file on the stick:
+        // they must not bring a cover each into memory.
+        let root = plain_stick("tags", 40, 200_000);
+        let medium = Medium::from_folders(&root, ServedSlot::USB).expect("a plain medium");
+        let ids = file_ids(&medium);
+        assert_eq!(ids.len(), 40);
+        for &id in &ids {
+            let tags = medium.tags(id).expect("a file of the stick");
+            assert!(tags.is_read(), "file {id} reads");
+        }
+        assert_eq!(
+            medium.cover_bytes(),
+            0,
+            "the tags of every file hold no cover"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_plain_mediums_covers_are_few_and_a_loaded_files_stays() {
+        let root = plain_stick("covers", 60, 200_000);
+        let medium = Medium::from_folders(&root, ServedSlot::USB).expect("a plain medium");
+        let ids = file_ids(&medium);
+        // Every file's cover asked for, 12 MB of them: a budget's worth kept.
+        for &id in &ids {
+            assert_eq!(medium.artwork(id).len(), 200_000, "the folder's picture");
+        }
+        assert!(
+            medium.cover_bytes() <= COVER_BUDGET,
+            "{} bytes of covers held",
+            medium.cover_bytes()
+        );
+        // A file a player loaded keeps its cover through the stick going.
+        let loaded = ids[0];
+        medium.warm(loaded);
+        medium.go_phantom();
+        assert_eq!(
+            medium.artwork(loaded).len(),
+            200_000,
+            "kept for the phantom"
+        );
+        assert!(
+            medium.artwork(ids[1]).is_empty(),
+            "asked for long ago: not kept, and a phantom reads nothing"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
