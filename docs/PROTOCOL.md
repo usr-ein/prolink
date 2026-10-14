@@ -305,7 +305,9 @@ Query carries the requester, its IP, the target device and the slot. Response
 | `0x28` | slot |
 | `0x2c`–`0x6b` | media name, UTF-16 **big**-endian, 64 bytes |
 | `0x6c`… | creation date, e.g. `2025-06-24` |
+| `0x84`… | text: `1000` on every rekordbox medium, empty on a plain one; meaning unknown |
 | `0xa4` | **track count** |
+| `0xaa`–`0xab` | `01 01` on every rekordbox medium in the corpus; `02 00` on a stick with no rekordbox library |
 | `0xac` | **playlist count** |
 | `0xb0` / `0xb8` | total / free bytes, **eight bytes each** |
 
@@ -332,7 +334,12 @@ slot turning loaded, every 5 s while unanswered (F37 is the "once"). It used to
 ask about both slots of every peer every 5 s, answered or not, loaded or not.
 
 Answer with the true counts: a deck told there are no tracks has no reason to
-offer the medium.
+offer the medium. **Except a stick with no rekordbox library**, which a CDJ
+describes with its volume label, no date, no `1000`, no tracks, no playlists and
+`02 00` at `0xaa`, and which another deck offers all the same, browsed with
+track type 2 from its first request (`emu-captures/PLAIN-STICKS.md` §3, §10.1).
+This library describes its own plain media that way, and an emulated NXS browses
+them so (emu-capture E23).
 
 ### 3.3b Sync and tempo master *(confirmed)*
 
@@ -509,6 +516,15 @@ different APIs.
 A server comparing bytes answers `NFSERR_NOENT` for files that are plainly
 there. Match exactly first, then fall back to `NFC(name).casefold()`, and always
 return the handle for the name **as stored** (O6).
+
+**A plain file is opened by a name no directory lists** *(emulated)*. A
+player loading a file off a stick with no rekordbox library walks no path: it
+makes one `LOOKUP` on the export's root of `?` in UTF-16LE (`3f 00`) followed
+by `D <folder> <entry>` in ASCII, upper-case hex, the two numbers being the
+arguments 0 of the container and duration items of the file's track info
+(`PLAIN-STICKS.md` §7.3; E12 f712 `3f 00 44 20 32 20 35`). The name is no valid
+UTF-16, so it is matched on its bytes. Our server gives each plain file such a
+name, from its folder's id and its own.
 
 ---
 
@@ -759,6 +775,30 @@ the same load, so it is per-reply, monotonic, ~40,000/second — a counter or
 allocator address. **It must be non-zero**: with zero the main waveform does not
 draw (F33). We emit a counter of the same shape.
 
+### 5.12 A plain medium: FOLDER, and three requests nobody answers *(emulated)*
+
+A stick with no rekordbox library is served by its folders, and everything a
+player asks of one is in `emu-captures/PLAIN-STICKS.md`, read off Pioneer's own
+firmware on emulated NXSs; §10.1 there is the list a server must answer. In
+short: `MENU_ROOT` answers one category, FOLDER (`0x11`, type `0x0090`);
+`MENU_FOLDER 0x2006 [descriptor, sort, folder, files only]` lists folders
+(`0x0001`) then files (`0x0004`, flags `0x02000000`, artwork id = the file's
+id), the root being `0xffffffff`, and with the menu targets 3 and 4 of a load
+the rows carry their ids and nothing else; `GET_GENERIC_METADATA 0x2202`
+answers ten items from the file's tags; `0x3100` answers the file's place among
+its folder's files; `GET_TRACK_INFO` answers five items with no path, the
+container's and the duration's arguments 0 being the two numbers a player opens
+the file by over NFS (§4.7); the analysis requests answer zeros or nothing.
+
+**Three requests a player sends a plain medium's server are answered with
+nothing at all**, as `0x3001` is (§5.2): `0x2005`, a preview waveform it hands
+back for a file it played; `0x2205`, a seek index it worked out for a VBR file;
+`0x3503`, a file it could not play. A reply would be read as the answer to the
+next request, and every one after it would be one behind.
+
+A tagged plain file's row carries the tag bit, `0x02000001`, and never the
+loaded one (E10-E17: 28 tagged rows, none marked loaded).
+
 ---
 
 ## 6. What a device must do to be browsable
@@ -797,6 +837,9 @@ poll us for signs of life, so sockets that simply close leave it retrying
 against nothing. Going away means ejecting first: `0x02`, then `0x03` — which is
 what draws its `UMNT` — then `0x04`, and only then closing dbserver, NFS and the
 announcement, in that order. The states and their timings are in §3.2b.
+
+A stick with no rekordbox library needs the same seven steps, with the answers
+of §5.12 in step 6 and its own description in step 3 (§3.3).
 
 ### 6.1 Two media at once *(confirmed)*
 
@@ -872,7 +915,18 @@ serving needs only to hand over what the medium holds.
 
 ## 8. Where we deliberately differ from the hardware
 
-One place, and it is a considered choice rather than an oversight (F43).
+Two places, each a considered choice rather than an oversight.
+
+**What a plain medium lists.** A CDJ lists every folder of a plain stick,
+empty ones included, and every file named `.mp3`, `.m4a`, `.wav`, `.aiff` or
+`.flac`, macOS's `._*` files included, and greys out what it then cannot play
+(PLAIN-STICKS.md §2, §7.6). We list only what a player can play: MP3, AAC,
+WAV and AIFF, no hidden names, no empty files, no `PIONEER/` or `System Volume
+Information`, and no folder with nothing playable anywhere below it. Our ids
+are counted rather than FAT clusters (`serve::folder`), and a file whose only
+picture is a PNG gets its folder's `cover.jpg`, where a CDJ sends none.
+
+**The key sort** (F43).
 
 A CDJ sorts key names as text, so a library in Camelot notation comes out
 `1A 1B 10A 10B 11A 11B 12A 12B 2A 2B` — the wheel positions interleave and two
@@ -895,7 +949,7 @@ indistinguishable would mean being wrong.
 | `0x3d03` | We acknowledge it; no capture shows a real reply |
 | `0x3b03`, `0x3903`, `0x3001`, `0x3401` | Appear around a loaded track; undecoded |
 | The green key indicator | Does not light for compatible keys; no capture shows a deck displaying it over LINK |
-| `FOLDER` | Browses unanalysed files by directory, track type 2; not served |
+| `FOLDER` | Served for a plain medium (§5.12), from emulated captures only; not offered on a rekordbox medium |
 | Auto number selection | Not "lowest free"; possibly remembered |
 | `0x1400` argument 2 | Names a menu but the reply is the same regardless |
 

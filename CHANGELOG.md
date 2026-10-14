@@ -25,6 +25,19 @@ by [`work_log/`](work_log/README.md).
   of them (`emu-captures/PLAIN-STICKS.md` §7.7, E14, E15). We acknowledged
   them, as any request we do not implement, and a player waiting for no reply
   takes one for the answer to its next request (F16).
+- **A stick with no rekordbox library can be served, by its folders**, as a
+  CDJ serves one (`emu-captures/PLAIN-STICKS.md` §10.1, read off emulated
+  NXSs). It is described with its volume label, no date, no `1000`, no
+  counts and `02 00` at `0xaa`, in the media response and in `0x4902`; its
+  root menu is one category, FOLDER; `MENU_FOLDER` lists folders, then
+  files; `GET_GENERIC_METADATA` answers a file's tags, read when a player
+  first asks; `GET_TRACK_INFO` answers five items and no path; `0x3100`
+  answers the file's place in its folder; the preview and the seek index
+  are zeros; the artwork is the file's JPEG or its folder's `cover.jpg`; and
+  NFS opens the file by the name a player asks for, `?` then `D <folder>
+  <entry>`. Until now such a stick was refused. An emulated NXS browses one,
+  reads its tags, loads a file and plays it (E23). We list less than a CDJ
+  does: only what a player can play (`docs/PROTOCOL.md` §8).
 
 ### Behind the API
 
@@ -38,6 +51,25 @@ by [`work_log/`](work_log/README.md).
   unanswered.
 - **prolink:** `MediaDescription::total_bytes` and `free_bytes` are
   `Option<u64>`.
+- **prolink-proto:** `MediaResponse::is_plain` and
+  `MediaResponseBuilder::plain`; `MediaInfo::plain`.
+- **prolink:** `Medium::open` reads a mounted medium of either kind, and
+  `Medium::from_folders` a plain one: `folders`, `is_plain`, `track_count`,
+  `tags` and `track_files` say what it holds. `serve::folder` walks a stick
+  as a player is shown it (`FolderTree`, `WalkLimits`) and `serve::tags`
+  reads a file's tags (`FileTags`). `MediaDescription::plain`.
+  `local_volumes` finds every mounted stick, `Volume::rekordbox` says which
+  kind it is, and `volumes::label_of` is public. `Error::NoMusic` refuses a
+  plain stick with nothing to play.
+
+### New dependencies
+
+- **lofty 0.24** (MIT OR Apache-2.0), default features off: a plain file's
+  tags, duration, bitrate and picture. 0.25 wants Rust 1.89, past the
+  workspace's 1.88.
+- **rustix 1** (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT), `fs`
+  only: `statvfs`, for a served medium's size, where the workspace forbids
+  `unsafe`.
 
 ## 0.4.0
 

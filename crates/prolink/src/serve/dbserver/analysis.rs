@@ -70,6 +70,11 @@ pub(super) fn reply(
     if kind == MessageKind::GET_MEDIA_INFO {
         return Some(media_info(transaction, medium));
     }
+    if let Some(medium) = medium
+        && medium.is_plain()
+    {
+        return plain_analysis(transaction, kind);
+    }
 
     let (response, payload, trailing) = match kind {
         MessageKind::GET_VBR_INDEX => (
@@ -131,6 +136,41 @@ pub(super) fn reply(
     Message::binary_reply(transaction, response, kind, payload, trailing)
 }
 
+/// A preview waveform's bytes as a player is sent them, a plain file's all
+/// zero (E12 f687).
+const PLAIN_WAVEFORM_PREVIEW: usize = 900;
+
+/// A seek index's bytes, 400 words and the sample count, a plain file's all
+/// zero (E12 f736).
+const PLAIN_VBR_INDEX: usize = 1604;
+
+/// The analysis of a plain file, which has none.
+///
+/// A CDJ serving a plain stick answers a player's load with zeros the size of
+/// what a rekordbox track would be sent, a preview waveform and a seek index
+/// (PLAIN-STICKS.md §7.1), and is never asked for a beat grid or a detailed
+/// waveform. Answered all the same, the beat grid and the detail with nothing,
+/// as a track without them is. A player will not read an MP3 it was not given
+/// a seek index for (`docs/plain-usb-plan.md` F1), and works out its own.
+fn plain_analysis(transaction: u32, kind: MessageKind) -> Option<Message> {
+    let (response, payload) = match kind {
+        MessageKind::GET_WAVEFORM_PREVIEW => (
+            MessageKind::WAVEFORM_PREVIEW,
+            vec![0; PLAIN_WAVEFORM_PREVIEW],
+        ),
+        MessageKind::GET_VBR_INDEX => (MessageKind::VBR_INDEX, vec![0; PLAIN_VBR_INDEX]),
+        MessageKind::GET_BEAT_GRID => (MessageKind::BEAT_GRID, Vec::new()),
+        MessageKind::GET_WAVEFORM_DETAIL => (MessageKind::WAVEFORM_DETAIL, Vec::new()),
+        _ => return None,
+    };
+    let trailing: &[u32] = if kind == MessageKind::GET_BEAT_GRID {
+        &[0]
+    } else {
+        &[]
+    };
+    Message::binary_reply(transaction, response, kind, payload, trailing)
+}
+
 /// Describe the medium, in answer to `0x3903`.
 ///
 /// **Answering this as an unknown request costs the whole browse session.**
@@ -140,9 +180,10 @@ pub(super) fn reply(
 /// scrolling waveform, until the DJ leaves LINK and comes back. Observed on
 /// hardware; see [`MediaInfo`] for how the body was decoded.
 ///
-/// The counts are the true ones, as everywhere (F24). The creation date and the
-/// two sizes are the values our UDP media response also sends, so a deck that
-/// asks both ways is told the same thing twice.
+/// The counts are the true ones, as everywhere (F24). The creation date, the
+/// two sizes and the plain medium's markers are the values our UDP media
+/// response also sends, so a deck that asks both ways is told the same thing
+/// twice.
 fn media_info(transaction: u32, medium: Option<&Medium>) -> Message {
     let description = medium.map(Medium::description).unwrap_or_default();
     let body = MediaInfo {
@@ -152,6 +193,7 @@ fn media_info(transaction: u32, medium: Option<&Medium>) -> Message {
         playlist_count: description.playlist_count,
         total_bytes: description.total_bytes.unwrap_or(0),
         free_bytes: description.free_bytes.unwrap_or(0),
+        plain: description.plain,
     }
     .encode();
     Message::new(

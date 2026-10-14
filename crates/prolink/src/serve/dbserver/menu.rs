@@ -151,6 +151,15 @@ pub(super) fn build(
         .then(Vec::new);
     }
 
+    // A plain medium is browsed by its folders and by nothing else, whatever
+    // track type it is asked with (PLAIN-STICKS.md §4.1).
+    if let Some(medium) = medium
+        && let Some(folders) = medium.folders()
+        && let Some(items) = super::plain::build(kind, args, medium, folders, tags)
+    {
+        return Some(items);
+    }
+
     // These two are answered identically whatever the medium, and `MENU_SORT`
     // is answered identically whatever argument 2 names.
     match kind {
@@ -162,6 +171,10 @@ pub(super) fn build(
     let Some(medium) = medium else {
         return is_menu(kind).then(Vec::new);
     };
+    // Nothing a rekordbox library answers is on a plain medium.
+    if medium.is_plain() {
+        return is_menu(kind).then(Vec::new);
+    }
     let library = medium.library();
     // Argument 1 is the sort on a track list, a playlist, a drill and a search.
     let sort = SortOrder(args.number(1).unwrap_or(SortOrder::DEFAULT.0));
@@ -206,6 +219,14 @@ pub(super) fn build(
 /// byte-perfect (F55).
 pub(super) fn mark(item: &MenuItem, tags: &[u32], playing: Option<u32>) -> MenuItem {
     let mut item = item.clone();
+    // A plain file's row carries the tag mark and never the loaded one: a CDJ
+    // serving a plain stick tagged 28 rows and marked none loaded in E10-E17.
+    if item.flags & super::plain::PLAIN_TRACK_FLAGS != 0 {
+        if tags.contains(&item.id) {
+            item.flags |= MenuItem::TAGGED;
+        }
+        return item;
+    }
     if item.flags & MenuItem::TRACK_FLAGS == 0 {
         return item;
     }
@@ -247,6 +268,7 @@ fn is_menu(kind: MessageKind) -> bool {
             | MENU_DATE_ADDED
             | MessageKind::MENU_HISTORY
             | MessageKind::MENU_PLAYLIST
+            | MessageKind::MENU_FOLDER
             | MessageKind::MENU_SEARCH
             | MessageKind::GET_METADATA
             | MessageKind::GET_GENERIC_METADATA

@@ -55,6 +55,13 @@ pub struct MediaDescription {
     pub total_bytes: Option<u64>,
     /// Free space in bytes, if known.
     pub free_bytes: Option<u64>,
+    /// A stick with no rekordbox library, offered by its folders.
+    ///
+    /// A CDJ describes one with the volume label, no date, no tracks, no
+    /// playlists, and `02 00` where a rekordbox medium has `01 01`
+    /// (PLAIN-STICKS.md §3); a player browsing it asks with track type 2 and
+    /// finds one root category, FOLDER.
+    pub plain: bool,
 }
 
 /// The media a virtual CDJ presents.

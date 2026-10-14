@@ -309,18 +309,22 @@ const UMNT_POLL: Duration = Duration::from_millis(25);
 /// Each medium gets its own subtree, because a filehandle is a hash of its path
 /// and a CDJ keeps only the leading twelve bytes of one (F28) — two media under
 /// one prefix would collide.
+///
+/// A plain medium's files are also given the names a player opens them by,
+/// `?\0D <folder> <entry>` on the export's root (PLAIN-STICKS.md §7.3).
 fn graft(vfs: &Arc<RwLock<Vfs>>, medium: &Medium) -> Result<()> {
-    let Some(root) = medium.root() else {
+    if medium.root().is_none() {
         return Ok(());
-    };
-    let mounted = with_vfs_mut(vfs, |tree| tree.mount(medium.slot().vfs_prefix(), root))
+    }
+    let mounted = with_vfs_mut(vfs, |tree| tree.mount_medium(medium))
         .map_err(Error::io("walking a medium"))?;
     info!(
         slot = %medium.slot().slot(),
         export = medium.slot().export_path(),
         files = mounted,
         volume = medium.volume_name(),
-        tracks = medium.library().tracks.len(),
+        tracks = medium.track_count(),
+        plain = medium.is_plain(),
         "mounted a medium",
     );
     Ok(())
@@ -478,9 +482,11 @@ impl VirtualPlayer {
         let Some(root) = medium.root() else {
             return 0;
         };
-        let Some(track) = medium.library().tracks.get(&track_id) else {
+        // The audio, and a rekordbox track's two analysis files.
+        let wanted = medium.track_files(track_id);
+        if wanted.is_empty() {
             return 0;
-        };
+        }
 
         // Held in the medium's own memo rather than as files: the dbserver
         // answers those from parsed structures, not from disk.
@@ -488,19 +494,8 @@ impl VirtualPlayer {
 
         let before = preserve.len();
         let prefix = medium.slot().vfs_prefix();
-        // The audio, and both analysis files. The `.EXT` because a player asks
-        // for tags that are only in it, and rekordbox writes both extensions
-        // upper case.
-        let mut wanted = vec![track.file_path.clone(), track.analyze_path.clone()];
-        if let Some(ext) = track.analyze_ext_path() {
-            wanted.push(ext);
-        }
         for relative in wanted {
-            let trimmed = relative.trim_start_matches('/');
-            if trimmed.is_empty() {
-                continue;
-            }
-            preserve.keep(&format!("/{prefix}/{trimmed}"), &root.join(trimmed));
+            preserve.keep(&format!("/{prefix}/{relative}"), &root.join(&relative));
         }
         preserve.len() - before
     }

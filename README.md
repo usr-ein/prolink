@@ -11,7 +11,8 @@ A Pioneer **Pro DJ Link** implementation in Rust, both directions:
 1. **Consume** — see the media in CDJs on the network, browse their libraries the
    way the LINK button does, and stream their tracks.
 2. **Serve** — appear as another CDJ with a USB and an SD slot, and let real
-   players browse and play a local rekordbox medium.
+   players browse and play a local rekordbox medium, or a stick of plain
+   music files by its folders, as a CDJ offers one.
 
 It is written from captures of real hardware: two CDJ-2000NXS on firmware 1.44,
 37 pcapng sessions, and a working Python proof of concept and C++ port that
@@ -109,6 +110,13 @@ rule so it stops asking for a password.
 A second USB stick presented with `--sd` appears to a CDJ as an SD card, which is
 exactly what it expects to see. Both media are served over one dbserver
 connection and told apart by the slot byte in each request.
+
+A stick with no `PIONEER/rekordbox/export.pdb` is served by its folders, the
+way a CDJ serves a stick rekordbox never saw: a player's LINK shows one
+category, FOLDER, and a file's tags are read when a player first asks about
+it. What a player is told is in
+[`emu-captures/PLAIN-STICKS.md`](emu-captures/PLAIN-STICKS.md) §10.1, and how we
+differ from a CDJ in `docs/PROTOCOL.md` §8.
 
 Ctrl-C **ejects** before it stops, the way pulling the stick out of a real deck
 does: the slot goes unmounting, the players reading from it send `UMNT` and let

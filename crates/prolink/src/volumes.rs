@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Finding the rekordbox sticks plugged into *this* machine.
+//! Finding the sticks plugged into *this* machine: rekordbox ones, and sticks of
+//! plain music files.
 //!
 //! A host that wants to offer its own media to the players on the network has
 //! to know what it has, and there is no event for that worth waiting on — so
@@ -27,13 +28,17 @@ use std::path::{Path, PathBuf};
 /// looks for nothing else before it will browse one.
 pub const PDB_PATH: &str = "PIONEER/rekordbox/export.pdb";
 
-/// A rekordbox medium mounted on this machine.
+/// A medium mounted on this machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Volume {
-    /// Where it is mounted — the directory holding `PIONEER/`.
+    /// Where it is mounted — the directory holding `PIONEER/`, on a rekordbox
+    /// medium.
     pub path: PathBuf,
     /// What the DJ's deck calls it, resolved as described above.
     pub label: String,
+    /// Whether it holds a rekordbox library. A volume without one may be a
+    /// stick of plain music files, or nothing a player could use at all.
+    pub rekordbox: bool,
 }
 
 /// Every rekordbox medium currently mounted on this machine.
@@ -49,11 +54,50 @@ pub fn rekordbox_volumes() -> Vec<Volume> {
         .map(|path| Volume {
             label: label_of(&path),
             path,
+            rekordbox: true,
         })
         .collect();
     found.sort_by(|left, right| left.path.cmp(&right.path));
     found.dedup_by(|left, right| left.path == right.path);
     found
+}
+
+/// Every medium mounted on this machine a player might be offered: the
+/// rekordbox ones [`rekordbox_volumes`] finds, and every other mounted
+/// filesystem, which may be a stick of plain files.
+///
+/// **A plain candidate must be a mount point**: a directory, not a link, on
+/// another device than the directory holding it. `/Volumes` lists the Mac's
+/// own disk as a link to `/`, and a `/media/DJ_USB_1` with nothing mounted on
+/// it is an empty directory on the card; neither is a stick. Whether one holds
+/// anything a player could play is for the medium to find out, by walking it.
+///
+/// Ordered by path, as [`rekordbox_volumes`] is.
+#[must_use]
+pub fn local_volumes() -> Vec<Volume> {
+    let mut found = rekordbox_volumes();
+    for path in candidates() {
+        if found.iter().any(|volume| volume.path == path) || !is_mount_point(&path) {
+            continue;
+        }
+        found.push(Volume {
+            label: label_of(&path),
+            path,
+            rekordbox: false,
+        });
+    }
+    found.sort_by(|left, right| left.path.cmp(&right.path));
+    found
+}
+
+/// Whether a directory is where a filesystem is mounted: on another device
+/// than its parent, and not reached through a link.
+fn is_mount_point(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let (Ok(own), Some(parent)) = (std::fs::symlink_metadata(path), path.parent()) else {
+        return false;
+    };
+    own.is_dir() && std::fs::metadata(parent).is_ok_and(|parent| parent.dev() != own.dev())
 }
 
 /// The directories a removable medium is mounted under, one level deep.
@@ -84,8 +128,10 @@ fn candidates() -> Vec<PathBuf> {
     volumes
 }
 
-/// The filesystem label of whatever is mounted at `mount_point`.
-fn label_of(mount_point: &Path) -> String {
+/// The filesystem label of whatever is mounted at `mount_point`, resolved as
+/// the module documentation describes; the mount point's own name when there
+/// is none to find.
+pub fn label_of(mount_point: &Path) -> String {
     let fallback = mount_point
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -182,6 +228,22 @@ mod tests {
         // A backslash that starts nothing is kept, rather than eaten.
         assert_eq!(unescape("a\\b"), "a\\b");
         assert_eq!(unescape("trailing\\"), "trailing\\");
+    }
+
+    #[test]
+    fn a_directory_is_a_mount_point_only_on_a_device_of_its_own() {
+        // The root is on its own device and has no parent to compare with; a
+        // directory beside this file is on the same device as its parent.
+        assert!(!is_mount_point(Path::new("/")));
+        assert!(!is_mount_point(Path::new(env!("CARGO_MANIFEST_DIR"))));
+        assert!(!is_mount_point(Path::new("/nonexistent/volume")));
+        for volume in local_volumes() {
+            assert!(
+                volume.rekordbox || is_mount_point(&volume.path),
+                "{} is neither",
+                volume.path.display()
+            );
+        }
     }
 
     #[test]

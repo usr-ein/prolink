@@ -29,6 +29,9 @@ binrw = "0.15"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
 etherparse = "0.19"
+# Reading a plain file's tags when a player asks for them. 0.24, not later:
+# 0.25 wants Rust 1.89, past this workspace's floor.
+lofty = { version = "0.24", default-features = false }
 network-interface = "2"
 pcap-file = "2"
 rekordcrate = { version = "0.3", default-features = false }

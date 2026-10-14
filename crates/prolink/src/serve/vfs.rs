@@ -132,6 +132,10 @@ struct Entry {
 #[derive(Debug, Default)]
 pub struct Vfs {
     entries: BTreeMap<FileHandleKey, Entry>,
+    /// Names a directory answers a `LOOKUP` for without listing them:
+    /// `(directory, the name's bytes as they arrive)` → the path each stands
+    /// for. See [`Vfs::alias`].
+    aliases: BTreeMap<(String, Vec<u8>), String>,
 }
 
 impl Vfs {
@@ -139,6 +143,7 @@ impl Vfs {
     pub fn new() -> Self {
         let mut vfs = Self {
             entries: BTreeMap::new(),
+            aliases: BTreeMap::new(),
         };
         vfs.insert(
             "/",
@@ -297,6 +302,50 @@ impl Vfs {
         result
     }
 
+    /// Graft a medium's files under its slot's prefix, and give a plain
+    /// medium's files the names a player opens them by (see [`Vfs::alias`]).
+    ///
+    /// Returns how many files were mounted. A medium with no files behind it
+    /// mounts none.
+    pub fn mount_medium(&mut self, medium: &crate::serve::Medium) -> std::io::Result<usize> {
+        let Some(root) = medium.root() else {
+            return Ok(0);
+        };
+        let prefix = medium.slot().vfs_prefix();
+        let mounted = self.mount(prefix, root)?;
+        if let Some(folders) = medium.folders() {
+            let export = format!("/{prefix}");
+            for file in folders.files() {
+                self.alias(
+                    &export,
+                    crate::serve::folder::lookup_name(file.folder, file.id),
+                    &format!("{export}/{}", file.relative),
+                );
+            }
+        }
+        Ok(mounted)
+    }
+
+    /// Let a name no directory lists stand for a file in the tree.
+    ///
+    /// A player opens a plain medium's file by one `LOOKUP` on the export's
+    /// root of a name that is no file's: `?` as UTF-16LE, then `D <folder>
+    /// <entry>` in ASCII, the two numbers our track info gave it
+    /// (PLAIN-STICKS.md §7.3). Matched on its bytes, which are no valid UTF-16
+    /// to decode. Going with the subtree when it is unmounted.
+    pub fn alias(&mut self, directory: &str, name: Vec<u8>, target: &str) {
+        self.aliases
+            .insert((directory.to_owned(), name), target.to_owned());
+    }
+
+    /// The file a name [`Vfs::alias`] gave a directory stands for, if any.
+    pub fn lookup_alias(&self, directory: FileHandle, name: &[u8]) -> Option<(FileHandle, &Node)> {
+        let parent = self.entries.get(&directory.key())?;
+        let target = self.aliases.get(&(parent.path.clone(), name.to_vec()))?;
+        let handle = Self::handle_for(target);
+        Some((handle, &self.entries.get(&handle.key())?.node))
+    }
+
     /// Remove a mounted subtree, and the mount point itself.
     ///
     /// Returns how many entries went. A prefix that was never mounted is not an
@@ -320,6 +369,9 @@ impl Vfs {
         for key in &doomed {
             self.entries.remove(key);
         }
+        self.aliases.retain(|(directory, _), _| {
+            *directory != mount_point && !directory.starts_with(&under)
+        });
 
         // The parent still lists it as a child, and a READDIR that names an
         // entry LOOKUP then cannot find reads to a deck as a corrupt medium
@@ -681,6 +733,36 @@ mod tests {
         assert_eq!(
             vfs.read(handle, 0, 16).as_deref(),
             Some(b"lower".as_slice())
+        );
+    }
+
+    #[test]
+    fn a_name_no_directory_lists_can_stand_for_a_file() {
+        // E12 f712: `?\0D 2 5` on the export's root opens `01 Full v23.mp3`.
+        let mut vfs = tree();
+        let name = vec![0x3f, 0x00, b'D', b' ', b'2', b' ', b'5'];
+        let track = "/C/Contents/GESAFFELSTEIN/track.mp3";
+        vfs.alias("/C", name.clone(), track);
+        let export = Vfs::handle_for("/C");
+        let (handle, node) = vfs.lookup_alias(export, &name).expect("the alias resolves");
+        assert_eq!(handle, Vfs::handle_for(track));
+        assert!(!node.is_dir());
+        assert!(
+            vfs.lookup_alias(Vfs::handle_for("/C/Contents"), &name)
+                .is_none(),
+            "the root's only"
+        );
+        assert!(
+            vfs.read_dir(export)
+                .expect("a directory")
+                .iter()
+                .all(|child| child != "?")
+        );
+
+        vfs.unmount("C");
+        assert!(
+            vfs.lookup_alias(export, &name).is_none(),
+            "gone with the subtree"
         );
     }
 

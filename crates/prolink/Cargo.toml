@@ -16,6 +16,7 @@ categories.workspace = true
 prolink-proto.workspace = true
 prolink-rekordbox.workspace = true
 
+lofty.workspace = true
 network-interface.workspace = true
 rustix.workspace = true
 sha2.workspace = true

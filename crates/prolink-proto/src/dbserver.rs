@@ -3012,8 +3012,15 @@ mod tests {
             playlist_count: 0,
             total_bytes: 64_000_000,
             free_bytes: 0x1_0000_0001,
+            plain: true,
         };
         let body = info.encode();
+        assert_eq!(
+            &body[0x7c..0x80],
+            &[0, 0, 2, 0],
+            "the UDP reply's 0xa8 bytes"
+        );
+        assert!(body[0x58..0x60].iter().all(|&byte| byte == 0), "no `1000`");
         assert_eq!(&body[0x84..0x8c], &[0, 0, 0, 0, 0x00, 0x90, 0xd0, 0x03]);
         assert_eq!(&body[0x8c..0x94], &[1, 0, 0, 0, 1, 0, 0, 0]);
         assert_eq!(MediaInfo::parse(&body), Some(info));
@@ -3631,8 +3638,9 @@ mod tests {
 /// GiB with 21.9 free. **Note the endianness**: every other string in this
 /// protocol is UTF-16 *big*-endian, and this one is not.
 ///
-/// The bytes at `0x7c` and the text at `0x58` are reproduced as observed.
-/// Substituting a plausible zero is what this codebase does not do.
+/// The bytes at `0x7c` are those of the UDP reply's `0xa8`, in the same order.
+/// They and the text at `0x58` are reproduced as observed. Substituting a
+/// plausible zero is what this codebase does not do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MediaInfo {
     /// The volume label, as the DJ formatted it.
@@ -3647,6 +3655,10 @@ pub struct MediaInfo {
     pub total_bytes: u64,
     /// Free space in bytes.
     pub free_bytes: u64,
+    /// A stick with no rekordbox library: no `1000`, and at `0x7c` the
+    /// `00 00 02 00` its UDP description carries at `0xa8` (PLAIN-STICKS.md
+    /// §3), where a rekordbox medium has `00 00 01 01`.
+    pub plain: bool,
 }
 
 impl MediaInfo {
@@ -3678,10 +3690,14 @@ impl MediaInfo {
             Self::LEN_CREATED,
             &self.created,
         );
-        // Reproduced from the one capture; meaning unknown.
-        put_utf16le(&mut body, Self::OFF_UNKNOWN_TEXT, 8, "1000");
         put_u32le(&mut body, Self::OFF_TRACKS, self.track_count);
-        put_u32le(&mut body, Self::OFF_TRACKS + 4, 0x0101_0000);
+        if self.plain {
+            put_u32le(&mut body, Self::OFF_TRACKS + 4, 0x0002_0000);
+        } else {
+            // Reproduced from the one capture; meaning unknown.
+            put_utf16le(&mut body, Self::OFF_UNKNOWN_TEXT, 8, "1000");
+            put_u32le(&mut body, Self::OFF_TRACKS + 4, 0x0101_0000);
+        }
         put_u32le(&mut body, Self::OFF_PLAYLISTS, self.playlist_count);
         put_u64_as_words(&mut body, Self::OFF_TOTAL, self.total_bytes);
         put_u64_as_words(&mut body, Self::OFF_FREE, self.free_bytes);
@@ -3700,6 +3716,7 @@ impl MediaInfo {
             playlist_count: u32le(body, Self::OFF_PLAYLISTS),
             total_bytes: u64_from_words(body, Self::OFF_TOTAL),
             free_bytes: u64_from_words(body, Self::OFF_FREE),
+            plain: body.get(Self::OFF_TRACKS + 6) == Some(&2),
         })
     }
 }

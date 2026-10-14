@@ -190,7 +190,8 @@ enum Command {
         number: Option<BrowsableDeviceNumber>,
     },
 
-    /// Serve local rekordbox media to real CDJs, as a virtual player.
+    /// Serve local media to real CDJs, as a virtual player: a rekordbox
+    /// medium, or a directory of plain music files, browsed by its folders.
     ///
     /// **This transmits, and needs UDP/111.** That port is privileged: run as
     /// root, or on Linux set `net.ipv4.ip_unprivileged_port_start=111`. Without
@@ -556,14 +557,24 @@ async fn serve(
     let mut media = Vec::new();
     for (path, slot) in [(usb, ServedSlot::USB), (sd, ServedSlot::SD)] {
         let Some(path) = path else { continue };
-        let medium = Medium::from_volume(path, slot)?;
-        eprintln!(
-            "{}: {} — {} tracks, {} playlists",
-            slot.export_path(),
-            path.display(),
-            medium.library().tracks.len(),
-            medium.library().summary().playlists,
-        );
+        let medium = Medium::open(path, slot)?;
+        if let Some(folders) = medium.folders() {
+            eprintln!(
+                "{}: {} — no rekordbox library: {} files in {} folders, by FOLDER",
+                slot.export_path(),
+                path.display(),
+                folders.file_count(),
+                folders.folder_count(),
+            );
+        } else {
+            eprintln!(
+                "{}: {} — {} tracks, {} playlists",
+                slot.export_path(),
+                path.display(),
+                medium.library().tracks.len(),
+                medium.library().summary().playlists,
+            );
+        }
         media.push(std::sync::Arc::new(medium));
     }
 

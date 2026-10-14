@@ -1328,7 +1328,8 @@ fn answer_media_query(
         .slot(query.slot)
         .name(name)
         .volume_name(&description.volume_name)
-        .counts(description.track_count, description.playlist_count);
+        .counts(description.track_count, description.playlist_count)
+        .plain(description.plain);
     if let (Some(total), Some(free)) = (description.total_bytes, description.free_bytes) {
         builder = builder.size(total, free);
     }
@@ -1406,6 +1407,7 @@ fn observe_peer_media(peers: &PeerMedia, response: &status::MediaResponse) {
         playlist_count: response.playlist_count(),
         total_bytes: response.total_bytes(),
         free_bytes: response.free_bytes(),
+        plain: response.is_plain(),
     };
     debug!(
         %device,
@@ -2946,6 +2948,7 @@ mod tests {
                 playlist_count: 4,
                 total_bytes: None,
                 free_bytes: None,
+                plain: false,
             },
         );
         assert_eq!(

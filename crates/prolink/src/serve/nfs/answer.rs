@@ -362,8 +362,8 @@ impl Dispatcher {
                 nfs2::Response::Attr(attributes(&vfs, handle)).encode()
             }
             nfs2::Request::Lookup { dir, name } => {
-                let name = name.to_string_lossy();
                 let found = lookup(&vfs, dir, &name);
+                let name = name.to_string_lossy();
                 trace!(?dir, %name, status = %nfs2::Response::Lookup(found).status(), "LOOKUP");
                 nfs2::Response::Lookup(found).encode()
             }
@@ -525,19 +525,29 @@ fn file_too_big() -> ErrorStatus {
 /// `.` and `..` are RFC 1094's, not Pioneer's — no deck has ever been seen to
 /// ask for either, since it walks paths it read out of `export.pdb`. They cost
 /// two lines and a generic client cannot navigate without them.
-fn lookup(vfs: &Vfs, dir: FileHandle, name: &str) -> NfsResult<FileRef> {
+///
+/// A name the tree was given as an alias is matched first, on its bytes: a
+/// plain file's `?\0D <folder> <entry>`, which is no valid UTF-16.
+fn lookup(vfs: &Vfs, dir: FileHandle, name: &Utf16LeString) -> NfsResult<FileRef> {
     let parent = vfs.resolve(dir).ok_or(ErrorStatus::STALE)?;
     if !parent.is_dir() {
         return Err(ErrorStatus::NOTDIR);
     }
-    let handle = match name {
+    if let Some((handle, _)) = vfs.lookup_alias(dir, name.as_bytes()) {
+        return Ok(FileRef {
+            handle,
+            attr: attributes(vfs, handle)?,
+        });
+    }
+    let name = name.to_string_lossy();
+    let handle = match name.as_str() {
         "." => Vfs::handle_for(vfs.path_of(dir).ok_or(ErrorStatus::STALE)?),
         ".." => Vfs::handle_for(parent_of(vfs.path_of(dir).ok_or(ErrorStatus::STALE)?)),
         // Never the handle for the name as asked for: matching is case- and
         // normalisation-insensitive, and hashing the spelling a player used
         // would mint a handle that is in no table, so every later use of it
         // would come back `NFSERR_STALE` (O6).
-        _ => vfs.lookup(dir, name).ok_or(ErrorStatus::NOENT)?.0,
+        _ => vfs.lookup(dir, &name).ok_or(ErrorStatus::NOENT)?.0,
     };
     Ok(FileRef {
         handle,

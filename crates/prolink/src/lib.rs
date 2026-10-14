@@ -92,7 +92,7 @@ pub use serve::{MediaSet, Medium, VirtualPlayer, VirtualPlayerConfig};
 pub use virtual_cdj::{
     Numbering, OBSERVER_NUMBER, PeerMedia, PeerSlot, VirtualCdj, VirtualCdjConfig,
 };
-pub use volumes::{Volume, rekordbox_volumes};
+pub use volumes::{Volume, local_volumes, rekordbox_volumes};
 
 /// Re-exported so callers do not need a direct dependency on the codec crate
 /// for the handful of its types that appear in this one's signatures.

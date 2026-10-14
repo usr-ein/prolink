@@ -1225,7 +1225,13 @@ impl MediaResponse {
     const LEN_VOLUME_NAME: usize = 0x40;
     const OFF_CREATED: usize = 0x6c;
     const LEN_CREATED: usize = 0x18;
+    /// Text, `1000` on every rekordbox medium in the corpus and empty on a
+    /// plain one, its meaning unknown.
+    const OFF_TEXT_84: usize = 0x84;
     const OFF_TRACK_COUNT: usize = 0xa4;
+    /// `01` on every rekordbox medium in the corpus, `02` on a stick with no
+    /// rekordbox library, as is `0xab`'s `00` against `01` (PLAIN-STICKS.md §3).
+    const OFF_LIBRARY_KIND: usize = 0xaa;
     const OFF_PLAYLIST_COUNT: usize = 0xac;
     const OFF_TOTAL_BYTES: usize = 0xb0;
     const OFF_FREE_BYTES: usize = 0xb8;
@@ -1274,6 +1280,13 @@ impl MediaResponse {
         be_u32_at(&self.raw, Self::OFF_TRACK_COUNT).unwrap_or(0)
     }
 
+    /// Whether the medium is a stick with no rekordbox library, which a player
+    /// offers by its folders: byte `0xaa` is `02` (PLAINMP3, E10 f51) where
+    /// every rekordbox medium in the corpus has `01`.
+    pub fn is_plain(&self) -> bool {
+        byte_at(&self.raw, Self::OFF_LIBRARY_KIND) == Some(2)
+    }
+
     /// How many playlists the medium holds.
     pub fn playlist_count(&self) -> u32 {
         be_u32_at(&self.raw, Self::OFF_PLAYLIST_COUNT).unwrap_or(0)
@@ -1315,6 +1328,7 @@ pub struct MediaResponseBuilder {
     playlist_count: u32,
     total_bytes: u64,
     free_bytes: u64,
+    plain: bool,
 }
 
 impl MediaResponseBuilder {
@@ -1351,6 +1365,15 @@ impl MediaResponseBuilder {
     pub fn counts(mut self, tracks: u32, playlists: u32) -> Self {
         self.track_count = tracks;
         self.playlist_count = playlists;
+        self
+    }
+
+    /// A stick with no rekordbox library, described as a CDJ describes one
+    /// (PLAINMP3, E10 f51): no creation date, no `1000`, and `02 00` at `0xaa`
+    /// where the skeleton, a rekordbox medium's answer, has `01 01`.
+    #[must_use]
+    pub fn plain(mut self, plain: bool) -> Self {
+        self.plain = plain;
         self
     }
 
@@ -1399,6 +1422,14 @@ impl MediaResponseBuilder {
                 MediaResponse::OFF_FREE_BYTES,
                 &self.free_bytes.to_be_bytes(),
             );
+            if self.plain {
+                put(MediaResponse::OFF_CREATED, &[0; MediaResponse::LEN_CREATED]);
+                put(
+                    MediaResponse::OFF_TEXT_84,
+                    &[0; MediaResponse::OFF_TRACK_COUNT - MediaResponse::OFF_TEXT_84],
+                );
+                put(MediaResponse::OFF_LIBRARY_KIND, &[0x02, 0x00]);
+            }
         }
 
         if let Some(field) = raw.get_mut(
@@ -1971,6 +2002,33 @@ mod tests {
         // these were 0.68 GB with 1.13 GB of it free.
         assert_eq!(response.total_bytes(), Some(30_749_130_752));
         assert_eq!(response.free_bytes(), Some(22_609_362_944));
+    }
+
+    #[test]
+    fn a_plain_medium_is_described_as_a_cdj_describes_plainmp3() {
+        // E10 f51: PLAINMP3's response is a rekordbox medium's but for the
+        // name, no date, no `1000`, no counts and `02 00` at 0xaa.
+        let built = MediaResponse::builder()
+            .volume_name("PLAINMP3")
+            .plain(true)
+            .size(1_070_579_712, 1_040_375_808)
+            .build();
+        let raw = built.as_bytes();
+        assert!(built.is_plain());
+        assert_eq!(built.created(), "");
+        assert!(raw[0x6c..0xa4].iter().all(|&byte| byte == 0));
+        assert_eq!(&raw[0xa8..0xac], &[0, 0, 2, 0]);
+        assert_eq!(
+            &raw[0xb0..0xc0],
+            &[
+                0, 0, 0, 0, 0x3f, 0xcf, 0xc0, 0, 0, 0, 0, 0, 0x3e, 0x02, 0xe0, 0
+            ]
+        );
+        assert_eq!(built.track_count(), 0);
+
+        let rekordbox = MediaResponse::builder().counts(141, 4).build();
+        assert!(!rekordbox.is_plain());
+        assert_eq!(&rekordbox.as_bytes()[0xa8..0xac], &[0, 0, 1, 1]);
     }
 
     #[test]

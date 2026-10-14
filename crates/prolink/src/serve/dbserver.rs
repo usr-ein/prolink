@@ -81,6 +81,7 @@
 mod analysis;
 mod keys;
 mod menu;
+mod plain;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
@@ -621,6 +622,17 @@ impl Session {
             }
             MessageKind::RENDER_MENU => {
                 self.render(shared, message, out);
+                return Flow::Continue;
+            }
+            // A plain file's place among its folder's files, which a player
+            // shows as `TRACK 003/007` (PLAIN-STICKS.md §7.1); a bare `SUCCESS`
+            // for anything else, as a real deck answers a rekordbox track.
+            MessageKind::UNKNOWN_3100 => {
+                let place = medium
+                    .and_then(Medium::folders)
+                    .and_then(|folders| folders.index_in_folder(message.number(1).unwrap_or(0)))
+                    .unwrap_or(0);
+                push(out, &Message::success(transaction, kind, place));
                 return Flow::Continue;
             }
             // Tagging is the one request that changes server state. The reply

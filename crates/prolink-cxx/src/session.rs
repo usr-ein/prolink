@@ -2569,6 +2569,7 @@ mod media_asker_tests {
                 playlist_count: 4,
                 total_bytes: None,
                 free_bytes: None,
+                plain: false,
             }),
         }
     }

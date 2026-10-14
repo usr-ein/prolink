@@ -42,6 +42,14 @@ pub enum Error {
     #[error("nothing to serve: give at least one medium")]
     NothingToServe,
 
+    /// A stick with no rekordbox library and nothing on it a player could
+    /// play: no MP3, AAC, WAV or AIFF file anywhere a walk reaches.
+    #[error("{}: no rekordbox library, and no music a player could play", .path.display())]
+    NoMusic {
+        /// Where the stick is mounted.
+        path: std::path::PathBuf,
+    },
+
     /// A peer sent something this crate could not decode.
     #[error(transparent)]
     Protocol(#[from] prolink_proto::Error),

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Serving a local rekordbox medium to real players.
+//! Serving a local medium to real players: a rekordbox one, or a stick of
+//! plain files served by its folders.
 //!
 //! Seven things have to be true before a CDJ will browse us, and each of them
 //! fails silently when it is not — see the crate documentation for the list and
@@ -8,10 +9,12 @@
 //! servers over it, and the dbserver that makes it browsable.
 
 pub mod dbserver;
+pub mod folder;
 pub mod medium;
 pub mod nfs;
 pub mod player;
 pub mod preserve;
+pub mod tags;
 pub mod vfs;
 
 pub use medium::{Analysis, Medium, ServedSlot};
