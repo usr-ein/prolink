@@ -288,6 +288,15 @@ fn status_problems(raw: &[u8], source: Option<Ipv4Addr>) -> Vec<String> {
                     response.sender()
                 ));
             }
+            // The sizes are eight bytes wide. Read as four, S13 f98's medium
+            // has more free space than capacity.
+            if let (Some(total), Some(free)) = (response.total_bytes(), response.free_bytes())
+                && free > total
+            {
+                problems.push(format!(
+                    "media_response: {free} bytes free of a {total}-byte medium"
+                ));
+            }
         }
         status::Packet::SettingsQuery(_)
         | status::Packet::SettingsResponse(_)
@@ -1089,6 +1098,9 @@ fn the_committed_media_response_carries_the_counts_a_deck_needs() {
     // the true counts are load-bearing rather than cosmetic.
     assert_eq!(response.track_count(), 692);
     assert_eq!(response.playlist_count(), 35);
+    // A 32 GB stick: eight bytes each, the high words 7 and 5.
+    assert_eq!(response.total_bytes(), Some(0x0000_0007_28ca_8000));
+    assert_eq!(response.free_bytes(), Some(0x0000_0005_7d06_c000));
 }
 
 #[test]

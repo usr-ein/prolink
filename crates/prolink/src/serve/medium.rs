@@ -112,6 +112,9 @@ pub struct Medium {
     volume_name: String,
     created: String,
     settings: Vec<u8>,
+    /// The volume's total and free bytes, read once when it is mounted. A
+    /// deck plays off it read-only.
+    size: Option<(u64, u64)>,
     /// track id → its analysis. A load asks for four tags across two files
     /// within milliseconds, and asks again when the DJ reloads the same track.
     analysis: Mutex<BTreeMap<u32, std::sync::Arc<Analysis>>>,
@@ -159,6 +162,7 @@ impl Medium {
             volume_name,
             created: String::new(),
             settings,
+            size: crate::volumes::size_of(volume),
             analysis: Mutex::new(BTreeMap::new()),
             artwork: Mutex::new(BTreeMap::new()),
             phantom: AtomicBool::new(false),
@@ -175,6 +179,7 @@ impl Medium {
             volume_name: volume_name.to_owned(),
             created: String::new(),
             settings: Vec::new(),
+            size: None,
             analysis: Mutex::new(BTreeMap::new()),
             artwork: Mutex::new(BTreeMap::new()),
             phantom: AtomicBool::new(false),
@@ -223,8 +228,8 @@ impl Medium {
                     .count(),
             )
             .unwrap_or(u32::MAX),
-            total_bytes: None,
-            free_bytes: None,
+            total_bytes: self.size.map(|(total, _)| total),
+            free_bytes: self.size.map(|(_, free)| free),
         }
     }
 

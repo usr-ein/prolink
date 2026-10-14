@@ -2968,10 +2968,28 @@ mod tests {
         // the same medium, which reports exactly these.
         assert_eq!(parsed.track_count, 692);
         assert_eq!(parsed.playlist_count, 35);
-        assert_eq!(parsed.total_bytes, 0x28ca_8000);
+        // The same 28.6 GiB the UDP reply carries for SAM2, high word first.
+        assert_eq!(parsed.total_bytes, 0x0000_0007_28ca_8000);
+        assert_eq!(parsed.free_bytes, 0x0000_0005_7d00_c000);
 
-        // And ours is byte-identical to the deck's, unknown words included.
+        // And ours is byte-identical to the deck's, unknown bytes included.
         assert_eq!(parsed.encode(), body, "we must send what a deck sends");
+    }
+
+    #[test]
+    fn a_media_info_body_says_a_small_mediums_size_with_zero_high_words() {
+        let info = MediaInfo {
+            volume_name: "PLAINMP3".to_owned(),
+            created: String::new(),
+            track_count: 0,
+            playlist_count: 0,
+            total_bytes: 64_000_000,
+            free_bytes: 0x1_0000_0001,
+        };
+        let body = info.encode();
+        assert_eq!(&body[0x84..0x8c], &[0, 0, 0, 0, 0x00, 0x90, 0xd0, 0x03]);
+        assert_eq!(&body[0x8c..0x94], &[1, 0, 0, 0, 1, 0, 0, 0]);
+        assert_eq!(MediaInfo::parse(&body), Some(info));
     }
 
     #[test]
@@ -3569,22 +3587,25 @@ mod tests {
 /// 0x58  unknown         8 bytes, UTF-16 little-endian    "1000"
 /// 0x60  zeros          24 bytes
 /// 0x78  u32 LE         track count                       692
-/// 0x7c  u32 LE         unknown, 0x01010000 observed
+/// 0x7c  4 bytes        unknown, 00 00 01 01 observed
 /// 0x80  u32 LE         playlist count                    35
-/// 0x84  u32 LE         unknown, 7 observed
-/// 0x88  u32 LE         total bytes
-/// 0x8c  u32 LE         unknown, 5 observed
-/// 0x90  u32 LE         free bytes
+/// 0x84  u32 LE         total bytes, high word            7
+/// 0x88  u32 LE         total bytes, low word             0x28ca8000
+/// 0x8c  u32 LE         free bytes, high word             5
+/// 0x90  u32 LE         free bytes, low word
 /// ```
 ///
 /// The two counts and the two sizes are what tie it to the UDP reply: the
 /// sample carries 692 tracks and 35 playlists, which is exactly what that
-/// medium's `0x06` response reports, and the same total-bytes word appears in
-/// both — big-endian there, little-endian here. **Note the endianness**: every
-/// other string in this protocol is UTF-16 *big*-endian, and this one is not.
+/// medium's `0x06` response reports, and the same size appears in both: eight
+/// big-endian bytes there, two little-endian words here, the high one first.
+/// The 7 and 5 were read as unknown words for a while, and announced as such
+/// for every medium; they are the sizes' high words, and that stick is 28.6
+/// GiB with 21.9 free. **Note the endianness**: every other string in this
+/// protocol is UTF-16 *big*-endian, and this one is not.
 ///
-/// The four unknown words are reproduced as observed. Substituting a plausible
-/// zero is what this codebase does not do.
+/// The bytes at `0x7c` and the text at `0x58` are reproduced as observed.
+/// Substituting a plausible zero is what this codebase does not do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MediaInfo {
     /// The volume label, as the DJ formatted it.
@@ -3596,9 +3617,9 @@ pub struct MediaInfo {
     /// How many playlists it holds.
     pub playlist_count: u32,
     /// Capacity in bytes.
-    pub total_bytes: u32,
+    pub total_bytes: u64,
     /// Free space in bytes.
-    pub free_bytes: u32,
+    pub free_bytes: u64,
 }
 
 impl MediaInfo {
@@ -3612,8 +3633,8 @@ impl MediaInfo {
     const OFF_UNKNOWN_TEXT: usize = 0x58;
     const OFF_TRACKS: usize = 0x78;
     const OFF_PLAYLISTS: usize = 0x80;
-    const OFF_TOTAL: usize = 0x88;
-    const OFF_FREE: usize = 0x90;
+    const OFF_TOTAL: usize = 0x84;
+    const OFF_FREE: usize = 0x8c;
 
     /// Encode the body a real deck sends.
     pub fn encode(&self) -> Vec<u8> {
@@ -3635,10 +3656,8 @@ impl MediaInfo {
         put_u32le(&mut body, Self::OFF_TRACKS, self.track_count);
         put_u32le(&mut body, Self::OFF_TRACKS + 4, 0x0101_0000);
         put_u32le(&mut body, Self::OFF_PLAYLISTS, self.playlist_count);
-        put_u32le(&mut body, Self::OFF_PLAYLISTS + 4, 7);
-        put_u32le(&mut body, Self::OFF_TOTAL, self.total_bytes);
-        put_u32le(&mut body, Self::OFF_TOTAL + 4, 5);
-        put_u32le(&mut body, Self::OFF_FREE, self.free_bytes);
+        put_u64_as_words(&mut body, Self::OFF_TOTAL, self.total_bytes);
+        put_u64_as_words(&mut body, Self::OFF_FREE, self.free_bytes);
         body
     }
 
@@ -3652,10 +3671,23 @@ impl MediaInfo {
             created: utf16le(body, Self::OFF_CREATED, Self::LEN_CREATED),
             track_count: u32le(body, Self::OFF_TRACKS),
             playlist_count: u32le(body, Self::OFF_PLAYLISTS),
-            total_bytes: u32le(body, Self::OFF_TOTAL),
-            free_bytes: u32le(body, Self::OFF_FREE),
+            total_bytes: u64_from_words(body, Self::OFF_TOTAL),
+            free_bytes: u64_from_words(body, Self::OFF_FREE),
         })
     }
+}
+
+/// An eight-byte size as this body carries it: two little-endian words, the
+/// high one first.
+fn put_u64_as_words(out: &mut [u8], offset: usize, value: u64) {
+    let high = u32::try_from(value >> 32).unwrap_or(u32::MAX);
+    let low = u32::try_from(value & u64::from(u32::MAX)).unwrap_or(u32::MAX);
+    put_u32le(out, offset, high);
+    put_u32le(out, offset.saturating_add(4), low);
+}
+
+fn u64_from_words(body: &[u8], offset: usize) -> u64 {
+    (u64::from(u32le(body, offset)) << 32) | u64::from(u32le(body, offset.saturating_add(4)))
 }
 
 /// UTF-16 **little**-endian, which this one body uses and nothing else here

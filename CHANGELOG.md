@@ -7,6 +7,27 @@ is listed under its own heading, with the capture that justifies it.
 Releases before 0.4.0 are described by their tags (`v0.1.0` to `v0.3.0`) and
 by [`work_log/`](work_log/README.md).
 
+## Unreleased
+
+### On the wire
+
+- **A medium's size is eight bytes, and ours is the volume's own.** The media
+  response carries total and free bytes as eight big-endian bytes at `0xb0`
+  and `0xb8` (S13 f98: `00000007 28ca8000` and `00000005 439f8000`, 28.6 GiB
+  with 21.1 free; S4b, S15a), and `0x4902` as two little-endian words each,
+  the high one first. We read and wrote four bytes at `0xb4` and `0xbc`, and
+  left the captured answer's high words in place, so every medium we served
+  was announced as that captured 32 GB stick. `docs/PROTOCOL.md` §3.3.
+
+### Behind the API
+
+- **prolink-proto:** `MediaResponse::total_bytes` and `free_bytes` are `u64`,
+  and `MediaResponseBuilder::size` takes `u64`; a size not given is sent as
+  zero rather than as the template's. `MediaInfo`'s sizes are `u64`, its two
+  "unknown" words (7 and 5 in the capture) being their high words.
+- **prolink:** `MediaDescription::total_bytes` and `free_bytes` are
+  `Option<u64>`.
+
 ## 0.4.0
 
 What the CDJ-to-CDJ captures teach ([work log 033](work_log/033-what-the-cdj-to-cdj-captures-teach.md)).

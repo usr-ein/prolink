@@ -32,6 +32,9 @@ etherparse = "0.19"
 network-interface = "2"
 pcap-file = "2"
 rekordcrate = { version = "0.3", default-features = false }
+# statvfs, for the size a served medium is announced with: safe bindings,
+# where this workspace forbids `unsafe`.
+rustix = { version = "1", default-features = false, features = ["std", "fs"] }
 sha2 = "0.10"
 thiserror = "2"
 tokio = "1"

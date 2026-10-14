@@ -251,6 +251,11 @@ pub(crate) fn be_u32_at(raw: &[u8], offset: usize) -> Option<u32> {
     Some(u32::from_be_bytes(bytes.try_into().ok()?))
 }
 
+pub(crate) fn be_u64_at(raw: &[u8], offset: usize) -> Option<u64> {
+    let bytes = raw.get(offset..offset.checked_add(8)?)?;
+    Some(u64::from_be_bytes(bytes.try_into().ok()?))
+}
+
 /// Decode a fixed-width UTF-16 **big**-endian field.
 ///
 /// Big-endian here and in the dbserver protocol; the NFS layer of the same
@@ -1197,13 +1202,21 @@ impl MediaQuery {
 ///
 /// Answer with the **true** counts: a deck told there are no tracks has no
 /// reason to offer the medium (F24).
+///
+/// **The two sizes are eight bytes each**, at `0xb0` and `0xb8`. Every medium
+/// in the corpus is larger than 4 GiB and has a non-zero high word: S13 f98's
+/// stick is `00000007 28ca8000` bytes (28.6 GiB) with `00000005 439f8000` free
+/// (21.1 GiB), S15a's SD card `00000003 b9f14000` (14.9 GiB of a 16 GB card).
+/// Read as four bytes at `0xb4` and `0xbc`, S13's free space would exceed its
+/// capacity.
 #[derive(Clone, PartialEq, Eq)]
 pub struct MediaResponse {
     raw: Vec<u8>,
 }
 
 impl MediaResponse {
-    /// The shortest response carrying every field below.
+    /// The shortest response carrying every field but the two sizes, which a
+    /// shorter packet is read without.
     pub const MIN_LEN: usize = 0xb0;
 
     const OFF_DEVICE: usize = 0x24;
@@ -1214,8 +1227,8 @@ impl MediaResponse {
     const LEN_CREATED: usize = 0x18;
     const OFF_TRACK_COUNT: usize = 0xa4;
     const OFF_PLAYLIST_COUNT: usize = 0xac;
-    const OFF_TOTAL_BYTES: usize = 0xb4;
-    const OFF_FREE_BYTES: usize = 0xbc;
+    const OFF_TOTAL_BYTES: usize = 0xb0;
+    const OFF_FREE_BYTES: usize = 0xb8;
 
     /// Parse a media response.
     pub fn parse(data: &[u8]) -> Result<Self> {
@@ -1266,14 +1279,14 @@ impl MediaResponse {
         be_u32_at(&self.raw, Self::OFF_PLAYLIST_COUNT).unwrap_or(0)
     }
 
-    /// The medium's capacity in bytes.
-    pub fn total_bytes(&self) -> Option<u32> {
-        be_u32_at(&self.raw, Self::OFF_TOTAL_BYTES)
+    /// The medium's capacity in bytes, eight bytes wide.
+    pub fn total_bytes(&self) -> Option<u64> {
+        be_u64_at(&self.raw, Self::OFF_TOTAL_BYTES)
     }
 
-    /// Free space in bytes.
-    pub fn free_bytes(&self) -> Option<u32> {
-        be_u32_at(&self.raw, Self::OFF_FREE_BYTES)
+    /// Free space in bytes, eight bytes wide.
+    pub fn free_bytes(&self) -> Option<u64> {
+        be_u64_at(&self.raw, Self::OFF_FREE_BYTES)
     }
 }
 
@@ -1285,6 +1298,8 @@ impl fmt::Debug for MediaResponse {
             .field("volume_name", &self.volume_name())
             .field("tracks", &self.track_count())
             .field("playlists", &self.playlist_count())
+            .field("total_bytes", &self.total_bytes())
+            .field("free_bytes", &self.free_bytes())
             .finish()
     }
 }
@@ -1298,8 +1313,8 @@ pub struct MediaResponseBuilder {
     volume_name: String,
     track_count: u32,
     playlist_count: u32,
-    total_bytes: Option<u32>,
-    free_bytes: Option<u32>,
+    total_bytes: u64,
+    free_bytes: u64,
 }
 
 impl MediaResponseBuilder {
@@ -1339,11 +1354,12 @@ impl MediaResponseBuilder {
         self
     }
 
-    /// Capacity and free space. Left as the skeleton's values when not set.
+    /// Capacity and free space, in bytes. Zero when not set: the skeleton was
+    /// a real stick's answer, and its size is not ours to announce.
     #[must_use]
-    pub fn size(mut self, total_bytes: u32, free_bytes: u32) -> Self {
-        self.total_bytes = Some(total_bytes);
-        self.free_bytes = Some(free_bytes);
+    pub fn size(mut self, total_bytes: u64, free_bytes: u64) -> Self {
+        self.total_bytes = total_bytes;
+        self.free_bytes = free_bytes;
         self
     }
 
@@ -1357,21 +1373,32 @@ impl MediaResponseBuilder {
             self.device_number,
         );
         {
-            let mut put_u32 = |offset: usize, value: u32| {
-                if let Some(field) = raw.get_mut(offset..offset + 4) {
-                    field.copy_from_slice(&value.to_be_bytes());
+            let mut put = |offset: usize, value: &[u8]| {
+                if let Some(field) = raw.get_mut(offset..offset + value.len()) {
+                    field.copy_from_slice(value);
                 }
             };
-            put_u32(MediaResponse::OFF_DEVICE, u32::from(self.device_number));
-            put_u32(MediaResponse::OFF_SLOT, u32::from(self.slot));
-            put_u32(MediaResponse::OFF_TRACK_COUNT, self.track_count);
-            put_u32(MediaResponse::OFF_PLAYLIST_COUNT, self.playlist_count);
-            if let Some(total) = self.total_bytes {
-                put_u32(MediaResponse::OFF_TOTAL_BYTES, total);
-            }
-            if let Some(free) = self.free_bytes {
-                put_u32(MediaResponse::OFF_FREE_BYTES, free);
-            }
+            put(
+                MediaResponse::OFF_DEVICE,
+                &u32::from(self.device_number).to_be_bytes(),
+            );
+            put(MediaResponse::OFF_SLOT, &u32::from(self.slot).to_be_bytes());
+            put(
+                MediaResponse::OFF_TRACK_COUNT,
+                &self.track_count.to_be_bytes(),
+            );
+            put(
+                MediaResponse::OFF_PLAYLIST_COUNT,
+                &self.playlist_count.to_be_bytes(),
+            );
+            put(
+                MediaResponse::OFF_TOTAL_BYTES,
+                &self.total_bytes.to_be_bytes(),
+            );
+            put(
+                MediaResponse::OFF_FREE_BYTES,
+                &self.free_bytes.to_be_bytes(),
+            );
         }
 
         if let Some(field) = raw.get_mut(
@@ -1909,6 +1936,7 @@ mod tests {
             .slot(Slot::USB)
             .volume_name("MY STICK")
             .counts(692, 35)
+            .size(64_023_183_360, 5_368_709_120)
             .build();
         let parsed = MediaResponse::parse(built.as_bytes()).unwrap();
         assert_eq!(parsed.device(), Some(device(4)));
@@ -1916,6 +1944,41 @@ mod tests {
         assert_eq!(parsed.volume_name(), "MY STICK");
         assert_eq!(parsed.track_count(), 692);
         assert_eq!(parsed.playlist_count(), 35);
+        assert_eq!(parsed.total_bytes(), Some(64_023_183_360));
+        assert_eq!(parsed.free_bytes(), Some(5_368_709_120));
+    }
+
+    /// `captures/S13-format-ground-truth` frame 98: an unlabelled 32 GB stick
+    /// with 651 tracks.
+    const S13_F98: &str = concat!(
+        "5173707431576d4a4f4c0643444a2d323030306e657875730000000000000001",
+        "0001009c00000001000000030000000000000000000000000000000000000000",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0000000000000000000000000032003000320036002d00300031002d00300034",
+        "0000000000310030003000300000000000000000000000000000000000000000",
+        "000000000000028b00000101000000010000000728ca800000000005439f8000",
+    );
+
+    #[test]
+    fn a_media_responses_sizes_are_eight_bytes_wide() {
+        let raw: Vec<u8> = (0..S13_F98.len())
+            .step_by(2)
+            .map(|at| u8::from_str_radix(&S13_F98[at..at + 2], 16).unwrap())
+            .collect();
+        let response = MediaResponse::parse(&raw).unwrap();
+        assert_eq!(response.track_count(), 651);
+        // 28.6 GiB of which 21.1 free. Read as four bytes at 0xb4 and 0xbc,
+        // these were 0.68 GB with 1.13 GB of it free.
+        assert_eq!(response.total_bytes(), Some(30_749_130_752));
+        assert_eq!(response.free_bytes(), Some(22_609_362_944));
+    }
+
+    #[test]
+    fn a_media_response_announces_no_size_it_was_not_given() {
+        // The skeleton is a real stick's answer, and its 28.6 GiB is not ours.
+        let built = MediaResponse::builder().counts(1, 0).build();
+        assert_eq!(built.total_bytes(), Some(0));
+        assert_eq!(built.free_bytes(), Some(0));
     }
 
     #[test]

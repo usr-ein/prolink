@@ -113,6 +113,20 @@ fn label_of(mount_point: &Path) -> String {
     fallback
 }
 
+/// A mounted volume's total and free bytes, or `None` if the filesystem will
+/// not say.
+///
+/// Free as an unprivileged user sees it, as `df` reports it. The volume is
+/// read once, when it is offered: a deck mounts its sticks read-only.
+pub fn size_of(mount_point: &Path) -> Option<(u64, u64)> {
+    let stats = rustix::fs::statvfs(mount_point).ok()?;
+    let block = stats.f_frsize;
+    Some((
+        stats.f_blocks.checked_mul(block)?,
+        stats.f_bavail.checked_mul(block)?,
+    ))
+}
+
 /// The block device mounted at a path, from the kernel's mount table.
 fn device_at(mount_point: &Path) -> Option<PathBuf> {
     let table = std::fs::read_to_string("/proc/self/mounts").ok()?;
@@ -168,6 +182,14 @@ mod tests {
         // A backslash that starts nothing is kept, rather than eaten.
         assert_eq!(unescape("a\\b"), "a\\b");
         assert_eq!(unescape("trailing\\"), "trailing\\");
+    }
+
+    #[test]
+    fn a_volumes_size_is_its_filesystems() {
+        let (total, free) = size_of(Path::new("/")).expect("the root filesystem has a size");
+        assert!(total > 0);
+        assert!(free <= total, "{free} free of {total}");
+        assert_eq!(size_of(Path::new("/nonexistent/volume")), None);
     }
 
     #[test]

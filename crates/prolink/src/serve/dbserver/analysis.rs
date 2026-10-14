@@ -142,8 +142,7 @@ pub(super) fn reply(
 ///
 /// The counts are the true ones, as everywhere (F24). The creation date and the
 /// two sizes are the values our UDP media response also sends, so a deck that
-/// asks both ways is told the same thing twice; they are the medium's, not
-/// ours, and we do not yet read them off the volume.
+/// asks both ways is told the same thing twice.
 fn media_info(transaction: u32, medium: Option<&Medium>) -> Message {
     let description = medium.map(Medium::description).unwrap_or_default();
     let body = MediaInfo {

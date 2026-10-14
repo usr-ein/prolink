@@ -1175,9 +1175,12 @@ fn print_slot(slot: &PeerSlot) {
     println!();
 }
 
-/// Bytes as a human-readable size. NFSv2 is 32-bit, and so is this field.
-fn gibibytes(bytes: u32) -> String {
-    let gib = f64::from(bytes) / 1024.0 / 1024.0 / 1024.0;
+/// Bytes as a human-readable size.
+fn gibibytes(bytes: u64) -> String {
+    // Counted in whole MiB, which is all one decimal of a GiB needs: `u64`
+    // has no lossless conversion to `f64`, and a MiB count fits a `u32` for
+    // any medium under 4 PiB.
+    let gib = f64::from(u32::try_from(bytes >> 20).unwrap_or(u32::MAX)) / 1024.0;
     format!("{gib:.1} GiB")
 }
 

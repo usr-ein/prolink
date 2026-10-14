@@ -307,7 +307,19 @@ Query carries the requester, its IP, the target device and the slot. Response
 | `0x6c`… | creation date, e.g. `2025-06-24` |
 | `0xa4` | **track count** |
 | `0xac` | **playlist count** |
-| `0xb4` / `0xbc` | total / free bytes |
+| `0xb0` / `0xb8` | total / free bytes, **eight bytes each** |
+
+**The sizes are eight bytes wide.** Every medium in the corpus is larger than
+4 GiB and has a non-zero high word: S13 f98's stick is `00000007 28ca8000`
+bytes (28.6 GiB) with `00000005 439f8000` free (21.1 GiB), S4b's two sticks
+are the same size, and S15a's SD card is `00000003 b9f14000` (14.9 GiB of a
+16 GB card). This table had them as four bytes at `0xb4` and `0xbc`, which read
+S13's medium as 0.68 GB with 1.13 GB free. This library built its answer on a
+captured one and, before 0.5, announced every medium it served as that
+captured stick, 28.6 GiB with 21.9 free; a size it was given went into the low
+words only, under that stick's high words. Since 0.5 it says the volume's own
+size. The dbserver's `0x4902` carries the same two sizes as two little-endian
+words, the high one first (`prolink-proto`'s `MediaInfo`).
 
 **When a deck asks.** One query per slot, 0.3-0.9 s after the peer's status
 shows that slot loaded, or a few seconds after first hearing a peer that has
