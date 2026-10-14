@@ -1152,16 +1152,14 @@ impl Session {
                 // track info is all a plain file can be opened by.
                 let (folder, entry) = {
                     let mut held = asking.lock().await;
-                    let client = crate::browse::asking(&mut held, peer, number).await?;
-                    match client.plain_track_info(slot, file_id).await {
-                        Ok(info) => info.plain_lookup.ok_or_else(|| {
-                            format!("file {file_id} came back with no numbers to open it by")
-                        })?,
-                        Err(error) => {
-                            held.remove(&peer);
-                            return Err(format!("asking about file {file_id}: {error}"));
-                        }
-                    }
+                    let info = crate::browse::ask_held(&mut held, peer, number, move |client| {
+                        Box::pin(async move { client.plain_track_info(slot, file_id).await })
+                    })
+                    .await
+                    .map_err(|error| format!("asking about file {file_id}: {error}"))?;
+                    info.plain_lookup.ok_or_else(|| {
+                        format!("file {file_id} came back with no numbers to open it by")
+                    })?
                 };
                 let _turn = queue.acquire().await;
                 fetch_streaming(

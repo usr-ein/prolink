@@ -67,7 +67,10 @@ None of it has met a real CDJ yet. The first release tagged since v0.3.0:
   another's file answers for its own file of that id: a second player's
   covers and previews came from the first, and its plain stick was walked,
   named and opened as the first one's, which two emulated NXSs showed. One
-  connection per player now, each player asked about its own (E24).
+  connection per player now, each player asked about its own (E24). And a
+  connection held from before that fails, as one does once its player has
+  restarted, is asked on again once, freshly opened: a player's plain stick
+  put back after its player restarted was otherwise not walked at all.
 
 ### Behind the API
 

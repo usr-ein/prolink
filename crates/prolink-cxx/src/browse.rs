@@ -76,6 +76,39 @@ pub(crate) async fn asking(
     }
 }
 
+/// One request on a held connection, as [`ask_held`] makes it.
+pub(crate) type Asked<'c, T> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = prolink::Result<T>> + Send + 'c>>;
+
+/// Ask `peer` over its held connection, and once more over a fresh one when
+/// a connection held from before fails: a player that restarted, or a cable
+/// pulled and put back, left it closed, and the first request since would
+/// fail for that alone. A connection that fails is dropped either way: it
+/// may be mid-message, and the protocol has no resynchronisation point (F16).
+pub(crate) async fn ask_held<T>(
+    held: &mut Asking,
+    peer: Ipv4Addr,
+    number: BrowsableDeviceNumber,
+    mut ask: impl for<'c> FnMut(&'c mut DbClient) -> Asked<'c, T>,
+) -> Result<T, String> {
+    let was_held = held.contains_key(&peer);
+    match ask(asking(held, peer, number).await?).await {
+        Ok(answer) => return Ok(answer),
+        Err(error) => {
+            held.remove(&peer);
+            if !was_held {
+                return Err(error.to_string());
+            }
+            tracing::info!(%peer, %error, "a held dbserver connection failed; asking on a fresh one");
+        }
+    }
+    let again = ask(asking(held, peer, number).await?).await;
+    if again.is_err() {
+        held.remove(&peer);
+    }
+    again.map_err(|error| error.to_string())
+}
+
 impl Session {
     /// What every player's slots hold, as of now.
     #[must_use]
@@ -179,22 +212,13 @@ impl Session {
             // connection in order anyway — opening one per cover would claim
             // a device number per cover and get nowhere faster.
             let mut held = queue.lock().await;
-            let client = match asking(&mut held, peer, number).await {
-                Ok(client) => client,
-                Err(error) => {
-                    finish(&events, id, &local, Err(error));
-                    return;
-                }
-            };
-
-            let outcome = match client.artwork(slot, artwork_id).await {
+            let asked = ask_held(&mut held, peer, number, move |client| {
+                Box::pin(async move { client.artwork(slot, artwork_id).await })
+            })
+            .await;
+            let outcome = match asked {
                 Ok(bytes) => write_artwork(&local, &bytes),
-                Err(error) => {
-                    // The connection may be mid-message; drop it so the next
-                    // cover reconnects rather than reading the wrong reply.
-                    held.remove(&peer);
-                    Err(format!("fetching artwork {artwork_id}: {error}"))
-                }
+                Err(error) => Err(format!("fetching artwork {artwork_id}: {error}")),
             };
             finish(&events, id, &local, outcome);
         });
@@ -239,31 +263,22 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match asking(&mut held, peer, number).await {
-                Ok(client) => client,
-                Err(error) => {
-                    finish(&events, id, "", Err(error));
-                    return;
-                }
-            };
-
-            let outcome = match client
-                .analysis(slot, track_id, prolink::consume::Analysis::WaveformPreview)
-                .await
-            {
+            let asked = ask_held(&mut held, peer, number, move |client| {
+                Box::pin(async move {
+                    client
+                        .analysis(slot, track_id, prolink::consume::Analysis::WaveformPreview)
+                        .await
+                })
+            })
+            .await;
+            let outcome = match asked {
                 Ok(bytes) => {
                     if let Ok(mut held) = stash.lock() {
                         held.insert(id, bytes);
                     }
                     Ok(())
                 }
-                Err(error) => {
-                    // The connection may be mid-message, and the protocol has
-                    // no resynchronisation point; drop it so the next request
-                    // reconnects rather than reading the wrong reply (F16).
-                    held.remove(&peer);
-                    Err(format!("fetching preview for track {track_id}: {error}"))
-                }
+                Err(error) => Err(format!("fetching preview for track {track_id}: {error}")),
             };
             finish(&events, id, "", outcome);
         });
@@ -304,26 +319,18 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match asking(&mut held, peer, number).await {
-                Ok(client) => client,
-                Err(error) => {
-                    finish(&events, id, "", Err(error));
-                    return;
-                }
-            };
-
-            let outcome = match client.generic_metadata(slot, file_id).await {
+            let asked = ask_held(&mut held, peer, number, move |client| {
+                Box::pin(async move { client.generic_metadata(slot, file_id).await })
+            })
+            .await;
+            let outcome = match asked {
                 Ok(found) => {
                     if let Ok(mut held) = stash.lock() {
                         held.insert(id, convert::metadata(&found));
                     }
                     Ok(())
                 }
-                Err(error) => {
-                    // As for a preview: the connection may be mid-message.
-                    held.remove(&peer);
-                    Err(format!("fetching metadata for file {file_id}: {error}"))
-                }
+                Err(error) => Err(format!("fetching metadata for file {file_id}: {error}")),
             };
             finish(&events, id, "", outcome);
         });
@@ -360,14 +367,13 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match asking(&mut held, peer, number).await {
-                Ok(client) => client,
-                Err(error) => {
-                    finish(&events, id, "", Err(error));
-                    return;
-                }
-            };
-            let outcome = match walk_plain(client, slot).await {
+            let asked = ask_held(&mut held, peer, number, move |client| {
+                Box::pin(async move {
+                    walk_plain(client, slot).await
+                })
+            })
+            .await;
+            let outcome = match asked {
                 Ok(entries) => {
                     tracing::info!(device_number, %slot, entries = entries.len(), "walked a plain stick");
                     if let Ok(mut held) = stash.lock() {
@@ -375,10 +381,7 @@ impl Session {
                     }
                     Ok(())
                 }
-                Err(error) => {
-                    held.remove(&peer);
-                    Err(format!("walking a plain stick: {error}"))
-                }
+                Err(error) => Err(format!("walking a plain stick: {error}")),
             };
             finish(&events, id, "", outcome);
         });
@@ -414,22 +417,16 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match asking(&mut held, peer, number).await {
-                Ok(client) => client,
-                Err(error) => {
-                    finish(&events, id, &local, Err(error));
-                    return;
-                }
-            };
-            let outcome = match client.plain_artwork(slot, file_id).await {
+            let asked = ask_held(&mut held, peer, number, move |client| {
+                Box::pin(async move { client.plain_artwork(slot, file_id).await })
+            })
+            .await;
+            let outcome = match asked {
                 // No picture is an empty answer, and a cover that is not
                 // there: written as nothing would be a broken image.
                 Ok(bytes) if bytes.is_empty() => Err(format!("file {file_id} has no artwork")),
                 Ok(bytes) => write_artwork(&local, &bytes),
-                Err(error) => {
-                    held.remove(&peer);
-                    Err(format!("fetching artwork of file {file_id}: {error}"))
-                }
+                Err(error) => Err(format!("fetching artwork of file {file_id}: {error}")),
             };
             finish(&events, id, &local, outcome);
         });
