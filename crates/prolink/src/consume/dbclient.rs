@@ -379,25 +379,29 @@ impl TrackInfo {
             plain_lookup: None,
             items: Vec::new(),
         };
-        let (mut folder, mut entry) = (0, 0);
+        let (mut folder, mut entry) = (None, None);
         for item in &items {
             match item.item_type.masked() {
                 // The trap: `0x04` is the container here, with an empty label
                 // and the rekordbox file type in the id.
                 ItemType::TRACK_TITLE => {
                     out.container = item.id;
-                    folder = item.argument0;
+                    folder = Some(item.argument0);
                 }
                 ItemType::DURATION => {
                     out.duration_seconds = item.id;
-                    entry = item.argument0;
+                    entry = Some(item.argument0);
                 }
                 ItemType::TEMPO => out.tempo_centibpm = item.id,
                 ItemType::COMMENT => out.comment.clone_from(&item.label1),
                 _ => {}
             }
         }
-        if out.path.is_empty() && entry != 0 {
+        // A plain file's answer is told by its empty path, never by its
+        // numbers: the first entry of an unlabelled stick's root is at slot 0.
+        if out.path.is_empty()
+            && let (Some(folder), Some(entry)) = (folder, entry)
+        {
             out.plain_lookup = Some((folder, entry));
         }
         out.items = items;
@@ -1855,6 +1859,38 @@ mod tests {
         let track = client.metadata(Slot::USB, 12_345).await.expect("no error");
         assert_eq!(track.id, 12_345);
         assert!(track.title.is_empty() && track.items.is_empty());
+    }
+
+    /// A plain file's five rows (PLAIN-STICKS.md §7.2): no path, and its two
+    /// numbers in argument 0 of the container and the duration.
+    fn plain_track_info_rows(folder: u32, entry: u32) -> Vec<MenuItem> {
+        let mut container = MenuItem::named(1, ItemType::TRACK_TITLE, "");
+        container.argument0 = folder;
+        let mut duration = MenuItem::named(60, ItemType::DURATION, "");
+        duration.argument0 = entry;
+        let mut path = MenuItem::named(0, ItemType::PATH, "");
+        path.argument0 = 1_453_552;
+        vec![
+            container,
+            duration,
+            MenuItem::named(12_500, ItemType::TEMPO, ""),
+            MenuItem::named(4, ItemType::COMMENT, ""),
+            path,
+        ]
+    }
+
+    #[test]
+    fn a_plain_answer_is_told_by_its_empty_path_whatever_its_numbers() {
+        let info = TrackInfo::from_items(4, plain_track_info_rows(1, 4)).expect("five rows");
+        assert_eq!(info.plain_lookup, Some((1, 4)));
+        assert_eq!(info.size, 1_453_552);
+        // The first entry of an unlabelled stick's root is at slot 0, and is a
+        // file like any other.
+        let first = TrackInfo::from_items(2, plain_track_info_rows(2, 0)).expect("five rows");
+        assert_eq!(first.plain_lookup, Some((2, 0)));
+        // A rekordbox answer names its path, and has no numbers to look up.
+        let rekordbox = TrackInfo::from_items(0xc8, track_info_rows()).expect("six rows");
+        assert_eq!(rekordbox.plain_lookup, None);
     }
 
     #[tokio::test]
