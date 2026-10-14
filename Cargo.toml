@@ -5,11 +5,11 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.4.0"
 edition = "2024"
-# 1.88 is the floor and it is a measured one: Debian trixie ships 1.85 and
-# this workspace fails on it with nine "`let` expressions in this position
-# are unstable" -- let-chains stabilised in 1.88. Edition 2024 alone would
-# only need 1.85.
-rust-version = "1.88"
+# The floor is the toolchain this is built with (rust-toolchain.toml), Sam's
+# call for 0.5.0: "I want to use the most modern rust". It was 1.88, the
+# measured floor of the let-chains, until lofty 0.24 turned out to need 1.89
+# whatever its own manifest says (it seeks an `io::Take`).
+rust-version = "1.97"
 license = "GPL-3.0-only"
 repository = "https://github.com/usr-ein/prolink"
 homepage = "https://github.com/usr-ein/prolink"
@@ -29,8 +29,9 @@ binrw = "0.15"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
 etherparse = "0.19"
-# Reading a plain file's tags when a player asks for them. 0.24, not later:
-# 0.25 wants Rust 1.89, past this workspace's floor.
+# Reading a plain file's tags when a player asks for them. 0.24, not 0.25:
+# 0.25.3 and 0.25.4 do not build without their default feature (compressed
+# ID3v2 frames), and that one brings flate2 and four crates more.
 lofty = { version = "0.24", default-features = false }
 network-interface = "2"
 pcap-file = "2"

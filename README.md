@@ -3,7 +3,7 @@
 [![CI](https://github.com/usr-ein/prolink/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/usr-ein/prolink/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/prolink.svg?logo=rust)](https://crates.io/crates/prolink)
 [![docs.rs](https://img.shields.io/docsrs/prolink?logo=docsdotrs&label=docs.rs)](https://docs.rs/prolink)
-[![MSRV 1.88](https://img.shields.io/badge/MSRV-1.88-blue.svg?logo=rust)](Cargo.toml)
+[![MSRV 1.97](https://img.shields.io/badge/MSRV-1.97-blue.svg?logo=rust)](Cargo.toml)
 [![licence GPL-3.0-only](https://img.shields.io/badge/licence-GPL--3.0--only-blue.svg)](LICENSE)
 
 A Pioneer **Pro DJ Link** implementation in Rust, both directions:

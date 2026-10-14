@@ -41,7 +41,7 @@ use prolink_proto::{DeviceKind, DeviceName, DeviceNumber, MacAddress};
 pub const STALE_AFTER: Duration = djl::DEVICE_TIMEOUT;
 
 /// ...and dropped entirely this long after that.
-pub const FORGET_AFTER: Duration = Duration::from_secs(60);
+pub const FORGET_AFTER: Duration = Duration::from_mins(1);
 
 /// One peer, as learned purely by listening.
 #[derive(Clone, PartialEq, Eq)]

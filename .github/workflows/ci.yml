@@ -74,12 +74,17 @@ jobs:
   msrv:
     name: minimum supported Rust version
     runs-on: ubuntu-24.04-arm
+    env:
+      # Over rust-toolchain.toml, which pins the toolchain everything else is
+      # built with and would be used here too: this job ran 1.97.1 for as long
+      # as it said 1.88. Keep in step with `rust-version` in the workspace
+      # manifest.
+      RUSTUP_TOOLCHAIN: "1.97"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
         with:
-          # Keep in step with `rust-version` in the workspace manifest.
-          toolchain: "1.88"
+          toolchain: "1.97"
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-features --locked
 

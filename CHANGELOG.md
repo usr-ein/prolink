@@ -63,6 +63,10 @@ by [`work_log/`](work_log/README.md).
   unanswered.
 - **prolink:** `MediaDescription::total_bytes` and `free_bytes` are
   `Option<u64>`.
+- **Rust 1.97 or later**, the toolchain the workspace is built with, where
+  it was 1.88: lofty 0.24 needs 1.89 whatever its manifest says, and Sam
+  wants "the most modern rust". CI's MSRV job now runs the version it names;
+  it ran the pinned toolchain all along.
 - **prolink-proto:** `MediaResponse::is_plain` and
   `MediaResponseBuilder::plain`; `MediaInfo::plain`.
 - **prolink-proto:** `LoadedTrack::track_type`.
@@ -90,8 +94,9 @@ by [`work_log/`](work_log/README.md).
 ### New dependencies
 
 - **lofty 0.24** (MIT OR Apache-2.0), default features off: a plain file's
-  tags, duration, bitrate and picture. 0.25 wants Rust 1.89, past the
-  workspace's 1.88.
+  tags, duration, bitrate and picture. Not 0.25: it does not build without
+  its default feature, compressed ID3v2 frames, which brings flate2 and four
+  crates more.
 - **rustix 1** (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT), `fs`
   only: `statvfs`, for a served medium's size, where the workspace forbids
   `unsafe`.
