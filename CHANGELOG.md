@@ -43,6 +43,13 @@ by [`work_log/`](work_log/README.md).
   at `0x28`, `PLAIN-STICKS.md` §7.8); a player then names it with
   `GET_GENERIC_METADATA`. We said `1`, a rekordbox track, for anything
   loaded.
+- **We ask about a player's plain files as a player does**: a file's tags
+  with `GET_GENERIC_METADATA` and track type 2, never the `0x2002` a
+  rekordbox track is asked with; its track info and artwork by its own id;
+  and the file itself with one NFS `LOOKUP` of `?` then `D <folder> <entry>`
+  on the export's root, the two numbers its track info gives
+  (`PLAIN-STICKS.md` §4.4, §7.1-§7.3). An emulated NXS's plain stick is named
+  and streamed this way (E24).
 
 ### Behind the API
 
@@ -59,6 +66,8 @@ by [`work_log/`](work_log/README.md).
 - **prolink-proto:** `MediaResponse::is_plain` and
   `MediaResponseBuilder::plain`; `MediaInfo::plain`.
 - **prolink-proto:** `LoadedTrack::track_type`.
+- **prolink:** `DbClient::generic_metadata`, `plain_track_info` and
+  `plain_artwork`; `TrackInfo::plain_lookup`; `NfsClient::open_plain`.
 - **prolink:** `Medium::open` reads a mounted medium of either kind, and
   `Medium::from_folders` a plain one: `folders`, `is_plain`, `track_count`,
   `tags` and `track_files` say what it holds. `serve::folder` walks a stick

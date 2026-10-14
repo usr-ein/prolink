@@ -818,3 +818,173 @@ async fn a_plan_over_a_tiny_file_still_reconstructs_it() {
     }
     assert_eq!(assembled, b"short");
 }
+
+// -- a plain stick ----------------------------------------------------------
+
+/// A WAV that says what it is: two seconds of CD-quality silence, with a
+/// title, an artist, a genre and a comment in its `LIST`/`INFO` chunk.
+fn tagged_wav() -> Vec<u8> {
+    fn chunk(id: [u8; 4], body: &[u8]) -> Vec<u8> {
+        let mut out = id.to_vec();
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(body);
+        if body.len() % 2 == 1 {
+            out.push(0);
+        }
+        out
+    }
+    let mut format = Vec::new();
+    for word in [1u16, 2] {
+        format.extend_from_slice(&word.to_le_bytes());
+    }
+    format.extend_from_slice(&44_100u32.to_le_bytes());
+    format.extend_from_slice(&(44_100u32 * 4).to_le_bytes());
+    format.extend_from_slice(&4u16.to_le_bytes());
+    format.extend_from_slice(&16u16.to_le_bytes());
+    let mut info = b"INFO".to_vec();
+    for (id, text) in [
+        (b"INAM", "Title Tag"),
+        (b"IART", "Artist Tag"),
+        (b"IGNR", "Techno"),
+        (b"ICMT", "A comment"),
+    ] {
+        let mut value = text.as_bytes().to_vec();
+        value.push(0);
+        info.extend(chunk(*id, &value));
+    }
+    let mut body = b"WAVE".to_vec();
+    body.extend(chunk(*b"fmt ", &format));
+    body.extend(chunk(*b"LIST", &info));
+    body.extend(chunk(*b"data", &vec![0u8; 44_100 * 4 * 2]));
+    chunk(*b"RIFF", &body)
+}
+
+/// A stick with no rekordbox library: a tagged WAV and its folder's cover in
+/// `Music/`, and an untagged file at the top.
+fn plain_stick(test: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("prolink-loopback-plain-{test}"));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("Music")).expect("a folder");
+    std::fs::write(root.join("Music/Tagged.wav"), tagged_wav()).expect("a WAV");
+    std::fs::write(
+        root.join("Music/cover.jpg"),
+        [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3],
+    )
+    .expect("a cover");
+    std::fs::write(root.join("Untagged.mp3"), [0x55u8; 4096]).expect("an untagged file");
+    root
+}
+
+#[tokio::test]
+async fn a_plain_stick_is_browsed_and_read_the_way_a_cdj_reads_one() {
+    let root = plain_stick("browse");
+    let medium = Arc::new(Medium::from_folders(&root, ServedSlot::USB).expect("a plain medium"));
+    assert!(medium.is_plain());
+
+    let server = DbServer::start(
+        DbServerConfig {
+            device: device(4),
+            address: LOOPBACK,
+            port: 0,
+            query_port: None,
+        },
+        [Arc::clone(&medium)],
+    )
+    .await
+    .expect("the dbserver starts");
+    let mut db = client(server.port()).await;
+
+    // The root menu is FOLDER alone (PLAIN-STICKS.md §4.1).
+    let root_menu = db.root_menu(Slot::USB).await.expect("the root menu");
+    assert_eq!(root_menu.len(), 1);
+    assert_eq!(root_menu[0].item_type, ItemType::MENU_FOLDER);
+
+    // Folders, then files (§4.2).
+    let top = db
+        .folder(Slot::USB, prolink_proto::dbserver::FILTER_ALL)
+        .await
+        .expect("the top of the stick");
+    let labels: Vec<&str> = top.iter().map(|row| row.label1.as_str()).collect();
+    assert_eq!(labels, ["Music", "Untagged.mp3"]);
+    assert_eq!(top[0].item_type, ItemType::FOLDER);
+    let music = db.folder(Slot::USB, top[0].id).await.expect("Music");
+    assert_eq!(music.len(), 1);
+    let wav = music[0].id;
+    assert_eq!(
+        music[0].label1, "Tagged.wav",
+        "a file row shows its file name"
+    );
+
+    // Its tags, asked as a player asks a plain file (§5).
+    let metadata = db
+        .generic_metadata(Slot::USB, wav)
+        .await
+        .expect("its metadata");
+    assert_eq!(metadata.title, "Title Tag");
+    assert_eq!(metadata.artist, "Artist Tag");
+    assert_eq!(metadata.genre, "Techno");
+    assert_eq!(metadata.comment, "A comment");
+    assert_eq!(metadata.duration_seconds, 2);
+    assert_eq!(metadata.bitrate, 1411);
+    assert_eq!(metadata.artwork_id, wav);
+    let untagged = db
+        .generic_metadata(Slot::USB, top[1].id)
+        .await
+        .expect("an untagged file's");
+    assert_eq!(untagged.title, "Untagged.mp3", "named by its file name");
+
+    // The folder's picture, by the file's own id (§6).
+    let cover = db.plain_artwork(Slot::USB, wav).await.expect("its cover");
+    assert_eq!(cover, [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+
+    // Its track info carries no path, and the numbers it is opened by (§7.2).
+    let info = db
+        .plain_track_info(Slot::USB, wav)
+        .await
+        .expect("its track info");
+    assert!(info.path.is_empty());
+    assert_eq!(info.container, 11, "WAV");
+    let (folder, entry) = info.plain_lookup.expect("the numbers");
+    assert_eq!(info.size, tagged_wav().len() as u64);
+
+    // One LOOKUP of `?\0D <folder> <entry>` on the export's root, and READs
+    // (§7.3).
+    let mut tree = Vfs::new();
+    tree.mount_medium(&medium).expect("mounting the stick");
+    let files = NfsServer::start(
+        Arc::new(RwLock::new(tree)),
+        ServerNfsConfig {
+            interface: None,
+            portmap_port: 0,
+            mount_port: 0,
+            nfs_port: 0,
+        },
+    )
+    .await
+    .expect("the file servers start");
+    let mut nfs = NfsClient::connect_with(
+        LOOPBACK,
+        None,
+        prolink::consume::NfsConfig {
+            portmap_port: files.ports().portmap,
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("connecting");
+    let mounted = nfs.mount_slot(Slot::USB).await.expect("mounting /C/");
+    let file = nfs
+        .open_plain(&mounted, folder, entry)
+        .await
+        .expect("the file, by its two numbers");
+    assert_eq!(file.size(), info.size);
+    let head = nfs.read_range(&file, 0, 12).await.expect("its head");
+    assert_eq!(&head[..4], b"RIFF");
+    assert_eq!(&head[8..12], b"WAVE");
+    assert!(
+        nfs.open_plain(&mounted, folder, entry + 1).await.is_err(),
+        "another entry of that folder is no file"
+    );
+
+    std::fs::remove_dir_all(&root).ok();
+}

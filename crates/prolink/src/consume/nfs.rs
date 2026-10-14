@@ -786,9 +786,18 @@ impl NfsClient {
         directory: FileHandle,
         name: &str,
     ) -> Result<nfs2::NfsResult<nfs2::FileRef>> {
+        self.lookup_name(directory, Utf16LeString::new(name)).await
+    }
+
+    /// One `LOOKUP` of a name given as the bytes that go on the wire.
+    async fn lookup_name(
+        &mut self,
+        directory: FileHandle,
+        name: Utf16LeString,
+    ) -> Result<nfs2::NfsResult<nfs2::FileRef>> {
         let arguments = nfs2::Request::Lookup {
             dir: directory,
-            name: Utf16LeString::new(name),
+            name,
         }
         .encode_arguments();
         self.stats.lookups += 1;
@@ -934,6 +943,43 @@ impl NfsClient {
             handle,
             size: u64::from(attr.size),
         })
+    }
+
+    /// Open a file off a stick with no rekordbox library, by the two numbers
+    /// its track info carries ([`crate::consume::TrackInfo::plain_lookup`]).
+    ///
+    /// **Never by a path**, which that track info does not have. A player
+    /// makes one `LOOKUP` on the export's root of the name `?\0D <folder>
+    /// <entry>`, `?` in UTF-16LE and the rest in ASCII (PLAIN-STICKS.md §7.3),
+    /// and so does this.
+    pub async fn open_plain(
+        &mut self,
+        mounted: &Mount,
+        folder: u32,
+        entry: u32,
+    ) -> Result<RemoteFile> {
+        let name = crate::serve::folder::lookup_name(folder, entry);
+        let path = format!("?D {folder:X} {entry:X}");
+        match self
+            .lookup_name(mounted.root(), Utf16LeString::from_bytes(&name))
+            .await?
+        {
+            Ok(found) if found.attr.is_regular_file() => Ok(RemoteFile {
+                path,
+                handle: found.handle,
+                size: u64::from(found.attr.size),
+            }),
+            Ok(_) => Err(Error::Nfs {
+                operation: "LOOKUP",
+                path,
+                status: ErrorStatus::ISDIR,
+            }),
+            Err(status) => Err(Error::Nfs {
+                operation: "LOOKUP",
+                path,
+                status,
+            }),
+        }
     }
 
     /// Read one byte range, in one `READ`.

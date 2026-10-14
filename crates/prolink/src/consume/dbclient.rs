@@ -347,6 +347,12 @@ pub struct TrackInfo {
     pub tempo_centibpm: u32,
     /// The comment.
     pub comment: String,
+    /// A plain file's two numbers, the name it is opened by over NFS:
+    /// argument 0 of the container item and of the duration item, the folder
+    /// and the entry ([`crate::consume::NfsClient::open_plain`]). `None` for a
+    /// rekordbox track, whose path is in [`TrackInfo::path`] instead
+    /// (PLAIN-STICKS.md §7.2).
+    pub plain_lookup: Option<(u32, u32)>,
     /// Every row exactly as it arrived, in order.
     pub items: Vec<MenuItem>,
 }
@@ -370,18 +376,29 @@ impl TrackInfo {
             duration_seconds: 0,
             tempo_centibpm: 0,
             comment: String::new(),
+            plain_lookup: None,
             items: Vec::new(),
         };
+        let (mut folder, mut entry) = (0, 0);
         for item in &items {
             match item.item_type.masked() {
                 // The trap: `0x04` is the container here, with an empty label
                 // and the rekordbox file type in the id.
-                ItemType::TRACK_TITLE => out.container = item.id,
-                ItemType::DURATION => out.duration_seconds = item.id,
+                ItemType::TRACK_TITLE => {
+                    out.container = item.id;
+                    folder = item.argument0;
+                }
+                ItemType::DURATION => {
+                    out.duration_seconds = item.id;
+                    entry = item.argument0;
+                }
                 ItemType::TEMPO => out.tempo_centibpm = item.id,
                 ItemType::COMMENT => out.comment.clone_from(&item.label1),
                 _ => {}
             }
+        }
+        if out.path.is_empty() && entry != 0 {
+            out.plain_lookup = Some((folder, entry));
         }
         out.items = items;
         Some(out)
@@ -751,6 +768,47 @@ impl DbClient {
             what: "a dbserver GET_TRACK_INFO",
             detail: format!("track {track_id} came back with no path item, so it cannot be loaded"),
         })
+    }
+
+    /// A plain file's metadata: `GET_GENERIC_METADATA` with track type 2.
+    ///
+    /// What a player asks about a file off a stick with no rekordbox library,
+    /// in its browser and in INFO, and answered with ten items from the file's
+    /// tags (PLAIN-STICKS.md §4.4, §5): title (else the file name), artist,
+    /// album, duration, the BPM tag, comment, genre, and a bitrate. `0x2002`
+    /// is what a rekordbox track is asked with, and a plain file is never.
+    pub async fn generic_metadata(&mut self, slot: Slot, file_id: u32) -> Result<TrackMetadata> {
+        let descriptor = self.descriptor(slot, MenuTarget::SUB, TrackType::UNANALYSED);
+        let items = self
+            .menu(MessageKind::GET_GENERIC_METADATA, descriptor, &[file_id])
+            .await?;
+        Ok(TrackMetadata::from_items(file_id, items))
+    }
+
+    /// A plain file's track info: its size, its container, and
+    /// [`TrackInfo::plain_lookup`], the two numbers it is opened by.
+    ///
+    /// Track type 2, as a player asks it at a load (PLAIN-STICKS.md §7.1).
+    pub async fn plain_track_info(&mut self, slot: Slot, file_id: u32) -> Result<TrackInfo> {
+        let descriptor = self.descriptor(slot, MenuTarget::BINARY, TrackType::UNANALYSED);
+        let items = self
+            .menu(MessageKind::GET_TRACK_INFO, descriptor, &[file_id])
+            .await?;
+        TrackInfo::from_items(file_id, items)
+            .filter(|info| info.plain_lookup.is_some())
+            .ok_or(Error::Refused {
+                what: "a dbserver GET_TRACK_INFO",
+                detail: format!("file {file_id} came back with no numbers to open it by"),
+            })
+    }
+
+    /// A plain file's cover, by its own id: its embedded picture, or its
+    /// folder's (PLAIN-STICKS.md §6). Track type 2, as a player asks it.
+    pub async fn plain_artwork(&mut self, slot: Slot, file_id: u32) -> Result<Vec<u8>> {
+        let descriptor = self.descriptor(slot, MenuTarget::BINARY, TrackType::UNANALYSED);
+        let request = self.binary_request(MessageKind::GET_ARTWORK, descriptor, &[file_id])?;
+        let reply = self.request(request).await?;
+        Ok(blob_of(&reply))
     }
 
     /// Cover art, by the artwork id a [`TrackMetadata`] carries.
