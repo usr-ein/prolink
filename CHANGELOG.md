@@ -38,6 +38,11 @@ by [`work_log/`](work_log/README.md).
   <entry>`. Until now such a stick was refused. An emulated NXS browses one,
   reads its tags, loads a file and plays it (E23). We list less than a CDJ
   does: only what a player can play (`docs/PROTOCOL.md` §8).
+- **Our status can say a plain file is loaded**: track type `2` at `0x2a`,
+  with the file's id on its medium, as a CDJ playing one says (`02 03 02 00`
+  at `0x28`, `PLAIN-STICKS.md` §7.8); a player then names it with
+  `GET_GENERIC_METADATA`. We said `1`, a rekordbox track, for anything
+  loaded.
 
 ### Behind the API
 
@@ -53,6 +58,7 @@ by [`work_log/`](work_log/README.md).
   `Option<u64>`.
 - **prolink-proto:** `MediaResponse::is_plain` and
   `MediaResponseBuilder::plain`; `MediaInfo::plain`.
+- **prolink-proto:** `LoadedTrack::track_type`.
 - **prolink:** `Medium::open` reads a mounted medium of either kind, and
   `Medium::from_folders` a plain one: `folders`, `is_plain`, `track_count`,
   `tags` and `track_files` say what it holds. `serve::folder` walks a stick

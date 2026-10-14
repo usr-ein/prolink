@@ -54,6 +54,7 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use crate::beat::{BeatInBar, Pitch};
+use crate::dbserver::TrackType;
 use crate::device::{DeviceName, DeviceNumber};
 use crate::status_templates as templates;
 use crate::{Error, MAGIC, Result, Slot};
@@ -802,8 +803,12 @@ pub struct LoadedTrack {
     pub source_player: DeviceNumber,
     /// Which of that player's slots.
     pub slot: Slot,
-    /// The rekordbox row id.
+    /// The rekordbox row id, or a plain file's id on its medium.
     pub id: u32,
+    /// [`TrackType::REKORDBOX`], or [`TrackType::UNANALYSED`] for a file off a
+    /// stick with no rekordbox library, which a player then asks about with
+    /// `GET_GENERIC_METADATA` (PLAIN-STICKS.md §7.8: `02 03 02 00` at `0x28`).
+    pub track_type: TrackType,
 }
 
 impl Default for CdjStatusBuilder {
@@ -1065,12 +1070,11 @@ impl CdjStatusBuilder {
             CdjStatus::OFF_SOURCE_SLOT,
             self.loaded_track.map_or(0, |track| track.slot.0),
         );
-        // `1` is a rekordbox track. Everything this library serves or plays is
-        // one; `2`, an unanalysed file, would be a claim we cannot support.
+        // `1` a rekordbox track, `2` a plain file, and zero for nothing.
         put(
             raw,
             CdjStatus::OFF_TRACK_TYPE,
-            u8::from(self.loaded_track.is_some()),
+            self.loaded_track.map_or(0, |track| track.track_type.0),
         );
         put_u32(
             raw,
@@ -1845,6 +1849,7 @@ mod tests {
                 source_player: device(2),
                 slot: Slot::USB,
                 id: 1234,
+                track_type: TrackType::REKORDBOX,
             }))
             .build();
         let parsed = CdjStatus::parse(playing.as_bytes()).expect("our own packet");
@@ -1869,10 +1874,12 @@ mod tests {
                 source_player: device(4),
                 slot: Slot::SD,
                 id: 7,
+                track_type: TrackType::UNANALYSED,
             }))
             .build();
         assert_eq!(byte_at(paused.as_bytes(), 0x9d), Some(0x01));
         assert_eq!(paused.source_slot(), Slot::SD);
+        assert_eq!(paused.track_type(), 2, "a plain file");
     }
 
     #[test]

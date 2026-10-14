@@ -2537,6 +2537,7 @@ mod tests {
             source_player: DeviceNumber::new(2).expect("device 2"),
             slot: Slot::USB,
             id: 42,
+            track_type: prolink_proto::dbserver::TrackType::REKORDBOX,
         }
     }
 

@@ -775,6 +775,8 @@ impl Session {
                 source_player,
                 slot: convert::slot_back(slot),
                 id: track_id,
+                // Only rekordbox tracks yet: the bridge says nothing else.
+                track_type: prolink_proto::dbserver::TrackType::REKORDBOX,
             }
         });
         self.with_live(|live| {
