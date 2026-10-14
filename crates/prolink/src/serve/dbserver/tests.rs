@@ -597,6 +597,58 @@ fn nothing_is_sent_back_for_0x3001() {
 }
 
 #[test]
+fn nothing_is_sent_back_for_what_a_player_hands_back_about_a_plain_file() {
+    // A player hands the server of a plain file the preview waveform and the
+    // seek table it worked out for it, and names each file it cannot play. An
+    // emulated CDJ-2000NXS serving a plain stick answered none of the sixteen
+    // in E14 and E15 (`emu-captures/PLAIN-STICKS.md` §7.7), and a reply would
+    // be read as the answer to the next request, as for `0x3001`.
+    let shared = shared([usb()]);
+    let mut session = Session::default();
+    let raw = Descriptor::new(
+        BrowsableDeviceNumber::new(2).expect("device 2 is browsable"),
+        Slot::USB,
+        MenuTarget::BINARY,
+        TrackType::UNANALYSED,
+    )
+    .to_raw();
+    let file = 6;
+    let requests = [
+        Message::new(
+            7,
+            MessageKind::HAND_BACK_WAVEFORM_PREVIEW,
+            [
+                Field::U32(raw),
+                Field::U32(3),
+                Field::U32(file),
+                Field::U32(0),
+                Field::U32(900),
+                Field::Blob(vec![0x15; 900]),
+            ],
+        ),
+        Message::new(
+            8,
+            MessageKind::HAND_BACK_VBR_INDEX,
+            [
+                Field::U32(raw),
+                Field::U32(file),
+                Field::U32(1604),
+                Field::Blob(vec![0; 1604]),
+            ],
+        ),
+        Message::new(
+            9,
+            MessageKind::UNPLAYABLE,
+            [Field::U32(raw), Field::U32(file)],
+        ),
+    ];
+    for request in &requests {
+        let replies = ask(&mut session, &shared, request);
+        assert!(replies.is_empty(), "{:?} drew {replies:?}", request.kind);
+    }
+}
+
+#[test]
 fn a_medium_description_is_not_an_acknowledgement() {
     // `0x3903` is answered by a real deck with `0x4902` carrying a 148-byte
     // body describing the medium — the same volume name, creation date, counts

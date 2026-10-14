@@ -18,6 +18,13 @@ by [`work_log/`](work_log/README.md).
   the high one first. We read and wrote four bytes at `0xb4` and `0xbc`, and
   left the captured answer's high words in place, so every medium we served
   was announced as that captured 32 GB stick. `docs/PROTOCOL.md` §3.3.
+- **Three requests about a plain file are answered with nothing.** A player
+  hands the server of a plain file the preview waveform (`0x2005`) and the
+  seek table (`0x2205`) it worked out for it, and says which files it cannot
+  play (`0x3503`); an emulated CDJ-2000NXS serving a plain stick answers none
+  of them (`emu-captures/PLAIN-STICKS.md` §7.7, E14, E15). We acknowledged
+  them, as any request we do not implement, and a player waiting for no reply
+  takes one for the answer to its next request (F16).
 
 ### Behind the API
 
@@ -25,6 +32,10 @@ by [`work_log/`](work_log/README.md).
   and `MediaResponseBuilder::size` takes `u64`; a size not given is sent as
   zero rather than as the template's. `MediaInfo`'s sizes are `u64`, its two
   "unknown" words (7 and 5 in the capture) being their high words.
+- **prolink-proto:** `MessageKind::HAND_BACK_WAVEFORM_PREVIEW`,
+  `HAND_BACK_VBR_INDEX` and `UNPLAYABLE`. `MessageKind::expects_no_reply` is
+  true for them, and for `UNKNOWN_3001`, which the server already left
+  unanswered.
 - **prolink:** `MediaDescription::total_bytes` and `free_bytes` are
   `Option<u64>`.
 

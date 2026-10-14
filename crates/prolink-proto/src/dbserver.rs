@@ -755,6 +755,21 @@ impl MessageKind {
     /// byte stream stays perfectly framed throughout, which is why nothing that
     /// checks framing finds it.
     pub const UNKNOWN_3001: Self = Self(0x3001);
+    /// A preview waveform a player hands back to the server of a plain file
+    /// it played: `[descriptor, 3, file id, 0, blob[0], 900, blob[900]]`, a
+    /// few seconds after it loads the next. **Answered with nothing at all**,
+    /// like [`Self::UNKNOWN_3001`]: an emulated CDJ-2000NXS serving a plain
+    /// stick never replied to the sixteen of these in E14 and E15
+    /// (`emu-captures/PLAIN-STICKS.md` §7.7).
+    pub const HAND_BACK_WAVEFORM_PREVIEW: Self = Self(0x2005);
+    /// A seek table a player worked out for a plain VBR file and hands back:
+    /// `[descriptor, file id, 1604, blob[1604]]`, 401 little-endian words, the
+    /// last the file's sample count (E14 f28741). Answered with nothing.
+    pub const HAND_BACK_VBR_INDEX: Self = Self(0x2205);
+    /// "This file will not play": `[descriptor, file id]`, for each plain file
+    /// a player found it cannot (E14: an AppleDouble file, random bytes named
+    /// `.mp3`, a FLAC). Answered with nothing.
+    pub const UNPLAYABLE: Self = Self(0x3503);
     /// The detailed waveform.
     pub const GET_WAVEFORM_DETAIL: Self = Self(0x2904);
     /// Extended cue points, CDJ-2000NXS2 and later.
@@ -885,6 +900,9 @@ impl MessageKind {
             Self::GET_VBR_INDEX => "get_vbr_index",
             Self::GET_MEDIA_INFO => "get_media_info",
             Self::UNKNOWN_3001 => "unknown_3001",
+            Self::HAND_BACK_WAVEFORM_PREVIEW => "hand_back_waveform_preview",
+            Self::HAND_BACK_VBR_INDEX => "hand_back_vbr_index",
+            Self::UNPLAYABLE => "unplayable",
             Self::MEDIA_INFO => "media_info",
             Self::GET_WAVEFORM_DETAIL => "get_waveform_detail",
             Self::GET_CUE_POINTS_EXT => "get_cue_points_ext",
@@ -913,11 +931,20 @@ impl MessageKind {
 
     /// Whether a peer expects no reply at all to this request.
     ///
-    /// True only for [`MessageKind::MENU_CLOSE`]. Sending anything back — least
-    /// of all the `0x4003` an unhandled type would otherwise produce — risks
-    /// desynchronising a client that is not listening for one (F16).
+    /// [`MessageKind::MENU_CLOSE`], [`MessageKind::UNKNOWN_3001`], and the
+    /// three a player sends the server of a plain file it played or could not
+    /// play. Sending anything back — least of all the `0x4003` an unhandled
+    /// type would otherwise produce — desynchronises a client that is not
+    /// listening for one: it takes the reply for the next request's (F16).
     pub fn expects_no_reply(self) -> bool {
-        self == Self::MENU_CLOSE
+        matches!(
+            self,
+            Self::MENU_CLOSE
+                | Self::UNKNOWN_3001
+                | Self::HAND_BACK_WAVEFORM_PREVIEW
+                | Self::HAND_BACK_VBR_INDEX
+                | Self::UNPLAYABLE
+        )
     }
 }
 

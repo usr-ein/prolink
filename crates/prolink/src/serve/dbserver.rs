@@ -601,15 +601,17 @@ impl Session {
                 return Flow::Continue;
             }
             MessageKind::DISCONNECT => return Flow::Close,
-            // No reply at all, and **no state discarded**: a deck sends this
-            // while still scrolling the list it is supposedly finished with
-            // (F16, F27).
-            // `0x3001` is the more expensive of the two to get wrong. A deck
-            // sends it about a minute after a load and a real server answers it
-            // with nothing; a reply nobody asked for becomes the answer to the
+            // No reply at all, and **no state discarded**: a deck sends
+            // `MENU_CLOSE` while still scrolling the list it is supposedly
+            // finished with (F16, F27).
+            // `0x3001` is the more expensive one to get wrong. A deck sends it
+            // about a minute after a load and a real server answers it with
+            // nothing; a reply nobody asked for becomes the answer to the
             // `GET_METADATA` that follows, and every reply after that is one
-            // behind. See `MessageKind::UNKNOWN_3001`.
-            MessageKind::MENU_CLOSE | MessageKind::UNKNOWN_3001 => return Flow::Continue,
+            // behind. See `MessageKind::UNKNOWN_3001`. The three a player sends
+            // about a plain file it played are answered the same way, by a CDJ
+            // as by us (PLAIN-STICKS.md §7.7).
+            kind if kind.expects_no_reply() => return Flow::Continue,
             MessageKind::UNKNOWN_3E03 => {
                 push(
                     out,
