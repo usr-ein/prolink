@@ -48,6 +48,7 @@ Status key: `todo` · `wip` · `done` · `blocked` · `dropped`
 | 33 | Becoming a real player: claim 1–4 from the consumer side, share UDP 50002, and stop blocking the host's UI thread | done | [030](030-becoming-a-real-player.md); five defects from a Pi running Mixxx against two CDJs |
 | 35 | Several TriMixxx on one network: a rebuilt session waits for UDP 111, a new MAC is a new session, and two players claiming one number at once settle it by address | done | [032](032-rebinding-and-claiming-together.md); found on emulated decks; the claim rule replayed against every discovery packet in the corpus |
 | 36 | What the CDJ-to-CDJ captures teach: we give up "first on the network" to a real deck, status goes out on a change, and a slot is asked about as a deck asks | done, on no real CDJ | [033](033-what-the-cdj-to-cdj-captures-teach.md); three wire changes, each its own commit; 0.4.0 |
+| 37 | Plain sticks both ways: a stick with no rekordbox library served by its folders and read in a player by its FOLDER menus, a plain track announced as one, each player asked about its own media, and a medium's size in eight bytes | done, on no real CDJ | [034](034-plain-sticks-both-ways.md); emu-captures E23-E25; CI green and Rust 1.97; 0.5.0 |
 
 ## Acceptance: what the CLI must be able to do
 

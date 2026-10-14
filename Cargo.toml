@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 # The floor is the toolchain this is built with (rust-toolchain.toml), Sam's
 # call for 0.5.0: "I want to use the most modern rust". It was 1.88, the
@@ -20,10 +20,10 @@ keywords = ["dj", "pioneer", "cdj", "rekordbox", "prolink"]
 categories = ["network-programming", "multimedia::audio", "parser-implementations"]
 
 [workspace.dependencies]
-prolink = { version = "0.4.0", path = "crates/prolink" }
-prolink-capture = { version = "0.4.0", path = "crates/prolink-capture" }
-prolink-proto = { version = "0.4.0", path = "crates/prolink-proto" }
-prolink-rekordbox = { version = "0.4.0", path = "crates/prolink-rekordbox" }
+prolink = { version = "0.5.0", path = "crates/prolink" }
+prolink-capture = { version = "0.5.0", path = "crates/prolink-capture" }
+prolink-proto = { version = "0.5.0", path = "crates/prolink-proto" }
+prolink-rekordbox = { version = "0.5.0", path = "crates/prolink-rekordbox" }
 
 binrw = "0.15"
 bytes = "1"

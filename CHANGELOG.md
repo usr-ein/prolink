@@ -7,7 +7,11 @@ is listed under its own heading, with the capture that justifies it.
 Releases before 0.4.0 are described by their tags (`v0.1.0` to `v0.3.0`) and
 by [`work_log/`](work_log/README.md).
 
-## Unreleased
+## 0.5.0
+
+Plain sticks both ways, and a medium's size ([work log 034](work_log/034-plain-sticks-both-ways.md)).
+None of it has met a real CDJ yet. The first release tagged since v0.3.0:
+0.4.0, below, was never tagged, and v0.5.0 carries it too.
 
 ### On the wire
 
@@ -64,39 +68,40 @@ by [`work_log/`](work_log/README.md).
   and `MediaResponseBuilder::size` takes `u64`; a size not given is sent as
   zero rather than as the template's. `MediaInfo`'s sizes are `u64`, its two
   "unknown" words (7 and 5 in the capture) being their high words.
+- **prolink-proto:** `MediaResponse::is_plain` and
+  `MediaResponseBuilder::plain`; `MediaInfo::plain`; `LoadedTrack::track_type`.
 - **prolink-proto:** `MessageKind::HAND_BACK_WAVEFORM_PREVIEW`,
   `HAND_BACK_VBR_INDEX` and `UNPLAYABLE`. `MessageKind::expects_no_reply` is
   true for them, and for `UNKNOWN_3001`, which the server already left
   unanswered.
 - **prolink:** `MediaDescription::total_bytes` and `free_bytes` are
-  `Option<u64>`.
-- **Rust 1.97 or later**, the toolchain the workspace is built with, where
-  it was 1.88: lofty 0.24 needs 1.89 whatever its manifest says, and Sam
-  wants "the most modern rust". CI's MSRV job now runs the version it names;
-  it ran the pinned toolchain all along.
-- **prolink-proto:** `MediaResponse::is_plain` and
-  `MediaResponseBuilder::plain`; `MediaInfo::plain`.
-- **prolink-proto:** `LoadedTrack::track_type`.
-- **prolink:** `DbClient::generic_metadata`, `plain_track_info` and
-  `plain_artwork`; `TrackInfo::plain_lookup`; `NfsClient::open_plain`.
-- **prolink-cxx:** a session serves every stick mounted on its host, a
-  plain one by its folders, where it served rekordbox ones only; a stick it
-  cannot serve is looked at again 30 s later, or at once when another is
-  mounted there. `MediaInfo::plain` says a
-  player's slot holds a plain stick, and `fetch_plain_tree`,
-  `fetch_plain_metadata`, `fetch_plain_artwork` and
-  `fetch_plain_file_streaming` read one (`PlainEntry`, `take_plain_tree`,
-  `take_metadata`). `set_loaded_track` takes `plain`, and `served_file_id`
-  and `served_file_path` turn a file of a plain stick we serve into the id a
-  player knows it by, and back.
+  `Option<u64>`, and `MediaDescription::plain` says a stick is plain.
 - **prolink:** `Medium::open` reads a mounted medium of either kind, and
   `Medium::from_folders` a plain one: `folders`, `is_plain`, `track_count`,
   `tags` and `track_files` say what it holds. `serve::folder` walks a stick
   as a player is shown it (`FolderTree`, `WalkLimits`) and `serve::tags`
-  reads a file's tags (`FileTags`). `MediaDescription::plain`.
-  `local_volumes` finds every mounted stick, `Volume::rekordbox` says which
-  kind it is, and `volumes::label_of` is public. `Error::NoMusic` refuses a
-  plain stick with nothing to play.
+  reads a file's tags (`FileTags`). `local_volumes` finds every mounted
+  stick, `Volume::rekordbox` says which kind it is, and `volumes::label_of`
+  is public. `Error::NoMusic` refuses a plain stick with nothing to play.
+- **prolink:** `DbClient::generic_metadata`, `plain_track_info` and
+  `plain_artwork`; `TrackInfo::plain_lookup`; `NfsClient::open_plain`.
+- **prolink-cxx:** a session serves every stick mounted on its host, a plain
+  one by its folders, where it served rekordbox ones only; a stick it cannot
+  serve is looked at again 30 s later, or at once when another is mounted
+  there. `MediaInfo::plain` says a player's slot holds a plain stick, and
+  `fetch_plain_tree`, `fetch_plain_metadata`, `fetch_plain_artwork` and
+  `fetch_plain_file_streaming` read one (`PlainEntry`, `take_plain_tree`,
+  `take_metadata`). `set_loaded_track` takes `plain`, and `served_file_id`
+  and `served_file_path` turn a file of a plain stick we serve into the id a
+  player knows it by, and back.
+
+### Rust 1.97 or later
+
+The workspace's floor is the toolchain it is built with, where it was 1.88:
+lofty 0.24 needs 1.89 whatever its manifest says, and Sam wants "the most
+modern rust". CI's MSRV job now runs the version it names; it ran the pinned
+toolchain all along. CI is green again, after a week red on formatting and
+the pinned clippy.
 
 ### New dependencies
 
