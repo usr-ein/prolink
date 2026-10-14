@@ -23,6 +23,8 @@
 //! later one reuses it.
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
+use std::net::Ipv4Addr;
 
 use prolink::consume::{DbClient, TrackMetadata};
 use prolink_proto::dbserver::{FILTER_ALL, ItemType, MenuItem, SortOrder};
@@ -30,6 +32,8 @@ use prolink_proto::{BrowsableDeviceNumber, Slot as LibSlot};
 
 use crate::convert;
 use crate::ffi::{MediaInfo, Metadata, PlainEntry, Row, Slot};
+use crate::session::Events;
+use crate::session::{Error, Session};
 
 /// How deep a walk of a player's plain stick goes: the deck's own browser's
 /// limit for its own sticks. A CDJ itself opens eight levels over LINK.
@@ -38,13 +42,38 @@ const PLAIN_DEPTH: usize = 16;
 /// How many files a walk of a player's plain stick takes, as for the deck's
 /// own sticks.
 const PLAIN_FILES: usize = 20_000;
-use crate::session::Events;
-use crate::session::{Error, Session};
 
 /// The dbserver connections a session holds open, one per player.
 #[derive(Debug, Default)]
 pub(crate) struct Connections {
     by_device: BTreeMap<u8, DbClient>,
+}
+
+/// The dbserver connections covers, previews and plain files are asked over,
+/// one per player by its address, each opened on first use.
+///
+/// One per player and not one for all: a player's dbserver answers for its own
+/// media, and asked about another's file it answers for its own file of that
+/// id. With one connection for all, everything was asked of whichever player
+/// was asked first: a second player's covers and previews, and its plain
+/// stick, walked, named and opened as the first one's.
+pub(crate) type Asking = BTreeMap<Ipv4Addr, DbClient>;
+
+/// The connection to `peer` among those held, opened if there is none.
+pub(crate) async fn asking(
+    held: &mut Asking,
+    peer: Ipv4Addr,
+    number: BrowsableDeviceNumber,
+) -> Result<&mut DbClient, String> {
+    match held.entry(peer) {
+        Entry::Occupied(open) => Ok(open.into_mut()),
+        Entry::Vacant(vacant) => {
+            let opened = DbClient::connect(peer, number)
+                .await
+                .map_err(|error| format!("connecting: {error}"))?;
+            Ok(vacant.insert(opened))
+        }
+    }
 }
 
 impl Session {
@@ -145,20 +174,17 @@ impl Session {
         let local = local_path.to_owned();
 
         self.runtime_handle().spawn(async move {
-            // One connection, one request at a time. A host asks for these by
-            // the hundred, and a deck answers a dbserver connection in order
-            // anyway — opening one per cover would claim a device number per
-            // cover and get nowhere faster.
+            // One connection per player, one request at a time. A host asks
+            // for these by the hundred, and a deck answers a dbserver
+            // connection in order anyway — opening one per cover would claim
+            // a device number per cover and get nowhere faster.
             let mut held = queue.lock().await;
-            let client = match held.as_mut() {
-                Some(client) => client,
-                None => match DbClient::connect(peer, number).await {
-                    Ok(opened) => held.insert(opened),
-                    Err(error) => {
-                        finish(&events, id, &local, Err(format!("connecting: {error}")));
-                        return;
-                    }
-                },
+            let client = match asking(&mut held, peer, number).await {
+                Ok(client) => client,
+                Err(error) => {
+                    finish(&events, id, &local, Err(error));
+                    return;
+                }
             };
 
             let outcome = match client.artwork(slot, artwork_id).await {
@@ -166,7 +192,7 @@ impl Session {
                 Err(error) => {
                     // The connection may be mid-message; drop it so the next
                     // cover reconnects rather than reading the wrong reply.
-                    *held = None;
+                    held.remove(&peer);
                     Err(format!("fetching artwork {artwork_id}: {error}"))
                 }
             };
@@ -213,15 +239,12 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match held.as_mut() {
-                Some(client) => client,
-                None => match DbClient::connect(peer, number).await {
-                    Ok(opened) => held.insert(opened),
-                    Err(error) => {
-                        finish(&events, id, "", Err(format!("connecting: {error}")));
-                        return;
-                    }
-                },
+            let client = match asking(&mut held, peer, number).await {
+                Ok(client) => client,
+                Err(error) => {
+                    finish(&events, id, "", Err(error));
+                    return;
+                }
             };
 
             let outcome = match client
@@ -238,7 +261,7 @@ impl Session {
                     // The connection may be mid-message, and the protocol has
                     // no resynchronisation point; drop it so the next request
                     // reconnects rather than reading the wrong reply (F16).
-                    *held = None;
+                    held.remove(&peer);
                     Err(format!("fetching preview for track {track_id}: {error}"))
                 }
             };
@@ -281,15 +304,12 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match held.as_mut() {
-                Some(client) => client,
-                None => match DbClient::connect(peer, number).await {
-                    Ok(opened) => held.insert(opened),
-                    Err(error) => {
-                        finish(&events, id, "", Err(format!("connecting: {error}")));
-                        return;
-                    }
-                },
+            let client = match asking(&mut held, peer, number).await {
+                Ok(client) => client,
+                Err(error) => {
+                    finish(&events, id, "", Err(error));
+                    return;
+                }
             };
 
             let outcome = match client.generic_metadata(slot, file_id).await {
@@ -301,7 +321,7 @@ impl Session {
                 }
                 Err(error) => {
                     // As for a preview: the connection may be mid-message.
-                    *held = None;
+                    held.remove(&peer);
                     Err(format!("fetching metadata for file {file_id}: {error}"))
                 }
             };
@@ -340,15 +360,12 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match held.as_mut() {
-                Some(client) => client,
-                None => match DbClient::connect(peer, number).await {
-                    Ok(opened) => held.insert(opened),
-                    Err(error) => {
-                        finish(&events, id, "", Err(format!("connecting: {error}")));
-                        return;
-                    }
-                },
+            let client = match asking(&mut held, peer, number).await {
+                Ok(client) => client,
+                Err(error) => {
+                    finish(&events, id, "", Err(error));
+                    return;
+                }
             };
             let outcome = match walk_plain(client, slot).await {
                 Ok(entries) => {
@@ -359,7 +376,7 @@ impl Session {
                     Ok(())
                 }
                 Err(error) => {
-                    *held = None;
+                    held.remove(&peer);
                     Err(format!("walking a plain stick: {error}"))
                 }
             };
@@ -397,15 +414,12 @@ impl Session {
 
         self.runtime_handle().spawn(async move {
             let mut held = queue.lock().await;
-            let client = match held.as_mut() {
-                Some(client) => client,
-                None => match DbClient::connect(peer, number).await {
-                    Ok(opened) => held.insert(opened),
-                    Err(error) => {
-                        finish(&events, id, &local, Err(format!("connecting: {error}")));
-                        return;
-                    }
-                },
+            let client = match asking(&mut held, peer, number).await {
+                Ok(client) => client,
+                Err(error) => {
+                    finish(&events, id, &local, Err(error));
+                    return;
+                }
             };
             let outcome = match client.plain_artwork(slot, file_id).await {
                 // No picture is an empty answer, and a cover that is not
@@ -413,7 +427,7 @@ impl Session {
                 Ok(bytes) if bytes.is_empty() => Err(format!("file {file_id} has no artwork")),
                 Ok(bytes) => write_artwork(&local, &bytes),
                 Err(error) => {
-                    *held = None;
+                    held.remove(&peer);
                     Err(format!("fetching artwork of file {file_id}: {error}"))
                 }
             };

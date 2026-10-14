@@ -74,13 +74,14 @@ pub struct Session {
     next_transfer: AtomicU32,
     /// The dbserver connections held open for browsing, one per player.
     connections: crate::browse::Connections,
-    /// The connection artwork is fetched over, opened on first use.
+    /// The connections artwork, previews and plain files are asked over, one
+    /// per player, each opened on first use: see [`crate::browse::Asking`].
     ///
     /// Separate from the browse connections, and behind an async lock: a host
     /// asks for covers by the hundred while the user is browsing, and sharing
     /// one connection would interleave a cover reply into the middle of a menu
     /// the user is scrolling.
-    artwork: Arc<tokio::sync::Mutex<Option<prolink::consume::DbClient>>>,
+    artwork: Arc<tokio::sync::Mutex<crate::browse::Asking>>,
     /// Preview waveforms that have arrived and not yet been collected.
     ///
     /// The bytes are 900 of them and the host wants them in RAM, not in a file,
@@ -280,7 +281,7 @@ pub fn open(config: &Config) -> Result<Box<Session>, Error> {
         events: Arc::new(Mutex::new(Events::default())),
         next_transfer: AtomicU32::new(1),
         connections: crate::browse::Connections::default(),
-        artwork: Arc::new(tokio::sync::Mutex::new(None)),
+        artwork: Arc::new(tokio::sync::Mutex::new(crate::browse::Asking::new())),
         previews: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         metadata: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         trees: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
@@ -1151,20 +1152,13 @@ impl Session {
                 // track info is all a plain file can be opened by.
                 let (folder, entry) = {
                     let mut held = asking.lock().await;
-                    let client = match held.as_mut() {
-                        Some(client) => client,
-                        None => held.insert(
-                            prolink::consume::DbClient::connect(peer, number)
-                                .await
-                                .map_err(|error| format!("connecting: {error}"))?,
-                        ),
-                    };
+                    let client = crate::browse::asking(&mut held, peer, number).await?;
                     match client.plain_track_info(slot, file_id).await {
                         Ok(info) => info.plain_lookup.ok_or_else(|| {
                             format!("file {file_id} came back with no numbers to open it by")
                         })?,
                         Err(error) => {
-                            *held = None;
+                            held.remove(&peer);
                             return Err(format!("asking about file {file_id}: {error}"));
                         }
                     }
@@ -1363,10 +1357,8 @@ impl Session {
         Arc::clone(&self.events)
     }
 
-    /// The connection artwork is fetched over.
-    pub(crate) fn artwork_queue(
-        &self,
-    ) -> Arc<tokio::sync::Mutex<Option<prolink::consume::DbClient>>> {
+    /// The connections artwork, previews and plain files are asked over.
+    pub(crate) fn artwork_queue(&self) -> Arc<tokio::sync::Mutex<crate::browse::Asking>> {
         Arc::clone(&self.artwork)
     }
 

@@ -50,6 +50,13 @@ by [`work_log/`](work_log/README.md).
   on the export's root, the two numbers its track info gives
   (`PLAIN-STICKS.md` §4.4, §7.1-§7.3). An emulated NXS's plain stick is named
   and streamed this way (E24).
+- **Each player is asked about its own media.** Covers, preview waveforms,
+  and a plain stick's walk, tags and track info went over one dbserver
+  connection, to whichever player was asked first, and a player asked about
+  another's file answers for its own file of that id: a second player's
+  covers and previews came from the first, and its plain stick was walked,
+  named and opened as the first one's, which two emulated NXSs showed. One
+  connection per player now, each player asked about its own (E24).
 
 ### Behind the API
 
