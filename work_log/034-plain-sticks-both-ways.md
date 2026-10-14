@@ -31,10 +31,18 @@ numbers (E23).
 with its label, no date, no counts and `02 00` at `0xaa`; FOLDER alone at the
 root; folders then files, a CDJ's collation, file names with their
 extensions; ten items of `0x2202` from the file's tags, read with `lofty`
-when a player first asks and kept; five items of track info and no path;
+when a player first asks and kept, without the file's pictures; five items of track info and no path;
 `0x3100` the file's place in its folder; zeros for the preview and the seek
-index; the file's JPEG or its folder's `cover.jpg`; and NFS opening the file
-by `?\0D <folder> <entry>`, the two numbers its track info gives.
+index; the file's JPEG or its folder's `cover.jpg`, read when a player asks
+for it; and NFS opening the file by `?\0D <folder> <entry>`, the two numbers
+its track info gives.
+
+**Covers are read apart from tags, and few are kept.** A CDJ asks about the
+rows its cursor rests on; another TriMixxx deck asks for the tags of every
+file, at about ten a second. Read and kept with the tags, a cover per file
+would have cost the serving deck 0.2-1 GB for a guest's 2,000-file stick (the
+review of TriMixxx#39). The last 4 MiB of covers asked for are kept, with
+those of files a player has loaded, which is all a phantom can be asked for.
 
 We list less than a CDJ does: only what a player can play, MP3, AAC, WAV and
 AIFF, no `._*`, no empty file, no `PIONEER/` or `System Volume Information`,
@@ -45,7 +53,9 @@ own browser shows the same.
 (`0x2005`) and seek table (`0x2205`) it worked out for a plain file, and
 names a file it cannot play (`0x3503`); a CDJ answers none, and an answer
 would be read as the reply to the next request. E23 has three `0x2005`s,
-unanswered, and nothing one behind after them.
+unanswered, and nothing one behind after them. `0x3503` comes about rekordbox
+tracks too (S11 f53269, S12 f26442), and a real NXS left one unanswered (S13
+f32340): this holds for every medium we serve.
 
 **A plain file is announced as one:** track type 2 at `0x2a`, with the id
 the server gives the file, so a player names it with `0x2202`.
@@ -80,7 +90,7 @@ use the most modern rust": the floor is 1.97, the pinned toolchain's.
 
 ## What is checked, and what is not
 
-**Checked, with `cargo test --workspace`** (802 passed): the sizes against
+**Checked, with `cargo test --workspace`** (805 passed): the sizes against
 the corpus (S13 f98, SAM2's `0x4902`); the walk, the tags, the menus, the
 `?\0D` name and PLAINMP3's description; the three requests left unanswered;
 a plain track in our status; and a loopback of the client against our own

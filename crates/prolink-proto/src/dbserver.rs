@@ -766,9 +766,11 @@ impl MessageKind {
     /// `[descriptor, file id, 1604, blob[1604]]`, 401 little-endian words, the
     /// last the file's sample count (E14 f28741). Answered with nothing.
     pub const HAND_BACK_VBR_INDEX: Self = Self(0x2205);
-    /// "This file will not play": `[descriptor, file id]`, for each plain file
-    /// a player found it cannot (E14: an AppleDouble file, random bytes named
-    /// `.mp3`, a FLAC). Answered with nothing.
+    /// "This file will not play": `[descriptor, track id]`, for each file a
+    /// player found it cannot play. A plain file (E14: an AppleDouble file,
+    /// random bytes named `.mp3`, a FLAC), and a rekordbox track too (S11
+    /// f53269, S12 f26442: a 24-bit WAV, track type 1). Answered with nothing:
+    /// a real NXS serving a rekordbox stick answered nothing (S13 f32340).
     pub const UNPLAYABLE: Self = Self(0x3503);
     /// The detailed waveform.
     pub const GET_WAVEFORM_DETAIL: Self = Self(0x2904);
@@ -3657,7 +3659,9 @@ pub struct MediaInfo {
     pub free_bytes: u64,
     /// A stick with no rekordbox library: no `1000`, and at `0x7c` the
     /// `00 00 02 00` its UDP description carries at `0xa8` (PLAIN-STICKS.md
-    /// §3), where a rekordbox medium has `00 00 01 01`.
+    /// §3), where a rekordbox medium has `00 00 01 01`. **Inferred, not
+    /// observed:** worked out from the UDP reply, as no capture has a
+    /// `0x3903` about a plain stick.
     pub plain: bool,
 }
 

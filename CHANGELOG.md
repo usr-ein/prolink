@@ -22,17 +22,22 @@ None of it has met a real CDJ yet. The first release tagged since v0.3.0:
   the high one first. We read and wrote four bytes at `0xb4` and `0xbc`, and
   left the captured answer's high words in place, so every medium we served
   was announced as that captured 32 GB stick. `docs/PROTOCOL.md` §3.3.
-- **Three requests about a plain file are answered with nothing.** A player
-  hands the server of a plain file the preview waveform (`0x2005`) and the
-  seek table (`0x2205`) it worked out for it, and says which files it cannot
-  play (`0x3503`); an emulated CDJ-2000NXS serving a plain stick answers none
-  of them (`emu-captures/PLAIN-STICKS.md` §7.7, E14, E15). We acknowledged
-  them, as any request we do not implement, and a player waiting for no reply
-  takes one for the answer to its next request (F16).
+- **Three requests are answered with nothing.** A player hands the server of
+  a plain file the preview waveform (`0x2005`) and the seek table (`0x2205`)
+  it worked out for it, and says which files it cannot play (`0x3503`); an
+  emulated CDJ-2000NXS serving a plain stick answers none of them
+  (`emu-captures/PLAIN-STICKS.md` §7.7, E14, E15). **`0x3503` comes about
+  rekordbox tracks too**, so this reaches our rekordbox media: real NXSs sent
+  it to this library's server about a 24-bit WAV (S11 f53269, S12 f26442,
+  track type 1), and a real NXS serving a rekordbox stick answered it with
+  nothing (S13 f32340). We acknowledged them, as any request we do not
+  implement (S11 and S12: `0x4003`), and a player waiting for no reply takes
+  one for the answer to its next request (F16).
 - **A stick with no rekordbox library can be served, by its folders**, as a
   CDJ serves one (`emu-captures/PLAIN-STICKS.md` §10.1, read off emulated
   NXSs). It is described with its volume label, no date, no `1000`, no
-  counts and `02 00` at `0xaa`, in the media response and in `0x4902`; its
+  counts and `02 00` at `0xaa`, in the media response, and likewise in
+  `0x4902` (inferred: no capture has one about a plain stick); its
   root menu is one category, FOLDER; `MENU_FOLDER` lists folders, then
   files; `GET_GENERIC_METADATA` answers a file's tags, read when a player
   first asks; `GET_TRACK_INFO` answers five items and no path; `0x3100`

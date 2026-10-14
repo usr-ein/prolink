@@ -339,7 +339,9 @@ describes with its volume label, no date, no `1000`, no tracks, no playlists and
 `02 00` at `0xaa`, and which another deck offers all the same, browsed with
 track type 2 from its first request (`emu-captures/PLAIN-STICKS.md` §3, §10.1).
 This library describes its own plain media that way, and an emulated NXS browses
-them so (emu-capture E23).
+them so (emu-capture E23). Its `0x4902` about a plain medium likewise has
+`00 00 02 00` at `0x7c` and no `1000`; that is **inferred** from the UDP reply,
+since no capture has a `0x3903` about a plain stick.
 
 ### 3.3b Sync and tempo master *(confirmed)*
 
@@ -790,11 +792,15 @@ its folder's files; `GET_TRACK_INFO` answers five items with no path, the
 container's and the duration's arguments 0 being the two numbers a player opens
 the file by over NFS (§4.7); the analysis requests answer zeros or nothing.
 
-**Three requests a player sends a plain medium's server are answered with
-nothing at all**, as `0x3001` is (§5.2): `0x2005`, a preview waveform it hands
-back for a file it played; `0x2205`, a seek index it worked out for a VBR file;
-`0x3503`, a file it could not play. A reply would be read as the answer to the
-next request, and every one after it would be one behind.
+**Three requests are answered with nothing at all**, as `0x3001` is (§5.2):
+`0x2005`, a preview waveform a player hands back for a plain file it played;
+`0x2205`, a seek index it worked out for a plain VBR file; `0x3503`, a file it
+could not play. A reply would be read as the answer to the next request, and
+every one after it would be one behind. **`0x3503` is not only about plain
+files:** real NXSs sent it about a rekordbox track, a 24-bit WAV, with track
+type 1 (S11 f53269, S12 f26442, to this library's server, which answered
+`0x4003`), and a real NXS serving a rekordbox stick answered it with nothing
+(S13 f32340). So this holds for every medium we serve.
 
 A tagged plain file's row carries the tag bit, `0x02000001`, and never the
 loaded one (E10-E17: 28 tagged rows, none marked loaded).

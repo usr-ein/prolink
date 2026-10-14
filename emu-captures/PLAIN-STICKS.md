@@ -133,7 +133,7 @@ The media response (E10 f51), against a rekordbox stick in the same emulator
 | `0xaa` | (byte) | `02` | `01` | `01` in S4b and S15a |
 | `0xab` | (byte) | `00` | `01` | `01` in S4b and S15a |
 | `0xac` | playlists | 0 | 4 | |
-| `0xb4`, `0xbc` | total, free | the volume's | the volume's | |
+| `0xb0`, `0xb8` | total, free, eight bytes each | the volume's | the volume's | read as four at `0xb4` and `0xbc` until prolink 0.5.0 (`../docs/PROTOCOL.md` §3.3) |
 
 A stick of loose files beside an export (E17 f61) answers exactly as SAM1
 does: the loose files count for nothing.
@@ -548,12 +548,12 @@ asked and answered above:
    - `0xa4` tracks and `0xac` playlists: 0
    - `0xaa`-`0xab`: `02 00` (SAM1, and every media response in
      `../captures/`: `01 01`)
-   - `0xb4` and `0xbc`: the volume's total and free bytes
+   - `0xb0` and `0xb8`: the volume's total and free bytes, eight bytes each
 
    prolink's `MediaResponseBuilder` starts from a rekordbox answer
    (`status_templates.rs`: the date `2025-06-24`, `1000`, `01 01`) and
-   replaces only the device, slot, name, counts and sizes: as it is, it
-   would announce a folder medium with rekordbox's markers.
+   replaces the device, slot, name, counts and sizes; since 0.5.0 its
+   `.plain()` clears the date and `1000` and writes `02 00`, as above.
 
    B offered PLAINMP3 with 0 tracks: PROTOCOL.md §3.3's "a deck told there
    are no tracks has no reason to offer the medium" does not hold for a

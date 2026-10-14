@@ -37,7 +37,7 @@ use super::*;
 
 /// One real request of each type a CDJ-2000NXS was observed to send, from
 /// `S20-browse-ground-truth`, `S22-sorting`, `S23-search-and-keys`,
-/// `S06-load-and-play` and `S18-two-slots`.
+/// `S06-load-and-play`, `S18-two-slots` and `S13-format-ground-truth`.
 ///
 /// Every one is a byte-exact message off the wire. Four have never been
 /// decoded — `0x3001`, `0x3401`, `0x3903`, `0x3b03` — and they are in the list
@@ -261,6 +261,13 @@ const CAPTURED_REQUESTS: &[(&str, &str)] = &[
         "unknown_3e03",
         "11872349ae1103800d82103e030f01140000000c060000000000000000000000\
                       1102010301",
+    ),
+    (
+        // S13 f32340: an NXS that cannot play a rekordbox track (id 0x287, a
+        // 24-bit WAV) says so to the NXS serving it, which answers nothing.
+        "unplayable",
+        "11872349ae11038000d91035030f02140000000c060600000000000000000000\
+                      11020803011100000287",
     ),
 ];
 
@@ -519,14 +526,12 @@ fn every_request_a_real_deck_sends_draws_a_reply_and_never_an_error() {
             replies.iter().all(|reply| reply.kind != MessageKind::ERROR),
             "{name} drew a refusal: {replies:?}"
         );
-        if matches!(
-            request.kind,
-            MessageKind::MENU_CLOSE | MessageKind::UNKNOWN_3001
-        ) {
-            // The two requests a real server answers with nothing at all. For
+        if request.kind.expects_no_reply() {
+            // The requests a real server answers with nothing at all. For
             // `MENU_CLOSE` no state may be discarded either (F16, F27); for
-            // `0x3001` a reply would be read as the answer to the next request
-            // and put every reply after it one behind.
+            // `0x3001` and `0x3503` a reply would be read as the answer to the
+            // next request and put every reply after it one behind (S13
+            // f32340: a real NXS leaves `0x3503` unanswered).
             assert!(replies.is_empty(), "{name} should draw nothing");
         } else {
             assert!(!replies.is_empty(), "{name} drew nothing at all");
