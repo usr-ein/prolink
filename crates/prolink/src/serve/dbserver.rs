@@ -84,7 +84,7 @@ mod menu;
 mod plain;
 
 use std::collections::{BTreeMap, VecDeque};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -98,8 +98,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
+use crate::interface::Interface;
 use crate::serve::medium::{Medium, ServedSlot};
 use crate::serve::player::MediaSet;
+use crate::socket;
 use crate::virtual_cdj::LoadedTracks;
 use crate::{Error, Result};
 
@@ -117,7 +119,7 @@ pub const MAX_PENDING_MENUS: usize = 32;
 const READ_CHUNK: usize = 16 * 1024;
 
 /// How to present the dbserver.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct DbServerConfig {
     /// The number we announce ourselves as, which is what the reply to
     /// `INTRODUCE` carries.
@@ -129,6 +131,12 @@ pub struct DbServerConfig {
     pub device: BrowsableDeviceNumber,
     /// The address to listen on.
     pub address: Ipv4Addr,
+    /// The interface to take connections from, or `None` for every one.
+    ///
+    /// A player's own, the one it announces on, as its NFS sockets are
+    /// pinned to it: a deck is often on a Wi-Fi network too, which has no
+    /// business browsing its sticks. `None` is for tests on the loopback.
+    pub interface: Option<Interface>,
     /// The port to serve dbserver on, or 0 for an ephemeral one.
     ///
     /// [`PORT`] by default, which is what every deck we have seen answers the
@@ -153,6 +161,7 @@ impl Default for DbServerConfig {
         Self {
             device: BrowsableDeviceNumber::new(1).unwrap(),
             address: Ipv4Addr::UNSPECIFIED,
+            interface: None,
             port: PORT,
             query_port: Some(PORT_QUERY_PORT),
         }
@@ -286,12 +295,18 @@ impl DbServer {
     /// for this server. Without it no row is marked, and a browsing deck has
     /// no reference key — the key-matching indicator stays dark on every row
     /// (F55).
+    #[expect(
+        clippy::unused_async,
+        reason = "spawns tasks and registers its listeners with tokio, so it needs a runtime; \
+                  async is how that is documented at the call site, as for the NFS server"
+    )]
     pub async fn start_watching(
         config: DbServerConfig,
         media: Arc<MediaSet>,
         loaded: Arc<LoadedTracks>,
     ) -> Result<Self> {
-        let listener = bind(config.address, config.port).await?;
+        let interface = config.interface.as_ref();
+        let listener = bind(config.address, config.port, interface)?;
         let port = local_port(&listener)?;
         let shared = Arc::new(Shared {
             device: config.device,
@@ -304,13 +319,12 @@ impl DbServer {
         let mut tasks = vec![spawn_dbserver(listener, Arc::clone(&shared))];
         let query_port = match config.query_port {
             None => None,
-            Some(wanted) => match bind_exactly(
+            Some(wanted) => match socket::listen(
                 config.address,
                 wanted,
+                interface,
                 "binding the dbserver port-query port",
-            )
-            .await
-            {
+            ) {
                 Ok(listener) => {
                     let bound = local_port(&listener)?;
                     tasks.push(spawn_port_query(listener, port));
@@ -384,25 +398,18 @@ impl Drop for DbServer {
 /// The dbserver port is nominally dynamic — that is what the port query is for
 /// — so failing to take 1051 because rekordbox or a second copy of this library
 /// already holds it is not a reason to refuse to serve.
-async fn bind(address: Ipv4Addr, port: u16) -> Result<TcpListener> {
-    match TcpListener::bind(SocketAddrV4::new(address, port)).await {
+///
+/// The port query has none: a query listener on a port nobody asks about
+/// answers nothing.
+fn bind(address: Ipv4Addr, port: u16, interface: Option<&Interface>) -> Result<TcpListener> {
+    match socket::listen(address, port, interface, "binding the dbserver port") {
         Ok(listener) => Ok(listener),
         Err(_) if port != 0 => {
             debug!(port, "port taken; falling back to an ephemeral one");
-            bind_exactly(address, 0, "binding an ephemeral dbserver port").await
+            socket::listen(address, 0, interface, "binding an ephemeral dbserver port")
         }
-        Err(error) => Err(Error::io("binding the dbserver port")(error)),
+        Err(error) => Err(error),
     }
-}
-
-/// Bind a listener on exactly this port, with no fallback.
-///
-/// The port query has no fallback because a query listener on a port nobody
-/// asks about answers nothing.
-async fn bind_exactly(address: Ipv4Addr, port: u16, what: &'static str) -> Result<TcpListener> {
-    TcpListener::bind(SocketAddrV4::new(address, port))
-        .await
-        .map_err(Error::io(what))
 }
 
 fn local_port(listener: &TcpListener) -> Result<u16> {

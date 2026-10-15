@@ -629,6 +629,7 @@ mod tests {
             DbServerConfig {
                 device: prolink::BrowsableDeviceNumber::new(4).expect("4"),
                 address: std::net::Ipv4Addr::LOCALHOST,
+                interface: None,
                 port: 0,
                 query_port: None,
             },

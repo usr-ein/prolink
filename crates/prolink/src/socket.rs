@@ -26,7 +26,7 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
 use socket2::{Domain, Protocol, Socket, Type};
-use tokio::net::UdpSocket;
+use tokio::net::{TcpListener, UdpSocket};
 
 use crate::interface::Interface;
 use crate::{Error, Result};
@@ -157,6 +157,44 @@ fn bind_sharing(
     UdpSocket::from_std(socket.into()).map_err(Error::io("registering a UDP socket with tokio"))
 }
 
+/// Listen on a TCP port, taking connections only from `interface` when one is
+/// given.
+///
+/// For the dbserver. Bound to `0.0.0.0` alone it took connections from every
+/// interface the host has, and a deck on the players' link is often on a
+/// Wi-Fi network as well, which has no business browsing its sticks: pinned,
+/// it answers where its player announces and its NFS sockets answer, and
+/// nowhere else. `None` takes every interface, which is what tests on the
+/// loopback want.
+pub(crate) fn listen(
+    address: Ipv4Addr,
+    port: u16,
+    interface: Option<&Interface>,
+    what: &'static str,
+) -> Result<TcpListener> {
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))
+        .map_err(Error::io("creating a TCP socket"))?;
+    // As tokio's own bind does: a listener rebuilt when the network moves
+    // finds its port free, whatever its old connections left in TIME_WAIT.
+    #[cfg(unix)]
+    socket
+        .set_reuse_address(true)
+        .map_err(Error::io("SO_REUSEADDR"))?;
+    // Before the bind, so it is the interface's port that is taken, not every
+    // interface's.
+    if let Some(interface) = interface {
+        pin_to_interface(&socket, interface)?;
+    }
+    socket
+        .bind(&SocketAddr::V4(SocketAddrV4::new(address, port)).into())
+        .map_err(Error::io(what))?;
+    socket.listen(1024).map_err(Error::io(what))?;
+    socket
+        .set_nonblocking(true)
+        .map_err(Error::io("O_NONBLOCK"))?;
+    TcpListener::from_std(socket.into()).map_err(Error::io("registering a TCP listener with tokio"))
+}
+
 /// Pin a socket's outgoing interface.
 ///
 /// Linux takes a name through `SO_BINDTODEVICE`; the BSDs and macOS take an
@@ -245,5 +283,47 @@ mod tests {
     async fn a_bound_socket_can_broadcast() {
         let socket = bind(0, None).expect("bind");
         assert!(socket.broadcast().expect("SO_BROADCAST readable"));
+    }
+
+    fn port_of(listener: &TcpListener) -> u16 {
+        listener.local_addr().expect("local address").port()
+    }
+
+    #[tokio::test]
+    async fn a_listener_pinned_to_an_interface_takes_nothing_from_another() {
+        // The dbserver's, pinned to the players' link: a connection arriving
+        // any other way finds no listener. Here the other way is the loopback,
+        // as a Wi-Fi network would be on a deck.
+        let Some(interface) = Interface::list()
+            .ok()
+            .and_then(|found| found.into_iter().next())
+        else {
+            // Nothing but the loopback here: nothing to pin to.
+            return;
+        };
+        let listener =
+            listen(Ipv4Addr::UNSPECIFIED, 0, Some(&interface), "listening").expect("listen");
+        // Linux refuses it at once; macOS lets the connection wait unanswered.
+        let connected = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            tokio::net::TcpStream::connect((Ipv4Addr::LOCALHOST, port_of(&listener))),
+        )
+        .await;
+        assert!(
+            !matches!(connected, Ok(Ok(_))),
+            "the loopback reached a listener pinned to {}",
+            interface.name
+        );
+    }
+
+    #[tokio::test]
+    async fn a_listener_pinned_to_nothing_takes_every_interface() {
+        let listener = listen(Ipv4Addr::UNSPECIFIED, 0, None, "listening").expect("listen");
+        let (connected, accepted) = tokio::join!(
+            tokio::net::TcpStream::connect((Ipv4Addr::LOCALHOST, port_of(&listener))),
+            listener.accept()
+        );
+        assert!(connected.is_ok(), "{connected:?}");
+        assert!(accepted.is_ok(), "{accepted:?}");
     }
 }

@@ -429,6 +429,7 @@ impl VirtualPlayer {
             DbServerConfig {
                 device,
                 address: Ipv4Addr::UNSPECIFIED,
+                interface: Some(config.interface.clone()),
                 ..DbServerConfig::default()
             },
             Arc::clone(&media),

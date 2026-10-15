@@ -9,8 +9,8 @@ by [`work_log/`](work_log/README.md).
 
 ## Unreleased
 
-What a TriMixxx deck served that it should not have (TriMixxx 1.0.2). No
-wire change: on the players' link everything is asked and answered as
+Two things a TriMixxx deck served that it should not have (TriMixxx 1.0.2).
+No wire change: on the players' link everything is asked and answered as
 before.
 
 ### Behind the API
@@ -22,6 +22,12 @@ before.
   player on the link was offered the first as a stick called `root-ro`: the
   whole system, with the ALSA test sounds as its music, in the USB slot a
   real stick should have had. macOS keeps the mount-point rule.
+- **prolink:** the dbserver takes connections only from its player's
+  interface, as the player's NFS sockets already did:
+  `DbServerConfig::interface`, which `VirtualPlayer` sets to the interface
+  it announces on. Its two listeners, the dbserver and the port query on
+  12523, were on every interface, so a deck's sticks could be browsed from
+  its Wi-Fi network too. `DbServerConfig` is no longer `Copy`.
 
 ## 0.5.0
 
