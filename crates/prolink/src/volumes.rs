@@ -19,6 +19,23 @@
 //! `/proc/self/mounts`, then device → label, through the `/dev/disk/by-label`
 //! symlinks. The mount point's own name is the fallback, which is correct on
 //! macOS and merely unhelpful elsewhere.
+//!
+//! # Why a plain stick has to be a USB disk
+//!
+//! A rekordbox medium proves itself with its `export.pdb`. A stick of plain
+//! files has nothing to prove itself with, and a Linux system mounts more than
+//! sticks where they go. A TriMixxx deck's release card has a read-only root,
+//! and overlayroot mounts its two layers under `/media`: `/media/root-ro`, the
+//! squashfs on the card, and `/media/root-rw`, a tmpfs. Taken for sticks, the
+//! first was served to every player on the link as a stick called `root-ro`,
+//! the whole system on it, with the ALSA test sounds in `usr/share/sounds/alsa`
+//! as its music, and it took the USB slot before any real stick could.
+//!
+//! So on Linux a plain stick is what the kernel's mount table says is a USB
+//! disk: a `/dev/sd*` device. That is where Linux puts USB mass storage — a
+//! stick, a card reader, a drive — and it is the same rule the deck's own
+//! browser keeps (`isStickMount` in TriMixxx's Mixxx). macOS has no such table
+//! to read, and `/Volumes` holds disks only, so there a mount point is enough.
 
 use std::path::{Path, PathBuf};
 
@@ -63,21 +80,32 @@ pub fn rekordbox_volumes() -> Vec<Volume> {
 }
 
 /// Every medium mounted on this machine a player might be offered: the
-/// rekordbox ones [`rekordbox_volumes`] finds, and every other mounted
-/// filesystem, which may be a stick of plain files.
+/// rekordbox ones [`rekordbox_volumes`] finds, and every USB disk mounted
+/// beside them, which may be a stick of plain files.
 ///
 /// **A plain candidate must be a mount point**: a directory, not a link, on
 /// another device than the directory holding it. `/Volumes` lists the Mac's
 /// own disk as a link to `/`, and a `/media/DJ_USB_1` with nothing mounted on
-/// it is an empty directory on the card; neither is a stick. Whether one holds
-/// anything a player could play is for the medium to find out, by walking it.
+/// it is an empty directory on the card; neither is a stick. **On Linux it
+/// must also be a USB disk's**, as the module documentation says: a release
+/// card's own root is mounted under `/media` too. Whether one holds anything
+/// a player could play is for the medium to find out, by walking it.
 ///
 /// Ordered by path, as [`rekordbox_volumes`] is.
 #[must_use]
 pub fn local_volumes() -> Vec<Volume> {
+    // Read once per scan, not once per candidate. Unreadable, it names no USB
+    // disk, and no plain stick is offered: better than the system as one.
+    let mounts = cfg!(target_os = "linux")
+        .then(|| std::fs::read_to_string("/proc/self/mounts").unwrap_or_default());
     let mut found = rekordbox_volumes();
     for path in candidates() {
-        if found.iter().any(|volume| volume.path == path) || !is_mount_point(&path) {
+        if found.iter().any(|volume| volume.path == path)
+            || !is_mount_point(&path)
+            || mounts
+                .as_deref()
+                .is_some_and(|table| !is_usb_disk_mount(table, &path))
+        {
             continue;
         }
         found.push(Volume {
@@ -98,6 +126,40 @@ fn is_mount_point(path: &Path) -> bool {
         return false;
     };
     own.is_dir() && std::fs::metadata(parent).is_ok_and(|parent| parent.dev() != own.dev())
+}
+
+/// Whether the mount table `table` (in `/proc/self/mounts` form) has a USB
+/// disk mounted at `mount_point`: a `/dev/sd*` device, for the reasons the
+/// module documentation gives. A card's own partitions (`/dev/mmcblk0p5`), a
+/// tmpfs and an overlay are not; nor is a directory nothing is mounted on.
+fn is_usb_disk_mount(table: &str, mount_point: &Path) -> bool {
+    let Some(source) = mount_source(table, mount_point) else {
+        return false;
+    };
+    // Resolved, so a mount by a /dev/disk/by-* link counts as its device; as
+    // the table gives it otherwise, which for a device is already its own path.
+    let device = source
+        .starts_with("/dev/")
+        .then(|| Path::new(&source).canonicalize().ok())
+        .flatten()
+        .unwrap_or_else(|| PathBuf::from(&source));
+    device.parent() == Some(Path::new("/dev"))
+        && device
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("sd"))
+}
+
+/// What the mount table `table` has mounted at `mount_point`, as it names it:
+/// a device's path, or a name such as `tmpfs-root`. The last entry for the
+/// path is the one that counts, since a mount stacked on another hides it.
+fn mount_source(table: &str, mount_point: &Path) -> Option<String> {
+    table.lines().rev().find_map(|line| {
+        let mut fields = line.split(' ');
+        let source = fields.next()?;
+        let at = fields.next()?;
+        (Path::new(&unescape(at)) == mount_point).then(|| unescape(source))
+    })
 }
 
 /// The directories a removable medium is mounted under, one level deep.
@@ -176,15 +238,9 @@ pub fn size_of(mount_point: &Path) -> Option<(u64, u64)> {
 /// The block device mounted at a path, from the kernel's mount table.
 fn device_at(mount_point: &Path) -> Option<PathBuf> {
     let table = std::fs::read_to_string("/proc/self/mounts").ok()?;
-    for line in table.lines() {
-        let mut fields = line.split(' ');
-        let device = fields.next()?;
-        let Some(at) = fields.next() else { continue };
-        if Path::new(&unescape(at)) == mount_point {
-            return Path::new(device).canonicalize().ok();
-        }
-    }
-    None
+    Path::new(&mount_source(&table, mount_point)?)
+        .canonicalize()
+        .ok()
 }
 
 /// Decode the octal escapes the mount table uses for spaces and the like.
@@ -244,6 +300,74 @@ mod tests {
                 volume.path.display()
             );
         }
+    }
+
+    /// A TriMixxx deck's mount table on its 1.0.1 release card, with a stick
+    /// in (an emulated deck's, the lines that matter): overlayroot's two layers
+    /// under /media, beside the stick dj-usb mounted.
+    const DECK_MOUNTS: &str = "\
+/dev/mmcblk0p5 /media/root-ro squashfs ro,relatime,errors=continue 0 0
+tmpfs-root /media/root-rw tmpfs rw,relatime 0 0
+overlayroot / overlay rw,relatime,lowerdir=/media/root-ro,upperdir=/media/root-rw/overlay,workdir=/media/root-rw/overlay-workdir/_,uuid=on 0 0
+/dev/mmcblk0p7 /data ext4 ro,noatime 0 0
+/dev/sda1 /media/DJ_USB_1 vfat ro,nosuid,nodev,noexec,noatime,uid=1000,gid=1000,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro 0 0
+";
+
+    #[test]
+    fn a_stick_dj_usb_mounted_is_a_usb_disk() {
+        assert!(is_usb_disk_mount(DECK_MOUNTS, Path::new("/media/DJ_USB_1")));
+    }
+
+    #[test]
+    fn a_release_cards_own_root_is_not_a_stick() {
+        // The squashfs on the card and the tmpfs over it: served as a stick
+        // called root-ro by TriMixxx 1.0.0 and 1.0.1.
+        assert!(!is_usb_disk_mount(DECK_MOUNTS, Path::new("/media/root-ro")));
+        assert!(!is_usb_disk_mount(DECK_MOUNTS, Path::new("/media/root-rw")));
+        assert!(!is_usb_disk_mount(DECK_MOUNTS, Path::new("/")));
+        assert!(!is_usb_disk_mount(DECK_MOUNTS, Path::new("/data")));
+    }
+
+    #[test]
+    fn a_directory_nothing_is_mounted_on_is_not_a_stick() {
+        // The slot dj-usb left behind when it could not remove it.
+        assert!(!is_usb_disk_mount(
+            DECK_MOUNTS,
+            Path::new("/media/DJ_USB_2")
+        ));
+        assert!(!is_usb_disk_mount("", Path::new("/media/DJ_USB_1")));
+    }
+
+    #[test]
+    fn usb_disks_are_found_by_their_device_whatever_they_hold() {
+        // A superfloppy (no partition table), and a label with a space, which
+        // the table escapes.
+        let table = "/dev/sdb /media/SUPERFLOPPY vfat ro 0 0\n\
+                     /dev/sdc1 /media/MY\\040SET exfat ro 0 0\n";
+        assert!(is_usb_disk_mount(table, Path::new("/media/SUPERFLOPPY")));
+        assert!(is_usb_disk_mount(table, Path::new("/media/MY SET")));
+    }
+
+    #[test]
+    fn other_disks_are_not_sticks() {
+        // A card in a built-in reader, an NVMe drive, a CD, a network share:
+        // none of them is where the deck's USB ports put a stick.
+        let table = "/dev/mmcblk1p1 /media/CARD vfat ro 0 0\n\
+                     /dev/nvme0n1p2 /media/DATA ext4 rw 0 0\n\
+                     /dev/sr0 /media/CDROM iso9660 ro 0 0\n\
+                     //nas/music /media/NAS cifs rw 0 0\n";
+        for name in ["CARD", "DATA", "CDROM", "NAS"] {
+            let path = Path::new("/media").join(name);
+            assert!(!is_usb_disk_mount(table, &path), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_mount_stacked_on_another_is_the_one_that_counts() {
+        let over_a_stick = "/dev/sda1 /media/X vfat ro 0 0\ntmpfs /media/X tmpfs rw 0 0\n";
+        assert!(!is_usb_disk_mount(over_a_stick, Path::new("/media/X")));
+        let a_stick_over = "tmpfs /media/X tmpfs rw 0 0\n/dev/sda1 /media/X vfat ro 0 0\n";
+        assert!(is_usb_disk_mount(a_stick_over, Path::new("/media/X")));
     }
 
     #[test]

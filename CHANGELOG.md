@@ -7,6 +7,22 @@ is listed under its own heading, with the capture that justifies it.
 Releases before 0.4.0 are described by their tags (`v0.1.0` to `v0.3.0`) and
 by [`work_log/`](work_log/README.md).
 
+## Unreleased
+
+What a TriMixxx deck served that it should not have (TriMixxx 1.0.2). No
+wire change: on the players' link everything is asked and answered as
+before.
+
+### Behind the API
+
+- **prolink:** `local_volumes` offers a plain stick on Linux only where the
+  kernel's mount table has a USB disk (`/dev/sd*`), the rule TriMixxx's own
+  browser keeps. A deck's release card mounts its read-only root's two
+  layers under `/media` (overlayroot's `root-ro` and `root-rw`), and every
+  player on the link was offered the first as a stick called `root-ro`: the
+  whole system, with the ALSA test sounds as its music, in the USB slot a
+  real stick should have had. macOS keeps the mount-point rule.
+
 ## 0.5.0
 
 Plain sticks both ways, and a medium's size ([work log 034](work_log/034-plain-sticks-both-ways.md)).
