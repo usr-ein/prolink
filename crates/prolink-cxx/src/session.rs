@@ -261,17 +261,15 @@ const INTERFACE_RECHECK: std::time::Duration = std::time::Duration::from_secs(2)
 /// `device_number` is zero until a number is held, `is_ready` says whether the
 /// sockets are up, and `last_error` carries anything that went wrong.
 ///
+/// A named interface is waited for as an automatic choice is: a deck asks for
+/// its Ethernet port, which has no address until a cable is plugged in, and it
+/// is a player there from then on, never on its Wi-Fi meanwhile.
+///
 /// # Errors
 ///
-/// When the runtime cannot be created, or a named interface does not exist.
-/// Choosing automatically never fails here: an absent network is something to
-/// wait for, not to refuse.
+/// When the runtime cannot be created. An absent network, or an interface
+/// with no address yet, is something to wait for, not to refuse.
 pub fn open(config: &Config) -> Result<Box<Session>, Error> {
-    if !config.interface.is_empty() {
-        Interface::named(&config.interface)
-            .map_err(|error| Error(format!("no interface {}: {error}", config.interface)))?;
-    }
-
     let runtime = Runtime::new().map_err(|error| Error(format!("no runtime: {error}")))?;
     let session = Session {
         runtime,
@@ -341,7 +339,14 @@ impl Supervisor {
                 // report once and give up on.
                 (None, _) => {
                     if !announced_failure {
-                        self.note("no usable network interface; waiting for one");
+                        if self.config.interface.is_empty() {
+                            self.note("no usable network interface; waiting for one");
+                        } else {
+                            self.note(&format!(
+                                "{} has no address; waiting for it",
+                                self.config.interface
+                            ));
+                        }
                         announced_failure = true;
                     }
                     self.teardown();

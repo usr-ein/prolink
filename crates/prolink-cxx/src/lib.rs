@@ -174,7 +174,10 @@ pub mod ffi {
         ///
         /// Choosing automatically prefers a link-local address, which is what
         /// a DJ network always is; on a machine with two candidates it is a
-        /// coin toss, so a host with a settings screen should name one.
+        /// coin toss, so a host with a settings screen should name one. A
+        /// named one is waited for until it has an address, and the session
+        /// is never anywhere else meanwhile: a deck naming its Ethernet port is
+        /// not a player on its Wi-Fi while no cable is in.
         interface: String,
 
         /// Whether to announce as a virtual CDJ.

@@ -9,9 +9,9 @@ by [`work_log/`](work_log/README.md).
 
 ## Unreleased
 
-Two things a TriMixxx deck served that it should not have (TriMixxx 1.0.2).
-No wire change: on the players' link everything is asked and answered as
-before.
+What a TriMixxx deck served, and where, that it should not have (TriMixxx
+1.0.2). No wire change: on the players' link everything is asked and
+answered as before.
 
 ### Behind the API
 
@@ -28,6 +28,11 @@ before.
   it announces on. Its two listeners, the dbserver and the port query on
   12523, were on every interface, so a deck's sticks could be browsed from
   its Wi-Fi network too. `DbServerConfig` is no longer `Copy`.
+- **prolink-cxx:** a session opened on a named interface waits for it to
+  have an address, as it waits for a network when it chooses, where it
+  refused to open. A TriMixxx deck names its Ethernet port, which has none
+  until a cable is plugged in, and is a player there and nowhere else: with
+  no cable it was one on its Wi-Fi, the next best guess.
 
 ## 0.5.0
 

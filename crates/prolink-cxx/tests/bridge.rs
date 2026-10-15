@@ -56,17 +56,28 @@ fn every_interface_offered_describes_itself_completely() {
 }
 
 #[test]
-fn naming_an_interface_that_is_not_there_fails_with_a_reason() {
-    // The message is what a host shows the user, so it has to name the thing
-    // that was not found rather than say "error".
+fn a_named_interface_with_no_address_is_waited_for_by_name() {
+    // A deck names its Ethernet port, which has no address until a cable is
+    // plugged in: the session opens and waits for it, and binds nowhere else
+    // meanwhile. The message is what a host shows the user, so it names what
+    // is being waited for rather than saying "error".
     let mut config = default_config();
     config.interface = "definitely-not-an-interface".to_owned();
-    let error = prolink_cxx::open(&config).expect_err("that interface cannot exist");
-    let message = error.to_string();
+    let session = prolink_cxx::open(&config).expect("a named interface is waited for");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let message = loop {
+        let message = session.last_error();
+        if !message.is_empty() || std::time::Instant::now() > deadline {
+            break message;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
     assert!(
         message.contains("definitely-not-an-interface"),
         "the message should name the interface: {message}"
     );
+    assert!(!session.is_ready(), "nothing is bound while it waits");
+    assert_eq!(session.device_number(), 0);
 }
 
 #[test]
